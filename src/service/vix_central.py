@@ -76,7 +76,7 @@ class VixCentralService:
         if VixCentralService.MONTH_OF_INTEREST is None:
             VixCentralService.MONTH_OF_INTEREST = current_months[0]
         month_of_interest = current_months[0]
-        contango = round(self.calculate_contango(current_last_prices[0], current_last_prices[1]), 2)
+        contango = self.calculate_contango(current_last_prices[0], current_last_prices[1])
         return {
             "current_date": date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime()).strftime("%Y-%m-%d"),
             "futures_date": self.format_futures_date(month_of_interest),
@@ -87,7 +87,7 @@ class VixCentralService:
         }
 
     def historical_to_vix_futures_value(self, historical, current_date: datetime.datetime):
-        contango = round(self.calculate_contango(historical[1], historical[2]), 2)
+        contango = self.calculate_contango(historical[1], historical[2])
         return {
             "current_date": date_util.get_most_recent_non_weekend_or_today(current_date).strftime("%Y-%m-%d"),
             "futures_date": self.format_futures_date(VixCentralService.MONTH_OF_INTEREST),

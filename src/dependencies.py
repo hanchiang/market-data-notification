@@ -1,9 +1,9 @@
-from service.vix_central import VixCentralService
+from src.service.vix_central import VixCentralService
 
 
 class Dependencies:
-  vix_central_service = None
-  is_initialised = False
+  vix_central_service: VixCentralService = None
+  is_initialised: bool = False
 
   @staticmethod
   def build():
@@ -13,6 +13,10 @@ class Dependencies:
       print('Dependencies built')
     else:
       print('Dependencies has already been initialised')
+
+  @staticmethod
+  async def cleanup():
+    await Dependencies.vix_central_service.cleanup()
 
   @staticmethod
   def get_vix_central_service():

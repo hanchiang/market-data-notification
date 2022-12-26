@@ -1,4 +1,4 @@
-from http_client import HttpClient
+from src.http_client import HttpClient
 
 
 class VixCentralService:
@@ -11,6 +11,9 @@ class VixCentralService:
   def __init__(self):
     self.http_client = HttpClient(base_url=VixCentralService.BASE_URL,
                                   headers=VixCentralService.HEADERS)
+
+  async def cleanup(self):
+    await self.http_client.cleanup()
 
   async def get_current(self):
     res = await self.http_client.get(url='/ajax_update')

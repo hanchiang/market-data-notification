@@ -7,11 +7,14 @@ class HttpClient:
   def __init__(self, base_url: str, headers={}):
     if not base_url:
       raise RuntimeError("base_url is required")
-    self.http_client = aiohttp.ClientSession(base_url=base_url,
+    self.client = aiohttp.ClientSession(base_url=base_url,
                                              headers=headers)
 
+  async def cleanup(self):
+    await self.client.close()
+
   async def get(self, url: str, params={}):
-    res = await self.http_client.get(url=url, params=params)
+    res = await self.client.get(url=url, params=params)
     return res
 
   @staticmethod

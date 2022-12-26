@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Response, status
-from dependencies import Dependencies
+from src.dependencies import Dependencies
 
 router = APIRouter(prefix="/vixcentral")
 

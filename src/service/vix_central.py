@@ -21,7 +21,6 @@ class VixCentralService:
       print(res.text)
       res.raise_for_status()
     res_json = await res.json()
-    print(res_json)
     return res_json
 
   # yyyy-mm-dd

@@ -21,9 +21,7 @@ async def get_historical(date: str, response: Response):
 
   try:
     res = await vix_central_service.get_historical(date=date)
-    res_json = await res.json()
-    return {"data": res_json}
+    return {"data": res}
   except Exception as e:
     print(e)
-    # response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    return {"error": e}
+    return {"error": str(e)}

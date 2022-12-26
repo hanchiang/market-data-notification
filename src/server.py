@@ -2,11 +2,12 @@ from fastapi import FastAPI
 import uvicorn
 import os
 from src.dependencies import Dependencies
-from src.router import vix_central
+from src.router.vix_central import thirdparty_vix_central, vix_central
+import src.notification_destination.telegram_notification as telegram_notification
 
 app = FastAPI()
+app.include_router(thirdparty_vix_central.router)
 app.include_router(vix_central.router)
-
 
 env = os.getenv('ENV')
 
@@ -27,4 +28,9 @@ async def shutdown_event():
 
 @app.get("/healthz")
 async def heath_check():
-  return {"data": "Vix central service is running!"}
+  return {"data": "Market data notification is running!"}
+
+# @app.post("/telegram")
+# async def heath_check():
+#   res = await telegram_notification.send_message("hello world")
+#   return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}"}

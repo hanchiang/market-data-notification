@@ -16,6 +16,8 @@ aiohttp = "^3.8.3"
 aiodns = "^3.0.0"
 python-telegram-bot = {version = "^20.0b0", allow-prereleases = true}
 pytz = "^2022.7"
+pytest = "^7.2.0"
+pytest-asyncio = "^0.20.3"
 
 [tool.poetry.dev-dependencies]
 debugpy = "^1.6.2"
@@ -24,3 +26,10 @@ replit-python-lsp-server = {extras = ["yapf", "rope", "pyflakes"], version = "^1
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -v -s"
+testpaths = [
+    "tests"
+]

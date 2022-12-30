@@ -4,11 +4,15 @@ import aiohttp
 class HttpClient:
   instance = None
 
-  def __init__(self, base_url: str, headers={}):
+  @staticmethod
+  async def create(base_url: str, headers = {}):
     if not base_url:
       raise RuntimeError("base_url is required")
-    self.client = aiohttp.ClientSession(base_url=base_url,
+
+    instance = HttpClient()
+    instance.client = aiohttp.ClientSession(base_url=base_url,
                                              headers=headers)
+    return instance
 
   async def cleanup(self):
     await self.client.close()
@@ -17,8 +21,4 @@ class HttpClient:
     res = await self.client.get(url=url, params=params)
     return res
 
-  @staticmethod
-  def get_instance():
-    if HttpClient.instance is None:
-      HttpClient.instance = HttpClient()
-    return HttpClient.instance
+

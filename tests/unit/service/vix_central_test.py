@@ -1,11 +1,10 @@
-from asyncio import Future
+import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
 
+from src.dependencies import Dependencies
 from src.service.vix_central import VixCentralService, RecentVixFuturesValues, VixFuturesValue
-from src.third_party_service.vix_central import ThirdPartyVixCentralService
-
 
 class TestVixCentralService:
     CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO = 0.2
@@ -166,6 +165,14 @@ class TestVixCentralService:
     def setup_method(self):
         self.vix_central_service = VixCentralService()
 
+    @classmethod
+    def setup_class(cls):
+        asyncio.run(Dependencies.build())
+
+    @classmethod
+    def teardown_class(cls):
+        asyncio.run(Dependencies.cleanup())
+
     def test_compute_contango_alert_threshold_no_vix_futures_values(self):
         recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
 
@@ -221,7 +228,7 @@ class TestVixCentralService:
     @pytest.mark.asyncio
     @patch("asyncio.gather", new_callable=AsyncMock)
     async def test_get_recent_values_empty_state(self, asyncio_gather_mock: AsyncMock):
-        thirdparty_vix_central_service = ThirdPartyVixCentralService()
+        thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
         thirdparty_vix_central_service.get_current = AsyncMock(return_value=self.current_vix_futures)
         thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)
         vix_central_service = VixCentralService(third_party_service=thirdparty_vix_central_service)
@@ -237,7 +244,7 @@ class TestVixCentralService:
     @pytest.mark.asyncio
     @patch("asyncio.gather", new_callable=AsyncMock)
     async def test_get_recent_values_full_state(self, asyncio_gather_mock: AsyncMock):
-        thirdparty_vix_central_service = ThirdPartyVixCentralService()
+        thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
 
         thirdparty_vix_central_service.get_current = AsyncMock(return_value=self.current_vix_futures)
         thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)

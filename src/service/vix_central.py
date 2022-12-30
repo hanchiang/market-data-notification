@@ -78,7 +78,7 @@ class VixCentralService:
             most_recent_date_yyyy_mm_dd = f"{most_recent_date.year}-{str(most_recent_date.month).ljust(2, '0')}-{str(most_recent_date.day).ljust(2, '0')}"
             if self.recent_values.vix_futures_values[0] and most_recent_date_yyyy_mm_dd == self.recent_values.vix_futures_values[0].current_date:
                 print('Most recent VIX futures data is already fetched')
-                return self.recent_values.vix_futures_values
+                return self.recent_values
 
             # remove oldest value, add current value
             self.recent_values.vix_futures_values.pop()

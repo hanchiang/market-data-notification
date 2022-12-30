@@ -8,9 +8,8 @@ class ThirdPartyVixCentralService:
     'X-Requested-With': 'XMLHttpRequest'
   }
 
-  def __init__(self):
-    self.http_client = HttpClient(base_url=ThirdPartyVixCentralService.BASE_URL,
-                                  headers=ThirdPartyVixCentralService.HEADERS)
+  def __init__(self, http_client: HttpClient):
+    self.http_client = http_client
 
   async def cleanup(self):
     await self.http_client.cleanup()

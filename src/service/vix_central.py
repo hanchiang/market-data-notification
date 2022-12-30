@@ -38,10 +38,14 @@ class VixCentralService:
     CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO = 0.01
     CONTANGO_DECREASE_PAST_N_DAYS = 1
 
-    def __init__(self, third_party_service = ThirdPartyVixCentralService()):
+    def __init__(self, third_party_service = ThirdPartyVixCentralService):
         self.third_party_service = third_party_service
-        # stateful, cache results. Retrieve at the end of the market hours
+        # stateful, cache results. Should be called at the end of the market hours. However, service is called during market hours,
+        # then subsequent calls during that day won't return the most recent data until the next day
         self.recent_values: RecentVixFuturesValues = RecentVixFuturesValues(VixCentralService.CONTANGO_DECREASE_PAST_N_DAYS)
+
+    async def cleanup(self):
+        await self.third_party_service.cleanup()
 
     def clear_values(self):
         self.recent_values: RecentVixFuturesValues = RecentVixFuturesValues(VixCentralService.CONTANGO_DECREASE_PAST_N_DAYS)

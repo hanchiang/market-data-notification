@@ -1,12 +1,13 @@
 import datetime
 import asyncio
 from typing import List
+from src.config import config
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
 import src.util.date_util as date_util
 
 
 class VixFuturesValue:
-    def __init__(self, contango_single_day_decrease_alert_ratio = 0.4):
+    def __init__(self, contango_single_day_decrease_alert_ratio):
         # "yyyy-mm-dd". 2022-12-30
         self.current_date: str = None
         # "yyyy mmm". e.g. 2022 Jan
@@ -23,7 +24,7 @@ class VixFuturesValue:
         self.contango_single_day_decrease_alert_ratio: float = contango_single_day_decrease_alert_ratio
 
 class RecentVixFuturesValues:
-    def __init__(self, decrease_past_n_days = 5):
+    def __init__(self, decrease_past_n_days):
         # store values of the upcoming VIX futures(next month)
         # list of dict in reverse chronological order of current_date.
         self.vix_futures_values: List[VixFuturesValue] = []
@@ -35,8 +36,8 @@ class VixCentralService:
     VALUE_CAPACITY = 5
     # month of the vix futures we are interested in. e.g. "Jan"
     MONTH_OF_INTEREST = None
-    CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO = 0.01
-    CONTANGO_DECREASE_PAST_N_DAYS = 1
+    CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO = config.get_contango_single_day_decrease_alert_ratio()
+    CONTANGO_DECREASE_PAST_N_DAYS = config.get_contango_decrease_past_n_days()
 
     def __init__(self, third_party_service = ThirdPartyVixCentralService):
         self.third_party_service = third_party_service
@@ -106,8 +107,10 @@ class VixCentralService:
                 recent_values.vix_futures_values[i].is_contango_single_day_decrease_alert = False
 
             if decrease_counter < recent_values.contango_decrease_past_n_days and curr_contango < prev_contango:
-                is_decrease_for_past_n_days = True
-            decrease_counter += 1
+                decrease_counter += 1
+                if decrease_counter == recent_values.contango_decrease_past_n_days:
+                    is_decrease_for_past_n_days = True
+
         # No previous item to compare to, so it is always false
         recent_values.vix_futures_values[len(recent_values.vix_futures_values) - 1].is_contango_single_day_decrease_alert = False
 

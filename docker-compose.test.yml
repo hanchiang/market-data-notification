@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  backend:
+    container_name: market_data_notification.com_test
+    build:
+      context: .
+      target: test
+    working_dir: /app
+    command: poetry run pytest
+    volumes:
+      - ./:/app

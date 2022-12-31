@@ -3,8 +3,7 @@ import asyncio
 from typing import List
 from src.config import config
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
-import src.util.date_util as date_util
-
+from src.util import date_util
 
 class VixFuturesValue:
     def __init__(self, contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio()):
@@ -56,7 +55,7 @@ class VixCentralService:
         coros = []
         values_length = len(self.recent_values.vix_futures_values)
 
-        if values_length < config.get_vix_central_number_of_days():
+        if values_length < self.number_of_days_to_store:
             # clear values and rebuild it for simplicity, instead of continuing from where it left off
             self.clear_values()
 
@@ -64,7 +63,7 @@ class VixCentralService:
             self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current))
 
             historical_dates = []
-            for i in range(0, config.get_vix_central_number_of_days() - len(self.recent_values.vix_futures_values)):
+            for i in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
                 # subtract days from previously used historical date, or from current date
                 reference_date = historical_dates[len(historical_dates) - 1] if len(historical_dates) > 0 else date_util.get_current_datetime()
                 date = date_util.get_most_recent_non_weekend_or_today(reference_date - datetime.timedelta(days=1))

@@ -21,8 +21,8 @@ def get_telegram_channel_id():
 def get_is_testing_telegram():
     return os.getenv('IS_TESTING_TELEGRAM', False) == 'true'
 
-def get_simulate_real_traffic():
-    return os.getenv('SIMULATE_REAL_TRAFFIC', False) == 'true'
+def get_simulate_tradingview_traffic():
+    return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', False) == 'true'
 
 def get_trading_view_ips():
     if not os.getenv('TRADING_VIEW_IPS', None):
@@ -51,3 +51,11 @@ def get_potential_overextended_by_symbol():
         }
     }
     return potential_overextended_by_symbol
+
+def get_tradingview_webhook_secret():
+    if not os.getenv('TRADING_VIEW_WEBHOOK_SECRET', None):
+        raise RuntimeError('TRADING_VIEW_WEBHOOK_SECRET is missing')
+    return os.getenv('TRADING_VIEW_WEBHOOK_SECRET')
+
+def get_disable_telegram():
+    return os.getenv('DISABLE_TELEGRAM', False) == 'true'

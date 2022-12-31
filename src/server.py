@@ -1,3 +1,4 @@
+import asyncio
 from functools import reduce
 from typing import List, Any
 
@@ -38,16 +39,20 @@ async def heath_check():
 
 @app.post("/tradingview-webhook")
 async def tradingview_webhook(request: Request):
-  # symbol, timeframe(e.g. 1d), close, ema20
-
+    # Body is a list of: symbol, timeframe(e.g. 1d), close, ema20
   print(f"{request.method} {request.url} Received request from {request.client}")
 
+  if request.headers.get('x-tradingview-webhook-secret', None) != config.get_tradingview_webhook_secret():
+      message = f"[Potential malicious request warning]‼️ Trading view webhook secret {request.headers.get('x-tradingview-webhook-secret', None)} is incorrect"
+      asyncio.create_task(telegram_notification.send_message_to_admin(message=message))
+      return {"data": "OK"}
+
   trading_view_ips = config.get_trading_view_ips()
-  if not config.get_is_testing_telegram() and not config.get_simulate_real_traffic() and request.client.host not in trading_view_ips:
-    message = f"Warning‼️ Request ip {request.client.host} is not from trading view {trading_view_ips}"
-    await telegram_notification.send_message_to_admin(message=escape_markdown(message))
-    print(message)
-    return {"data": "OK"}
+  if not config.get_is_testing_telegram() and not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
+      message = f"[Potential malicious request warning]‼️Request ip {request.client.host} is not from trading view {trading_view_ips}"
+      print(message)
+      asyncio.create_task(telegram_notification.send_message_to_admin(message=escape_markdown(message)))
+      return {"data": "OK"}
 
   vix_central_service = Dependencies.get_vix_central_service()
   vix_central_data = await vix_central_service.get_recent_values()
@@ -64,6 +69,9 @@ async def tradingview_webhook(request: Request):
   telegram_message = escape_markdown("\n-----------------------------------------------------------------\n").join(messages)
 
   res = await telegram_notification.send_message_to_channel(message=telegram_message)
+  if not res:
+      return {"data": "OK"}
+  print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
   return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}
 
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):

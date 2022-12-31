@@ -24,3 +24,6 @@ COPY . .
 
 FROM base as dev
 CMD ["poetry", "run", "python3", "main.py"]
+
+FROM base as test
+CMD ["poetry", "run", "pytest"]

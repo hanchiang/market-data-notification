@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  backend:
+    container_name: market_data_notification
+    build:
+      context: .
+      target: dev
+    working_dir: /app
+    env_file: .env
+    command: poetry run python3 main.py
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/app/src

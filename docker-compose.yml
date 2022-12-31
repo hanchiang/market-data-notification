@@ -13,3 +13,5 @@ services:
       - "8080:8080"
     volumes:
       - ./src:/app/src
+    environment:
+      ENV: dev

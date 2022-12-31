@@ -1,0 +1,11 @@
+.git
+.gitignore
+.vscode
+.mypy_cache
+venv
+Dockerfile
+my_readme.txt
+README.md
+logs
+secrets
+images

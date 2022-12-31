@@ -61,7 +61,7 @@ async def tradingview_webhook(request: Request):
   if config.get_is_testing_telegram():
     messages.insert(0, '*THIS IS A TEST MESSAGE*')
 
-  telegram_message = escape_markdown("\n----------------------------\n").join(messages)
+  telegram_message = escape_markdown("\n-----------------------------------------------------------------\n").join(messages)
 
   res = await telegram_notification.send_message_to_channel(message=telegram_message)
   return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}

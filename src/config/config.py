@@ -8,6 +8,11 @@ def get_telegram_bot_token():
         raise RuntimeError("telegram bot token is missing")
     return os.getenv('TELEGRAM_BOT_TOKEN')
 
+def get_telegram_admin_bot_token():
+    if not os.getenv('TELEGRAM_ADMIN_BOT_TOKEN', None):
+        raise RuntimeError("telegram admin bot token is missing")
+    return os.getenv('TELEGRAM_ADMIN_BOT_TOKEN')
+
 def get_telegram_channel_id():
     if not os.getenv('TELEGRAM_CHANNEL_ID', None):
         raise RuntimeError("telegram channel is missing")
@@ -36,7 +41,7 @@ def get_contango_decrease_past_n_days_threshold():
     return 5 if not get_is_testing_telegram() else 2
 
 def get_vix_central_number_of_days():
-    return 5 if not get_is_testing_telegram() else 2
+    return 5
 
 def get_potential_overextended_by_symbol():
     potential_overextended_by_symbol = {

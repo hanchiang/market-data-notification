@@ -48,6 +48,10 @@ def get_potential_overextended_by_symbol():
         'SPY': {
             'up': 0.04 if not get_is_testing_telegram() else 0.01,
             'down': -0.065 if not get_is_testing_telegram() else -0.01
+        },
+        'VIX': {
+            'up': 36 if not get_is_testing_telegram() else 26,
+            'down': 19.5 if not get_is_testing_telegram() else 26
         }
     }
     return potential_overextended_by_symbol

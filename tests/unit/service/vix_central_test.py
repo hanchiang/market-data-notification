@@ -255,7 +255,6 @@ class TestVixCentralService:
         vix_futures_values.next_month_futures_value = self.historical_vix_futures[2]
         vix_futures_values.raw_contango = self.historical_vix_futures[2] / self.historical_vix_futures[1] - 1
         vix_central_service.recent_values.vix_futures_values = [vix_futures_values, {}]
-        VixCentralService.VALUE_CAPACITY = 2
 
         result = await vix_central_service.get_recent_values()
 

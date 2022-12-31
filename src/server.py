@@ -92,7 +92,7 @@ def format_tradingview_message(payload: List[Any]):
     delta = (close - ema20) / ema20 if close > ema20 else -(ema20 - close) / ema20
 
     delta_percent = f"{delta:.2%}"
-    message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, ema20 1D: {escape_markdown(str(ema20))}, % change: {escape_markdown(delta_percent)}"
+    message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(ema20))}, % change: {escape_markdown(delta_percent)}"
 
     direction = 'up' if close > ema20 else 'down'
     if potential_overextended_by_symbol.get(symbol, None) is not None:

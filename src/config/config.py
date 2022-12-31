@@ -29,10 +29,13 @@ def get_telegram_admin_id():
         raise RuntimeError("telegram admin id is missing")
     return os.getenv('TELEGRAM_ADMIN_ID')
 
-def get_contango_single_day_decrease_alert_ratio():
+def get_contango_single_day_decrease_threshold_ratio():
     return 0.4 if not get_is_testing_telegram() else 0.01
 
-def get_contango_decrease_past_n_days():
+def get_contango_decrease_past_n_days_threshold():
+    return 5 if not get_is_testing_telegram() else 2
+
+def get_vix_central_number_of_days():
     return 5 if not get_is_testing_telegram() else 2
 
 def get_potential_overextended_by_symbol():

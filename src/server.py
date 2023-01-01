@@ -79,7 +79,7 @@ async def tradingview_webhook(request: Request):
     print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
     return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}
 
-
+# TODO: cleanup trading view webhook code
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
     message = reduce(format_vix_futures_values, vix_central_value.vix_futures_values,
                      f"*VIX central data for {vix_central_value.vix_futures_values[0].futures_date} futures:*")

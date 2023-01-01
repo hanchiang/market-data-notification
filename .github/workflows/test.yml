@@ -51,10 +51,10 @@ jobs:
     if: ${{ failure() }}
     env:
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-      TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - name: Send telegram notification
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification backend Test and build failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${TELEGRAM_USER_ID}&text=$text"
+          curl "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=$text"

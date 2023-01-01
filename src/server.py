@@ -46,16 +46,23 @@ async def tradingview_webhook(request: Request):
     # Body is a list of: symbol, timeframe(e.g. 1d), close, ema20
     print(f"{request.method} {request.url} Received request from {request.client}")
 
+    messages = []
+    if config.get_is_testing_telegram():
+        messages.insert(0, '*THIS IS A TEST MESSAGE*')
+
     if request.headers.get('x-tradingview-webhook-secret', None) != config.get_tradingview_webhook_secret():
-        message = f"[Potential malicious request warning]‼️ Trading view webhook secret {request.headers.get('x-tradingview-webhook-secret', None)} is incorrect"
+        messages.append(f"*[Potential malicious request warning]‼️*\nIncorrect tradingview webhook secret{escape_markdown('.')}\nHeaders: *{escape_markdown(str(request.headers))}*\nRequest ip: *{escape_markdown(request.client.host)}*")
+        message = format_messages_to_telegram(messages)
+        print(message)
         asyncio.create_task(telegram_notification.send_message_to_admin(message=message))
         return {"data": "OK"}
 
     trading_view_ips = config.get_trading_view_ips()
-    if not config.get_is_testing_telegram() and not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
-        message = f"[Potential malicious request warning]‼️Request ip {request.client.host} is not from trading view {trading_view_ips}"
+    if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
+        messages.append(f"*[Potential malicious request warning]‼️*\nRequest ip *{escape_markdown(request.client.host)}* is not from trading view: *{escape_markdown(str(trading_view_ips))}*")
+        message = format_messages_to_telegram(messages)
         print(message)
-        asyncio.create_task(telegram_notification.send_message_to_admin(message=escape_markdown(message)))
+        asyncio.create_task(telegram_notification.send_message_to_admin(message=message))
         return {"data": "OK"}
 
     vix_central_service = Dependencies.get_vix_central_service()
@@ -66,18 +73,23 @@ async def tradingview_webhook(request: Request):
     tradingview_message = format_tradingview_message(body)
     tradingview_message = f"*Trading view market data:*{tradingview_message}"
 
-    messages = [vix_central_message, tradingview_message]
-    if config.get_is_testing_telegram():
-        messages.insert(0, '*THIS IS A TEST MESSAGE*')
+    messages.append(vix_central_message)
+    messages.append(tradingview_message)
 
-    telegram_message = escape_markdown("\n-----------------------------------------------------------------\n").join(
+    telegram_message = format_messages_to_telegram(messages)
+
+    asyncio.create_task(telegram_notification.send_message_to_channel(message=telegram_message))
+    return {"data": "OK"}
+
+    # res = await telegram_notification.send_message_to_channel(message=telegram_message)
+    # if not res:
+    #     return {"data": "OK"}
+    # print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
+    # return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}
+
+def format_messages_to_telegram(messages: list[str]) -> str:
+    return escape_markdown("\n-----------------------------------------------------------------\n").join(
         messages)
-
-    res = await telegram_notification.send_message_to_channel(message=telegram_message)
-    if not res:
-        return {"data": "OK"}
-    print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
-    return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}
 
 # TODO: cleanup trading view webhook code
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):

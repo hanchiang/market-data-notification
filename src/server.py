@@ -8,10 +8,10 @@ import uvicorn
 import os
 from src.dependencies import Dependencies
 from src.router.vix_central import thirdparty_vix_central, vix_central
-import src.notification_destination.telegram_notification as telegram_notification
 from src.service.vix_central import RecentVixFuturesValues
 import src.config.config as config
 from src.util.my_telegram import escape_markdown
+from src.event.event_emitter import ee
 
 app = FastAPI()
 app.include_router(thirdparty_vix_central.router)
@@ -65,14 +65,13 @@ async def tradingview_webhook(request: Request):
         print(e)
         messages.append(f"JSON body error: {escape_markdown(str(e))}")
         message = format_messages_to_telegram(messages)
-        asyncio.create_task(telegram_notification.send_message_to_admin(message))
+        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     if body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
         message = format_messages_to_telegram(messages)
-        print(message)
-        asyncio.create_task(telegram_notification.send_message_to_admin(message=message))
+        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     trading_view_ips = config.get_trading_view_ips()
@@ -80,8 +79,7 @@ async def tradingview_webhook(request: Request):
         filtered_body = {k: v for k, v in body.items() if k != 'secret'}
         messages.append(f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
         message = format_messages_to_telegram(messages)
-        print(message)
-        asyncio.create_task(telegram_notification.send_message_to_admin(message=message))
+        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     vix_central_service = Dependencies.get_vix_central_service()
@@ -96,14 +94,8 @@ async def tradingview_webhook(request: Request):
 
     telegram_message = format_messages_to_telegram(messages)
 
-    asyncio.create_task(telegram_notification.send_message_to_channel(message=telegram_message))
+    ee.emit('send_to_telegram', message=telegram_message, channel=config.get_telegram_channel_id())
     return {"data": "OK"}
-
-    # res = await telegram_notification.send_message_to_channel(message=telegram_message)
-    # if not res:
-    #     return {"data": "OK"}
-    # print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
-    # return {"data": f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}"}
 
 def format_messages_to_telegram(messages: list[str]) -> str:
     return escape_markdown("\n-----------------------------------------------------------------\n").join(

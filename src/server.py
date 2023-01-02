@@ -56,17 +56,17 @@ async def tradingview_webhook(request: Request):
     # request body: { secret: '', data: [{ symbol, timeframe(e.g. 1d), close, ema20 }] }
 
     messages = []
+    if config.get_is_testing_telegram():
+        messages.insert(0, '*THIS IS A TEST MESSAGE*')
 
     try:
         body = await request.json()
     except Exception as e:
         print(e)
-        message = f"JSON body error: {str(e)}"
-        asyncio.create_task(telegram_notification.send_message_to_admin(escape_markdown(message)))
+        messages.append(f"JSON body error: {escape_markdown(str(e))}")
+        message = format_messages_to_telegram(messages)
+        asyncio.create_task(telegram_notification.send_message_to_admin(message))
         return {"data": "OK"}
-
-    if config.get_is_testing_telegram():
-        messages.insert(0, '*THIS IS A TEST MESSAGE*')
 
     if body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")

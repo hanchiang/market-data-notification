@@ -9,7 +9,7 @@ def get_current_datetime():
 
 # return the most recent non-weekend or today
 # TODO: exclude public holidays
-def get_most_recent_non_weekend_or_today(date: datetime.datetime):
+def get_most_recent_non_weekend_or_today(date: datetime.datetime) -> datetime.datetime:
     # Monday == 0, Sunday == 6
     day_of_week = date.weekday()
     days_to_subtract = 0

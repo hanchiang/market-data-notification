@@ -78,7 +78,7 @@ class VixCentralService:
                 self.recent_values.vix_futures_values.append(self.historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
         else:
             most_recent_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
-            most_recent_date_yyyy_mm_dd = f"{most_recent_date.year}-{str(most_recent_date.month).ljust(2, '0')}-{str(most_recent_date.day).ljust(2, '0')}"
+            most_recent_date_yyyy_mm_dd = f"{most_recent_date.year}-{str(most_recent_date.month).zfill(2)}-{str(most_recent_date.day).zfill(2)}"
             if self.recent_values.vix_futures_values[0] and most_recent_date_yyyy_mm_dd == self.recent_values.vix_futures_values[0].current_date:
                 print('Most recent VIX futures data is already fetched')
                 return self.recent_values

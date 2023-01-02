@@ -39,7 +39,7 @@ async def shutdown_event():
 @app.middleware("http")
 async def log_request_and_time_taken(request: Request, call_next):
     start_time = time.time()
-    print(f"{request.method} {request.url} Received request from {request.client}")
+    print(f"{request.method} {request.url}, headers: {request.headers} client: {request.client}")
     response = await call_next(request)
     time_elapsed = time.time() - start_time
     response.headers["X-Process-Time"] = str(time_elapsed)
@@ -56,7 +56,15 @@ async def tradingview_webhook(request: Request):
     # request body: { secret: '', data: [{ symbol, timeframe(e.g. 1d), close, ema20 }] }
 
     messages = []
-    body = await request.json()
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        print(e)
+        message = f"JSON body error: {str(e)}"
+        asyncio.create_task(telegram_notification.send_message_to_admin(escape_markdown(message)))
+        return {"data": "OK"}
+
     if config.get_is_testing_telegram():
         messages.insert(0, '*THIS IS A TEST MESSAGE*')
 

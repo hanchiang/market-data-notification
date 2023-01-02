@@ -8,6 +8,7 @@ def get_current_datetime():
     return now.astimezone(tz=ny_tz)
 
 # return the most recent non-weekend or today
+# TODO: exclude public holidays
 def get_most_recent_non_weekend_or_today(date: datetime.datetime):
     # Monday == 0, Sunday == 6
     day_of_week = date.weekday()

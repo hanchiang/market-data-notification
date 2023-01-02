@@ -57,7 +57,9 @@ async def tradingview_webhook(request: Request):
 
     messages = []
     if config.get_is_testing_telegram():
-        messages.insert(0, '*THIS IS A TEST MESSAGE*')
+        messages.insert(0, '*THIS IS A TEST MESSAGE: Parameters have been adjusted*')
+    elif config.get_simulate_tradingview_traffic():
+        messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
     try:
         body = await request.json()

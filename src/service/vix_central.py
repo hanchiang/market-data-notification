@@ -30,6 +30,10 @@ class RecentVixFuturesValues:
         self.is_contango_decrease_for_past_n_days: bool = None
         self.contango_decrease_past_n_days = decrease_past_n_days
 
+    def clear_current_value(self):
+        if len(self.vix_futures_values) > 1:
+            self.vix_futures_values.pop(0)
+
 # TODO: test
 class VixCentralService:
     # month of the vix futures we are interested in. e.g. "Jan"
@@ -42,32 +46,34 @@ class VixCentralService:
         self.third_party_service = third_party_service
         self.recent_values: RecentVixFuturesValues = RecentVixFuturesValues(self.contango_decrease_past_n_days_threshold)
 
-
     async def cleanup(self):
         await self.third_party_service.cleanup()
 
-    def clear_values(self):
-        self.recent_values: RecentVixFuturesValues = RecentVixFuturesValues(self.contango_decrease_past_n_days_threshold)
+    def clear_current_values(self):
+        self.recent_values.clear_current_value()
 
-    # Stateful, cache results. Should be called at the end of the market hours. However, service is called during market hours,
-    # then subsequent calls during that day won't return the most recent data until the next day
-    # Can consider switching to stateless in the future
+    # Stateful: Cache historical results. Retrieves current result on demand
     async def get_recent_values(self) -> RecentVixFuturesValues:
         coros = []
-        values_length = len(self.recent_values.vix_futures_values)
-        current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
 
-        if values_length < self.number_of_days_to_store:
-            # clear values and rebuild it for simplicity, instead of continuing from where it left off
-            self.clear_values()
+        self.clear_current_values()
 
+        if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
+            print('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
+            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=date_util.get_current_datetime()))
+        else:
+            print('Retrieving current and historical vix central data')
+            current = await self.third_party_service.get_current()
+            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current,
+                                                                                              current_date=date_util.get_current_datetime()))
 
             historical_dates = []
+            current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
             for i in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
                 # subtract days from previously used historical date, or from current date
-                reference_date = historical_dates[len(historical_dates) - 1] if len(historical_dates) > 0 else current_date
+                reference_date = historical_dates[len(historical_dates) - 1] if len(
+                    historical_dates) > 0 else current_date
                 date = date_util.get_most_recent_non_weekend_or_today(reference_date - datetime.timedelta(days=1))
 
                 historical_dates.append(date)
@@ -75,18 +81,8 @@ class VixCentralService:
             res = await asyncio.gather(*coros)
 
             for i in range(0, len(res)):
-                self.recent_values.vix_futures_values.append(self.historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
-        else:
-            most_recent_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
-            most_recent_date_yyyy_mm_dd = f"{most_recent_date.year}-{str(most_recent_date.month).zfill(2)}-{str(most_recent_date.day).zfill(2)}"
-            if self.recent_values.vix_futures_values[0] and most_recent_date_yyyy_mm_dd == self.recent_values.vix_futures_values[0].current_date:
-                print('Most recent VIX futures data is already fetched')
-                return self.recent_values
-
-            # remove oldest value, add current value
-            self.recent_values.vix_futures_values.pop()
-            current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
+                self.recent_values.vix_futures_values.append(
+                    self.historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
 
         return self.compute_contango_alert_threshold(self.recent_values)
 

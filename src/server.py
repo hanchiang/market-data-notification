@@ -137,7 +137,7 @@ def format_tradingview_message(payload: List[Any]):
         close_ema20_delta_percent = f"{close_ema20_delta_ratio:.2%}"
 
         if symbol != 'VIX':
-            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change: {escape_markdown(close_ema20_delta_percent)}"
+            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change from ema20: {escape_markdown(close_ema20_delta_percent)}"
             close_ema20_direction = 'up' if close > ema20 else 'down'
         else:
             message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}"

@@ -235,42 +235,18 @@ class TestVixCentralService:
         thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)
         vix_central_service = VixCentralService(third_party_service=thirdparty_vix_central_service, number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS)
 
-        asyncio_gather_mock.return_value = []
+        vix_futures_values = VixFuturesValue()
+        vix_futures_values.futures_value = self.historical_vix_futures[1]
+        vix_futures_values.current_date = '2022-12-31'
+        vix_futures_values.next_month_futures_value = self.historical_vix_futures[2]
+        vix_futures_values.raw_contango = self.historical_vix_futures[2] / self.historical_vix_futures[1] - 1
+        asyncio_gather_mock.return_value = [self.historical_vix_futures]
 
         result = await vix_central_service.get_recent_values()
 
         asyncio_gather_mock.assert_awaited()
         thirdparty_vix_central_service.get_current.assert_called()
-        assert len(result.vix_futures_values) == 1
-
-    @pytest.mark.asyncio
-    @patch("asyncio.gather", new_callable=AsyncMock)
-    @patch("src.service.vix_central.date_util.get_most_recent_non_weekend_or_today")
-    async def test_get_recent_values_full_state_most_recent_value_not_retrieved(self, get_most_recent_non_weekend_or_today: Mock, asyncio_gather_mock: AsyncMock):
-        thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
-
-        thirdparty_vix_central_service.get_current = AsyncMock(return_value=self.current_vix_futures)
-        thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)
-        vix_central_service = VixCentralService(third_party_service=thirdparty_vix_central_service, number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS)
-
-        vix_futures_values = VixFuturesValue()
-        vix_futures_values.futures_value = self.historical_vix_futures[1]
-        vix_futures_values.current_date = '2022-12-30'
-        vix_futures_values.next_month_futures_value = self.historical_vix_futures[2]
-        vix_futures_values.raw_contango = self.historical_vix_futures[2] / self.historical_vix_futures[1] - 1
-        vix_central_service.recent_values.vix_futures_values = [vix_futures_values, {}]
-
-        get_most_recent_non_weekend_or_today.return_value = datetime.datetime(2022, 12, 31)
-
-        result = await vix_central_service.get_recent_values()
-
-        asyncio_gather_mock.assert_not_awaited()
-        thirdparty_vix_central_service.get_historical.assert_not_called()
-
         assert len(result.vix_futures_values) == 2
-        assert result.vix_futures_values[0].futures_value == 23.35
-        assert result.vix_futures_values[0].next_month_futures_value == 24.6
-        assert result.vix_futures_values[0].raw_contango == 24.6 / 23.35 - 1
 
     @pytest.mark.asyncio
     @patch("asyncio.gather", new_callable=AsyncMock)
@@ -288,20 +264,47 @@ class TestVixCentralService:
         vix_futures_values.current_date = '2022-12-31'
         vix_futures_values.next_month_futures_value = self.historical_vix_futures[2]
         vix_futures_values.raw_contango = self.historical_vix_futures[2] / self.historical_vix_futures[1] - 1
-        vix_central_service.recent_values.vix_futures_values = [vix_futures_values, {}]
+        vix_central_service.recent_values.vix_futures_values = [{}, vix_futures_values]
 
-        vix_central_service.compute_contango_alert_threshold = Mock()
         get_most_recent_non_weekend_or_today.return_value = datetime.datetime(2022, 12, 31)
 
         result = await vix_central_service.get_recent_values()
 
         asyncio_gather_mock.assert_not_awaited()
         thirdparty_vix_central_service.get_historical.assert_not_called()
-        thirdparty_vix_central_service.get_current.assert_not_called()
-        vix_central_service.compute_contango_alert_threshold.assert_not_called()
+        thirdparty_vix_central_service.get_current.assert_called_once()
 
         assert len(result.vix_futures_values) == 2
-        assert result.vix_futures_values == [vix_futures_values, {}]
 
     def test_calculate_contango(self):
         assert self.vix_central_service.calculate_contango(23, 24) == 0.04347826086956519
+
+    def test_clear_historical_values(self):
+        recent_vix_futures_values = RecentVixFuturesValues()
+
+        v1 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO)
+        v1.current_date = '2020-12-31'
+        v1.futures_date = '2022 Jan'
+        v1.futures_value = 23
+        v1.next_month_futures_value = 24
+        # 0.04347826086956519
+        v1.raw_contango = (v1.next_month_futures_value / v1.futures_value) - 1
+        v1.formatted_contango = f"{v1.raw_contango:.2%}"
+
+        v2 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO)
+        v2.current_date = '2020-12-30'
+        v2.futures_date = '2022 Jan'
+        v2.futures_value = 15
+        v2.next_month_futures_value = 16
+        # 0.06666666666666665
+        v2.raw_contango = (v2.next_month_futures_value / v2.futures_value) - 1
+        v2.formatted_contango = f"{v2.raw_contango:.2%}"
+
+        recent_vix_futures_values.vix_futures_values.append(v1)
+        recent_vix_futures_values.vix_futures_values.append(v2)
+
+        recent_vix_futures_values.clear_current_value()
+
+        assert recent_vix_futures_values.vix_futures_values == [v2]

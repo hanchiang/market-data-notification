@@ -14,3 +14,7 @@ This repository sends market data notification to channels like telegram. Data s
 
 ## Simulate real message
 ![test message](images/telegram_simulate_tradingview_traffic.png)
+
+# Workflow
+* Receive market data when market closes at 4pm local time -> save in redis
+* Before market open -> Send notification to telegram

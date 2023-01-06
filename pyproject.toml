@@ -20,10 +20,14 @@ pytest = "^7.2.0"
 pytest-asyncio = "^0.20.3"
 python-dotenv = "^0.21.0"
 pyee = "^9.0.4"
+redis = "^4.4.0"
 
 [tool.poetry.dev-dependencies]
 debugpy = "^1.6.2"
 replit-python-lsp-server = {extras = ["yapf", "rope", "pyflakes"], version = "^1.5.9"}
+
+[tool.poetry.extras]
+redis = ["hiredis"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

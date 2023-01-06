@@ -10,3 +10,13 @@ services:
     command: poetry run pytest
     volumes:
       - ./:/app
+  redis:
+    container_name: redis
+    image: redis:7.0.7
+    volumes:
+      - redis_data:/data
+    ports:
+      - 6379:6379
+
+volumes:
+  redis_data:

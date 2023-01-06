@@ -73,3 +73,12 @@ def get_tradingview_webhook_secret():
 
 def get_disable_telegram():
     return os.getenv('DISABLE_TELEGRAM', False) == 'true'
+
+def get_redis_host():
+    return os.getenv('REDIS_HOST', 'localhost')
+
+def get_redis_port():
+    return os.getenv('REDIS_PORT', 6379)
+
+def get_redis_db():
+    return os.getenv('REDIS_DB', 0)

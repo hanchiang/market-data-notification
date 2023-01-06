@@ -1,17 +1,16 @@
-import asyncio
+import json
 import time
-from functools import reduce
-from typing import List, Any
 
 from fastapi import FastAPI, Request
 import uvicorn
 import os
 from src.dependencies import Dependencies
 from src.router.vix_central import thirdparty_vix_central, vix_central
-from src.service.vix_central import RecentVixFuturesValues
 import src.config.config as config
-from src.util.my_telegram import escape_markdown
 from src.event.event_emitter import ee
+from src.util.date_util import get_current_datetime
+from src.util.my_telegram import format_messages_to_telegram, escape_markdown
+from src.db.redis import Redis
 
 app = FastAPI()
 app.include_router(thirdparty_vix_central.router)
@@ -27,14 +26,15 @@ def start_server():
 
     uvicorn.run("server:app", app_dir="src", reload_dirs=["src"], host="0.0.0.0", port=8080, reload=reload)
 
-
 @app.on_event("startup")
 async def startup_event():
     await Dependencies.build()
+    await Redis.start_redis()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     await Dependencies.cleanup()
+    await Redis.stop_redis()
 
 @app.middleware("http")
 async def log_request_and_time_taken(request: Request, call_next):
@@ -50,19 +50,14 @@ async def log_request_and_time_taken(request: Request, call_next):
 async def heath_check():
     return {"data": "Market data notification is running!"}
 
-
 @app.post("/tradingview-webhook")
 async def tradingview_webhook(request: Request):
     # request body: { secret: '', data: [{ symbol, timeframe(e.g. 1d), close, ema20 }] }
 
     messages = []
-    if config.get_is_testing_telegram():
-        messages.insert(0, '*THIS IS A TEST MESSAGE: Parameters have been adjusted*')
-    elif config.get_simulate_tradingview_traffic():
-        messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
-
     try:
         body = await request.json()
+        print(body)
     except Exception as e:
         print(e)
         messages.append(f"JSON body error: {escape_markdown(str(e))}")
@@ -71,7 +66,8 @@ async def tradingview_webhook(request: Request):
         return {"data": "OK"}
 
     if body.get('secret', None) != config.get_tradingview_webhook_secret():
-        messages.append(f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
+        messages.append(
+            f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
         message = format_messages_to_telegram(messages)
         ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
@@ -79,85 +75,15 @@ async def tradingview_webhook(request: Request):
     trading_view_ips = config.get_trading_view_ips()
     if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
         filtered_body = {k: v for k, v in body.items() if k != 'secret'}
-        messages.append(f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
+        messages.append(
+            f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
         message = format_messages_to_telegram(messages)
         ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
-    vix_central_service = Dependencies.get_vix_central_service()
-    vix_central_data = await vix_central_service.get_recent_values()
-    vix_central_message = format_vix_central_message(vix_central_data)
+    now = get_current_datetime()
+    # key: <source>-<yyyymmdd>
+    key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+    data = await Redis.get_client().set(key, json.dumps(body))
+    return {"data": data}
 
-    tradingview_message = format_tradingview_message(body.get('data', []))
-    tradingview_message = f"*Trading view market data:*{tradingview_message}"
-
-    messages.append(vix_central_message)
-    messages.append(tradingview_message)
-
-    telegram_message = format_messages_to_telegram(messages)
-
-    ee.emit('send_to_telegram', message=telegram_message, channel=config.get_telegram_channel_id())
-    return {"data": "OK"}
-
-def format_messages_to_telegram(messages: list[str]) -> str:
-    return escape_markdown("\n-----------------------------------------------------------------\n").join(
-        messages)
-
-# TODO: cleanup trading view webhook code
-def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
-    message = reduce(format_vix_futures_values, vix_central_value.vix_futures_values,
-                     f"*VIX central data for {vix_central_value.vix_futures_values[0].futures_date} futures:*")
-    if vix_central_value.is_contango_decrease_for_past_n_days:
-        message = f"{message}\n*Contango has been decreasing for the past {vix_central_value.contango_decrease_past_n_days} days ‼️*"
-    return message
-
-
-def format_vix_futures_values(res, curr):
-    message = f"{res}\ndate: {escape_markdown(curr.current_date)}, contango %: {escape_markdown(curr.formatted_contango)}"
-    if curr.is_contango_single_day_decrease_alert:
-        threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
-        message = f"{message}{escape_markdown('.')} *Contango changed by more than {escape_markdown(threshold)} from the previous day* ‼️"
-    return message
-
-
-def format_tradingview_message(payload: List[Any]):
-    message = ''
-    potential_overextended_by_symbol = config.get_potential_overextended_by_symbol()
-
-    sorted_payload = sorted(payload, key=payload_sorter)
-
-    for p in sorted_payload:
-        symbol = p['symbol'].upper()
-
-        close = p['close']
-        ema20 = p['ema20']
-        close_ema20_delta_ratio = (close - ema20) / ema20 if close > ema20 else -(ema20 - close) / ema20
-
-        # For VIX, compare close and overextended threshold. Other other symbols, compare close and ema20
-        close_ema20_delta_percent = f"{close_ema20_delta_ratio:.2%}"
-
-        if symbol != 'VIX':
-            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change from ema20: {escape_markdown(close_ema20_delta_percent)}"
-            close_ema20_direction = 'up' if close > ema20 else 'down'
-        else:
-            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}"
-
-        if potential_overextended_by_symbol.get(symbol, None) is not None:
-            if symbol != 'VIX':
-                if potential_overextended_by_symbol[symbol].get(close_ema20_direction) is not None:
-                    overextended_threshold = potential_overextended_by_symbol[symbol][close_ema20_direction]
-                    if abs(close_ema20_delta_ratio) > abs(overextended_threshold):
-                        message = f"{message}, *greater than {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
-            else:
-                vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['up']
-                vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['down']
-                if close >= vix_overextended_up_threshold:
-                    message = f"{message}, *VIX is near the top around {f'{escape_markdown(str(vix_overextended_up_threshold))}'}, meaning market is near the bottom, watch for potential rebound* ‼️"
-                elif close <= vix_overextended_down_threshold:
-                    message = f"{message}, *VIX is near the bottom around {f'{escape_markdown(str(vix_overextended_down_threshold))}'}, meaning market is near the top, watch for potential rebound* ‼️"
-    return message
-
-def payload_sorter(item):
-    symbol = item['symbol'].upper()
-    # VIX should appear last
-    return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'

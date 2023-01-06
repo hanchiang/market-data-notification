@@ -9,9 +9,21 @@ services:
     working_dir: /app
     env_file: .env
     command: poetry run python3 main.py
+    depends_on:
+      - redis
     ports:
       - "8080:8080"
     volumes:
       - ./src:/app/src
     environment:
       ENV: dev
+  redis:
+    container_name: redis
+    image: redis:7.0.7
+    volumes:
+      - redis_data:/data
+    ports:
+      - 6379:6379
+
+volumes:
+  redis_data:

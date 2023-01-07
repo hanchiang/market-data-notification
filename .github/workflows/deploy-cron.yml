@@ -83,7 +83,7 @@ jobs:
             chmod +x ./market_data_notification.sh
           
             crontab <<< "30 12,13 * * * ./market_data_notification.sh  >> market_data_notification.log 2>&1"
-            crontab -l
+            echo \$?
           EOF
           rm -rf ~/.ssh
   notify_unsuccessful:

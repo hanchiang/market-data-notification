@@ -2,9 +2,14 @@ from pyee.asyncio import  AsyncIOEventEmitter
 from src.notification_destination import telegram_notification
 from src.util.my_telegram import escape_markdown
 
-ee = AsyncIOEventEmitter()
+async_ee = AsyncIOEventEmitter()
 
-@ee.on('send_to_telegram')
+@async_ee.on('error')
+async def on_error(message):
+    print(message)
+    await telegram_notification.send_message_to_admin(escape_markdown(str(message)))
+
+@async_ee.on('send_to_telegram')
 async def send_to_telegram_handler(*args, **kwargs):
     try:
         channel = kwargs['channel']

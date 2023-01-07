@@ -1,5 +1,9 @@
 name: Deploy cron
 on:
+  push:
+    branches:
+      - feature/*
+      - master
   workflow_run:
     workflows: [Test and build]
     types:

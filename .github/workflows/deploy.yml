@@ -104,8 +104,8 @@ jobs:
           TRADING_VIEW_WEBHOOK_SECRET: ${{ secrets.TRADING_VIEW_WEBHOOK_SECRET }}
           DISABLE_TELEGRAM: ${{ secrets.DISABLE_TELEGRAM }}
           REDIS_HOST: ${{ secrets.REDIS_HOST }}
-          REDIS_PORT: $${{ secrets.REDIS_PORT }}
-          REDIS_DB: $${{ secrets.REDIS_DB }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
+          REDIS_DB: ${{ secrets.REDIS_DB }}
         run: |
           ssh production << EOF
           echo "Logging into container registry"

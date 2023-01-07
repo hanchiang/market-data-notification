@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 from functools import reduce
@@ -6,7 +7,7 @@ from typing import List, Any
 from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
-from src.event.event_emitter import ee
+from src.notification_destination.telegram_notification import send_message_to_channel
 from src.service.vix_central import RecentVixFuturesValues
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
@@ -20,41 +21,53 @@ async def market_data_notification_job():
         messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
     try:
+        await Redis.start_redis()
+        await Dependencies.build()
         tradingview_data = await get_tradingview_data()
+
+        if tradingview_data is None:
+            raise RuntimeError("trading view data is empty")
+
+        vix_central_service = Dependencies.get_vix_central_service()
+        vix_central_data = await vix_central_service.get_recent_values()
+        vix_central_message = format_vix_central_message(vix_central_data)
+
+        tradingview_message = format_tradingview_message(tradingview_data.get('data', []))
+        tradingview_message = f"*Trading view market data:*{tradingview_message}"
+
+        messages.append(vix_central_message)
+        messages.append(tradingview_message)
+
+        telegram_message = format_messages_to_telegram(messages)
+
+        res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_channel_id())
+        return res
     except Exception as e:
         print(e)
-        messages.append(f"JSON body error: {escape_markdown(str(e))}")
+        messages.append(f"{escape_markdown(str(e))}")
         message = format_messages_to_telegram(messages)
-        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
-        return {"data": "OK"}
-
-    vix_central_service = Dependencies.get_vix_central_service()
-    vix_central_data = await vix_central_service.get_recent_values()
-    vix_central_message = format_vix_central_message(vix_central_data)
-
-    tradingview_message = format_tradingview_message(tradingview_data.get('data', []))
-    tradingview_message = f"*Trading view market data:*{tradingview_message}"
-
-    messages.append(vix_central_message)
-    messages.append(tradingview_message)
-
-    telegram_message = format_messages_to_telegram(messages)
-
-    ee.emit('send_to_telegram', message=telegram_message, channel=config.get_telegram_channel_id())
+        await send_message_to_channel(message=message, chat_id=config.get_telegram_admin_id())
+        return None
+    finally:
+        await Redis.stop_redis()
 
 async def get_tradingview_data():
     now = get_current_datetime()
-    # key: <source>-<yyyymmdd>
-    key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
-    tradingview_data = await Redis.get_client(key)
-    if tradingview_data is not None:
+    try:
+        # Usually this job is run before market open the next day, so we need to get data from the previous day.
+        # If this job is run on the same day. Then we will get the data from that day.
+        # key: <source>-<yyyymmdd>
+        key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+        tradingview_data = await Redis.get_client().get(key)
+        if tradingview_data is not None:
+            return json.loads(tradingview_data)
+        now = get_current_datetime() - datetime.timedelta(days=1)
+        key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+        tradingview_data = await Redis.get_client().get(key)
         return json.loads(tradingview_data)
-
-    now = get_current_datetime() - datetime.timedelta(days=1)
-    key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
-    tradingview_data = await Redis.get_client(key)
-    return json.loads(tradingview_data)
-
+    except Exception as e:
+        print(e)
+        return None
 
 # TODO: cleanup trading view webhook code
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
@@ -114,3 +127,8 @@ def payload_sorter(item):
     symbol = item['symbol'].upper()
     # VIX should appear last
     return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    data = asyncio.run(market_data_notification_job())
+    print(data)

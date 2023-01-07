@@ -13,8 +13,10 @@ from src.util.context_manager import TimeTrackerContext
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
-
 async def market_data_notification_job():
+    if not should_run():
+        return
+
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
         messages = []
@@ -50,6 +52,18 @@ async def market_data_notification_job():
             return None
         finally:
             await Redis.stop_redis()
+
+# run 1 hour before market open at 9.30am
+def should_run() -> bool:
+    now = get_current_datetime()
+    local = get_current_datetime()
+    local = local.replace(hour=config.get_notification_job_start_local_hour(), minute=config.get_notification_job_start_local_minute())
+    delta = now - local
+
+    should_run = abs(delta.total_seconds()) <= config.get_notification_job_delay_tolerance_second()
+    print(
+        f'local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
+    return should_run
 
 async def get_tradingview_data():
     now = get_current_datetime()

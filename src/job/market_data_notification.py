@@ -9,47 +9,47 @@ from src.db.redis import Redis
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.service.vix_central import RecentVixFuturesValues
+from src.util.context_manager import TimeTrackerContext
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 
 async def market_data_notification_job():
-    messages = []
-    if config.get_is_testing_telegram():
-        messages.insert(0, '*THIS IS A TEST MESSAGE: Parameters have been adjusted*')
-    elif config.get_simulate_tradingview_traffic():
-        messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
+    with TimeTrackerContext('market_data_notification_job'):
+        # TODO: May need a lock in the future
+        messages = []
+        if config.get_is_testing_telegram():
+            messages.insert(0, '*THIS IS A TEST MESSAGE: Parameters have been adjusted*')
+        elif config.get_simulate_tradingview_traffic():
+            messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
-    try:
-        await Redis.start_redis()
-        await Dependencies.build()
-        tradingview_data = await get_tradingview_data()
+        try:
+            await Redis.start_redis()
+            await Dependencies.build()
+            tradingview_data = await get_tradingview_data()
 
-        if tradingview_data is None:
-            raise RuntimeError("trading view data is empty")
+            if tradingview_data is not None:
+                tradingview_message = format_tradingview_message(tradingview_data.get('data', []))
+                tradingview_message = f"*Trading view market data:*{tradingview_message}"
+                messages.append(tradingview_message)
 
-        vix_central_service = Dependencies.get_vix_central_service()
-        vix_central_data = await vix_central_service.get_recent_values()
-        vix_central_message = format_vix_central_message(vix_central_data)
+            vix_central_service = Dependencies.get_vix_central_service()
+            vix_central_data = await vix_central_service.get_recent_values()
+            vix_central_message = format_vix_central_message(vix_central_data)
 
-        tradingview_message = format_tradingview_message(tradingview_data.get('data', []))
-        tradingview_message = f"*Trading view market data:*{tradingview_message}"
+            messages.append(vix_central_message)
+            telegram_message = format_messages_to_telegram(messages)
 
-        messages.append(vix_central_message)
-        messages.append(tradingview_message)
-
-        telegram_message = format_messages_to_telegram(messages)
-
-        res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_channel_id())
-        return res
-    except Exception as e:
-        print(e)
-        messages.append(f"{escape_markdown(str(e))}")
-        message = format_messages_to_telegram(messages)
-        await send_message_to_channel(message=message, chat_id=config.get_telegram_admin_id())
-        return None
-    finally:
-        await Redis.stop_redis()
+            res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_channel_id())
+            return res
+        except Exception as e:
+            print(e)
+            messages.append(f"{escape_markdown(str(e))}")
+            message = format_messages_to_telegram(messages)
+            await send_message_to_channel(message=message, chat_id=config.get_telegram_admin_id())
+            return None
+        finally:
+            await Redis.stop_redis()
 
 async def get_tradingview_data():
     now = get_current_datetime()
@@ -67,7 +67,7 @@ async def get_tradingview_data():
         return json.loads(tradingview_data)
     except Exception as e:
         print(e)
-        return None
+        return {}
 
 # TODO: cleanup trading view webhook code
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):

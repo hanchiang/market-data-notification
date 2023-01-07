@@ -58,18 +58,17 @@ class VixCentralService:
 
         self.clear_current_values()
 
+        current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
             print('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=date_util.get_current_datetime()))
+            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
         else:
             print('Retrieving current and historical vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current,
-                                                                                              current_date=date_util.get_current_datetime()))
-
+            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
             historical_dates = []
-            current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
+
             for i in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
                 # subtract days from previously used historical date, or from current date
                 reference_date = historical_dates[len(historical_dates) - 1] if len(
@@ -125,7 +124,7 @@ class VixCentralService:
 
         ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self.format_futures_date(month_of_interest)
+        ret_val.futures_date = self.format_futures_date(month_of_interest, current_date)
         ret_val.futures_value = current_last_prices[0]
         ret_val.next_month_futures_value = current_last_prices[1]
         ret_val.raw_contango = contango
@@ -138,7 +137,7 @@ class VixCentralService:
 
         ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self.format_futures_date(VixCentralService.MONTH_OF_INTEREST)
+        ret_val.futures_date = self.format_futures_date(VixCentralService.MONTH_OF_INTEREST, current_date)
         ret_val.futures_value = historical[1]
         ret_val.next_month_futures_value = historical[2]
         ret_val.raw_contango = contango
@@ -150,8 +149,7 @@ class VixCentralService:
         return (second / first) - 1
 
     # month: mmm. e.g. Jan
-    def format_futures_date(self, month: str) -> str:
-        current_date = date_util.get_current_datetime()
+    def format_futures_date(self, month: str, current_date: datetime.date) -> str:
         year = current_date.year
         if current_date.month == 12:
             year += 1

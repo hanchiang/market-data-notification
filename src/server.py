@@ -7,7 +7,7 @@ import os
 from src.dependencies import Dependencies
 from src.router.vix_central import thirdparty_vix_central, vix_central
 import src.config.config as config
-from src.event.event_emitter import ee
+from src.event.event_emitter import async_ee
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.db.redis import Redis
@@ -62,14 +62,14 @@ async def tradingview_webhook(request: Request):
         print(e)
         messages.append(f"JSON body error: {escape_markdown(str(e))}")
         message = format_messages_to_telegram(messages)
-        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
+        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     if body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
         message = format_messages_to_telegram(messages)
-        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
+        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     trading_view_ips = config.get_trading_view_ips()
@@ -78,7 +78,7 @@ async def tradingview_webhook(request: Request):
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
         message = format_messages_to_telegram(messages)
-        ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
+        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
     now = get_current_datetime()

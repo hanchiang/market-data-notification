@@ -99,7 +99,7 @@ def format_tradingview_message(payload: List[Any]):
         ema20 = p['ema20']
         close_ema20_delta_ratio = (close - ema20) / ema20 if close > ema20 else -(ema20 - close) / ema20
 
-        # For VIX, compare close and overextended threshold. Other other symbols, compare close and ema20
+        # For VIX, compare close and overextended threshold. For other symbols, compare close_ema20_delta_ratio and overextended threshold
         close_ema20_delta_percent = f"{close_ema20_delta_ratio:.2%}"
 
         if symbol != 'VIX':

@@ -57,7 +57,8 @@ async def tradingview_webhook(request: Request):
     messages = []
     try:
         body = await request.json()
-        print(body)
+        filtered_body = filter_tradingview_request_body(body)
+        print(filtered_body)
     except Exception as e:
         print(e)
         messages.append(f"JSON body error: {escape_markdown(str(e))}")
@@ -74,7 +75,6 @@ async def tradingview_webhook(request: Request):
 
     trading_view_ips = config.get_trading_view_ips()
     if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
-        filtered_body = {k: v for k, v in body.items() if k != 'secret'}
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
         message = format_messages_to_telegram(messages)
@@ -84,6 +84,8 @@ async def tradingview_webhook(request: Request):
     now = get_current_datetime()
     # key: <source>-<yyyymmdd>
     key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
-    data = await Redis.get_client().set(key, json.dumps(body), ex=config.get_trading_view_ttl())
+    data = await Redis.get_client().set(key, json.dumps(filtered_body), ex=config.get_trading_view_ttl())
     return {"data": data}
 
+def filter_tradingview_request_body(body: dict) -> dict:
+    return {k: v for k, v in body.items() if k != 'secret'}

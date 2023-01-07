@@ -27,6 +27,7 @@ RUN poetry install
 CMD ["poetry", "run", "python3", "main.py"]
 
 FROM base as test
+RUN poetry install
 CMD ["poetry", "run", "pytest"]
 
 FROM base AS release

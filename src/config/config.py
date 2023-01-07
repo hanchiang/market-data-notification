@@ -82,3 +82,5 @@ def get_redis_port():
 
 def get_redis_db():
     return os.getenv('REDIS_DB', 0)
+def get_trading_view_ttl():
+    return os.getenv('TRADING_VIEW_TTL', 60*60*24*3)

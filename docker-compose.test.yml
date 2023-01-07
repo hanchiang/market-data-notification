@@ -8,6 +8,8 @@ services:
       target: test
     working_dir: /app
     command: poetry run pytest
+    depends_on:
+      - redis
     volumes:
       - ./:/app
   redis:

@@ -84,3 +84,12 @@ def get_redis_db():
     return os.getenv('REDIS_DB', 0)
 def get_trading_view_ttl():
     return os.getenv('TRADING_VIEW_TTL', 60*60*24*3)
+
+def get_notification_job_start_local_hour():
+    return os.getenv('NOTIFICATION_JOB_START_LOCAL_HOUR', 8)
+
+def get_notification_job_start_local_minute():
+    return os.getenv('NOTIFICATION_JOB_START_LOCAL_MINUTE', 30)
+
+def get_notification_job_delay_tolerance_second():
+    return os.getenv('NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND', 60 * 15)

@@ -32,5 +32,5 @@ CMD ["poetry", "run", "pytest"]
 
 FROM base AS release
 COPY --from=base . .
-RUN rm -rf $(poetry env info --path)/lib/python3.9/site-packages && poetry install --no-dev
+RUN rm -rf $(poetry env info --path) && poetry install --only main
 CMD ["poetry", "run", "python3", "main.py"]

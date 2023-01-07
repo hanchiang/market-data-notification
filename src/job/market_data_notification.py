@@ -62,7 +62,7 @@ def should_run() -> bool:
 
     should_run = abs(delta.total_seconds()) <= config.get_notification_job_delay_tolerance_second()
     print(
-        f'local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
+        f'local time: {local}, current time: {now}, local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
 async def get_tradingview_data():

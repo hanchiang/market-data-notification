@@ -84,6 +84,6 @@ async def tradingview_webhook(request: Request):
     now = get_current_datetime()
     # key: <source>-<yyyymmdd>
     key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
-    data = await Redis.get_client().set(key, json.dumps(body))
+    data = await Redis.get_client().set(key, json.dumps(body), ex=config.get_trading_view_ttl())
     return {"data": data}
 

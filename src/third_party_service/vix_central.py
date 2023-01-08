@@ -1,6 +1,8 @@
 from src.http_client import HttpClient
 
 
+# Monday to friday, 24 hours
+# See: https://www.cboe.com/tradable_products/vix/vix_futures/specifications/
 class ThirdPartyVixCentralService:
   BASE_URL = 'http://vixcentral.com'
   HEADERS = {

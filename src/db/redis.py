@@ -3,7 +3,7 @@ import redis.asyncio as redis
 from src.config import config
 
 class Redis:
-    redis = None
+    redis: redis.Redis
 
     @staticmethod
     def get_client():

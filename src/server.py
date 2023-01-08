@@ -4,6 +4,8 @@ import time
 from fastapi import FastAPI, Request
 import uvicorn
 import os
+
+from src.job.market_data_notification import get_redis_key
 from src.dependencies import Dependencies
 from src.router.vix_central import thirdparty_vix_central, vix_central
 import src.config.config as config
@@ -82,11 +84,10 @@ async def tradingview_webhook(request: Request):
         return {"data": "OK"}
 
     now = get_current_datetime()
-    # key: <source>-<yyyymmdd>
-    key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+    key = get_redis_key(now)
     data = await Redis.get_client().set(key, json.dumps(filtered_body), ex=config.get_trading_view_ttl())
 
-    messages.append(f'Successfully saved trading view data at {escape_markdown(str(get_current_datetime()))}')
+    messages.append(f'Successfully saved trading view data at *{escape_markdown(str(get_current_datetime()))}*, key: *{escape_markdown(key)}*')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
     return {"data": data}
 

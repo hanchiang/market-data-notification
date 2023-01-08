@@ -1,6 +1,6 @@
 import telegram
 import src.config.config as config
-from util.my_telegram import escape_markdown
+from src.util.my_telegram import escape_markdown
 
 bot = telegram.Bot(token=config.get_telegram_bot_token())
 admin_bot = telegram.Bot(token=config.get_telegram_admin_bot_token())

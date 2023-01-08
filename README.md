@@ -3,6 +3,7 @@ This repository sends market data notification to channels like telegram. Data s
 
 ![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
 ![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
+![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron.yml/badge.svg)
 
 # Tech stack
 * Language: Python

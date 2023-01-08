@@ -85,6 +85,9 @@ async def tradingview_webhook(request: Request):
     # key: <source>-<yyyymmdd>
     key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
     data = await Redis.get_client().set(key, json.dumps(filtered_body), ex=config.get_trading_view_ttl())
+
+    messages.append(f'Successfully saved trading view data at {escape_markdown(str(get_current_datetime()))}')
+    async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
     return {"data": data}
 
 def filter_tradingview_request_body(body: dict) -> dict:

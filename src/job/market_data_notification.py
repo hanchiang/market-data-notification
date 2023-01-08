@@ -13,6 +13,7 @@ from src.util.context_manager import TimeTrackerContext
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
+# TODO: test
 async def market_data_notification_job():
     if not should_run():
         return
@@ -30,9 +31,10 @@ async def market_data_notification_job():
             await Dependencies.build()
             tradingview_data = await get_tradingview_data()
 
-            if tradingview_data is not None:
-                tradingview_message = format_tradingview_message(tradingview_data.get('data', []))
-                tradingview_message = f"*Trading view market data:*{tradingview_message}"
+            if tradingview_data.get('data', None) is not None:
+                tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))
+                key = tradingview_data['key']
+                tradingview_message = f"*Trading view market data at {escape_markdown(get_datetime_from_redis_key(key))}:*{tradingview_message}"
                 messages.append(tradingview_message)
 
             vix_central_service = Dependencies.get_vix_central_service()
@@ -55,6 +57,9 @@ async def market_data_notification_job():
 
 # run 1 hour before market open at 9.30am
 def should_run() -> bool:
+    if config.get_is_testing_telegram():
+        return True
+
     now = get_current_datetime()
     local = get_current_datetime()
     local = local.replace(hour=config.get_notification_job_start_local_hour(), minute=config.get_notification_job_start_local_minute())
@@ -65,20 +70,23 @@ def should_run() -> bool:
         f'local time: {local}, current time: {now}, local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
-async def get_tradingview_data():
+# TODO: can consider using sorted set
+async def get_tradingview_data() -> dict:
     now = get_current_datetime()
     try:
         # Usually this job is run before market open the next day, so we need to get data from the previous day.
         # If this job is run on the same day. Then we will get the data from that day.
         # key: <source>-<yyyymmdd>
-        key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+        key = get_redis_key(now)
         tradingview_data = await Redis.get_client().get(key)
         if tradingview_data is not None:
-            return json.loads(tradingview_data)
+            print(f'redis key: {key}')
+            return {"key": key, "data": json.loads(tradingview_data)}
         now = get_current_datetime() - datetime.timedelta(days=1)
-        key = f'tradingview-{now.year}{str(now.month).zfill(2)}{str(now.day).zfill(2)}'
+        key = get_redis_key(now)
         tradingview_data = await Redis.get_client().get(key)
-        return json.loads(tradingview_data)
+        print(f'redis key: {key}')
+        return {"key": key, "data": json.loads(tradingview_data)}
     except Exception as e:
         print(e)
         return {}
@@ -141,6 +149,18 @@ def payload_sorter(item):
     symbol = item['symbol'].upper()
     # VIX should appear last
     return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'
+
+# key: <source>:<yyyy>-<mm>-<dd>
+def get_redis_key(date: datetime.datetime):
+    is_testing_telegram = config.get_is_testing_telegram()
+    key = 'tradingview'
+    if is_testing_telegram:
+        key = f'{key}-dev'
+    key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
+    return key
+
+def get_datetime_from_redis_key(key: str):
+    return key.split(':')[-1]
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

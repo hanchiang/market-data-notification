@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import json
+import sys
 from functools import reduce
 from typing import List, Any
 
@@ -14,8 +15,9 @@ from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test
-async def market_data_notification_job():
-    if not should_run():
+async def market_data_notification_job(argv):
+    force_run = argv[1] == 'true' if len(argv) > 1 else False
+    if not force_run and not should_run():
         return
 
     with TimeTrackerContext('market_data_notification_job'):
@@ -164,5 +166,5 @@ def get_datetime_from_redis_key(key: str):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    data = asyncio.run(market_data_notification_job())
+    data = asyncio.run(market_data_notification_job(sys.argv))
     print(data)

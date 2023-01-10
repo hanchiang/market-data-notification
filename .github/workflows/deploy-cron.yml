@@ -95,7 +95,7 @@ jobs:
           EOF2
 
           sudo chmod +x market_data_notification.sh
-          crontab <<< "30 12,13 * * 2-6 ./market_data_notification.sh market_data_notification src/job/market_data_notification.py > market_data_notification.log 2>&1"
+          crontab <<< "45 12,13 * * 2-6 ./market_data_notification.sh market_data_notification src/job/market_data_notification.py > market_data_notification.log 2>&1"
           echo $?
           EOF
           

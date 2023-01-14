@@ -93,3 +93,6 @@ def get_notification_job_start_local_minute():
 
 def get_notification_job_delay_tolerance_second():
     return int(os.getenv('NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND', 60 * 15))
+
+def get_messari_asset_metrics_sha256():
+    return os.getenv('MESSARI_ASSET_METRICS_SHA256', '')

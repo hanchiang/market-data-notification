@@ -5,8 +5,8 @@ from fastapi import FastAPI, Request
 import uvicorn
 import os
 
-from src.job.market_data_notification import get_redis_key
 from src.dependencies import Dependencies
+from src.job.service.tradingview import get_redis_key
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 import src.config.config as config

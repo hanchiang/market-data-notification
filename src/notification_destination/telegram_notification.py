@@ -25,7 +25,7 @@ async def send_message_to_channel(message: str, chat_id):
         return res
     except Exception as e:
         print(e)
-        await send_message_to_admin(escape_markdown(str(e)))
+        await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=escape_markdown(str(e)), parse_mode='MarkdownV2')
 
 async def send_message_to_admin(message: str):
     res = await admin_bot.send_message(chat_id=config.get_telegram_admin_id(), text=message, parse_mode='MarkdownV2')

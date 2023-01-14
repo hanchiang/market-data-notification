@@ -145,6 +145,7 @@ class VixCentralService:
         ret_val.is_contango_single_day_decrease_alert = False
         return ret_val
 
+    # the gradient of the next month futures compared to current
     def calculate_contango(self, first: float, second: float) -> float:
         return (second / first) - 1
 

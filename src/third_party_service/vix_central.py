@@ -42,5 +42,5 @@ class ThirdPartyVixCentralService:
 
     res_json = await res.json()
     if res_json == "error":
-      raise RuntimeError(f"no data found for {date}")
+      raise RuntimeError(f"[third party vix central] no data found for {date}")
     return res_json

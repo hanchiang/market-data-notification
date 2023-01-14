@@ -1,6 +1,7 @@
 from src.service.messari import AssetMetrics
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import escape_markdown
+from src.util.number import friendly_number
 
 
 def format_messari_metrics(res: AssetMetrics):
@@ -13,7 +14,7 @@ def format_messari_metrics(res: AssetMetrics):
         for exchange, usd_quantity in res.exchange_net_flows.items():
             message = f"{message}{exchange}: "
             for k, v in usd_quantity.items():
-                message = f"{message}{k}: {escape_markdown(str(v))}, "
+                message = f"{message}{k}: {escape_markdown(str(friendly_number(v)))}, "
             message = message[:len(message)-3]
             message = f"{message}\n"
         message = f"{message}\n"
@@ -23,7 +24,7 @@ def format_messari_metrics(res: AssetMetrics):
         for exchange, usd_quantity in res.exchange_supply.items():
             message = f"{message}{exchange}: "
             for k, v in usd_quantity.items():
-                message = f"{message}{k}: {escape_markdown(str(v))}, "
+                message = f"{message}{k}: {escape_markdown(str(friendly_number(v)))}, "
             message = message[:len(message)-3]
             message = f"{message}\n"
 

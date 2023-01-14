@@ -15,7 +15,7 @@ def format_messari_metrics(res: AssetMetrics):
             message = f"{message}{exchange}: "
             for k, v in usd_quantity.items():
                 message = f"{message}{k}: {escape_markdown(str(friendly_number(v)))}, "
-            message = message[:len(message)-3]
+            message = message[:len(message)-2]
             message = f"{message}\n"
         message = f"{message}\n"
 

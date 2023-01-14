@@ -37,24 +37,31 @@ class MessariService:
         ret_val.price_usd = pricing.get('priceUsd')
 
         exchanges = ThirdPartyMessariService.exchanges[:]
-
         # Exchange supply
-        ret_val.exchange_supply = dict(ret_val.exchange_supply, **{'total': {
+        ret_val.exchange_supply = dict(ret_val.exchange_supply, **{'Total': {
             'usd': exchange_supply.get(f'supplyOnExchangesUsd', None),
             'quantity': exchange_supply.get(f'supplyOnExchangesNative', None),
         }})
-
         ret_val.exchange_supply = dict(ret_val.exchange_supply, **{exchange: {
             'usd': exchange_supply.get(f'supplyOn{exchange}Usd', None),
             'quantity': exchange_supply.get(f'supplyOn{exchange}Native', None),
         } for exchange in exchanges})
+        ret_val.exchange_supply = {k: v for k, v in sorted(ret_val.exchange_supply.items(),
+                                                           key=MessariService.exchange_usd_quantity_sorter,
+                                                           reverse=True)}
 
         # Net flows
         ret_val.exchange_net_flows = dict(ret_val.exchange_net_flows, **{exchange: {
             'usd': exchange_net_flows.get(f'netFlows{exchange}Usd', None),
             'quantity': exchange_net_flows.get(f'netFlows{exchange}Native', None),
         } for exchange in exchanges})
+        ret_val.exchange_net_flows = { k: v for k, v in sorted(ret_val.exchange_net_flows.items(), key=MessariService.exchange_usd_quantity_sorter, reverse=True)}
 
         return ret_val
+
+    @staticmethod
+    def exchange_usd_quantity_sorter(exchange_obj: dict):
+        [exchange, exchange_usd_quantity] = exchange_obj
+        return exchange_usd_quantity.get('quantity', 0)
 
 

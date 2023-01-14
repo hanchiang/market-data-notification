@@ -1,8 +1,12 @@
 import aiohttp
+from aiohttp import ClientSession
 
 
 class HttpClient:
   instance = None
+
+  def __init__(self):
+    self.client: ClientSession = None
 
   @staticmethod
   async def create(base_url: str, headers = {}):
@@ -17,8 +21,8 @@ class HttpClient:
   async def cleanup(self):
     await self.client.close()
 
-  async def get(self, url: str, params={}):
-    res = await self.client.get(url=url, params=params)
+  async def get(self, url: str, **kwargs):
+    res = await self.client.get(url=url, **kwargs)
     return res
 
 

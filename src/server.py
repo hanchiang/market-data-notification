@@ -8,6 +8,7 @@ import os
 from src.job.market_data_notification import get_redis_key
 from src.dependencies import Dependencies
 from src.router.vix_central import thirdparty_vix_central, vix_central
+from src.router.messari import thirdparty_messari, messari
 import src.config.config as config
 from src.event.event_emitter import async_ee
 from src.util.date_util import get_current_datetime
@@ -17,6 +18,8 @@ from src.db.redis import Redis
 app = FastAPI()
 app.include_router(thirdparty_vix_central.router)
 app.include_router(vix_central.router)
+app.include_router(thirdparty_messari.router)
+app.include_router(messari.router)
 
 env = os.getenv('ENV')
 

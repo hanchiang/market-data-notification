@@ -35,15 +35,17 @@ async def market_data_notification_job(argv):
 
             if tradingview_data.get('data', None) is not None:
                 tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))
-                key = tradingview_data['key']
-                tradingview_message = f"*Trading view market data at {escape_markdown(get_datetime_from_redis_key(key))}:*{tradingview_message}"
-                messages.append(tradingview_message)
+                if tradingview_message is not None:
+                    key = tradingview_data['key']
+                    tradingview_message = f"*Trading view market data at {escape_markdown(get_datetime_from_redis_key(key))}:*{tradingview_message}"
+                    messages.append(tradingview_message)
 
             vix_central_service = Dependencies.get_vix_central_service()
             vix_central_data = await vix_central_service.get_recent_values()
             vix_central_message = format_vix_central_message(vix_central_data)
+            if vix_central_message is not None:
+                messages.append(vix_central_message)
 
-            messages.append(vix_central_message)
             telegram_message = format_messages_to_telegram(messages)
 
             res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_channel_id())
@@ -72,7 +74,7 @@ def should_run() -> bool:
         f'local time: {local}, current time: {now}, local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
-# TODO: can consider using sorted set
+# TODO: can consider using sorted set to get the latest data.
 async def get_tradingview_data() -> dict:
     now = get_current_datetime()
     try:
@@ -95,6 +97,8 @@ async def get_tradingview_data() -> dict:
 
 # TODO: cleanup trading view webhook code
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
+    if vix_central_value is None or len(vix_central_value.vix_futures_values) == 0:
+        return None
     message = reduce(format_vix_futures_values, vix_central_value.vix_futures_values,
                      f"*VIX central data for {vix_central_value.vix_futures_values[0].futures_date} futures:*")
     if vix_central_value.is_contango_decrease_for_past_n_days:
@@ -111,6 +115,8 @@ def format_vix_futures_values(res, curr):
 
 
 def format_tradingview_message(payload: List[Any]):
+    if len(payload) == 0:
+        return None
     message = ''
     potential_overextended_by_symbol = config.get_potential_overextended_by_symbol()
 

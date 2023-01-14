@@ -4,7 +4,7 @@ class AssetMetrics:
     def __init__(self):
         self.symbol = '' # BTC
         self.slug = '' # bitcoin
-        self.price_usd = None
+        self.price_usd: float = None
         self.exchange_supply = {}
         self.exchange_net_flows = {}
 
@@ -15,7 +15,7 @@ class MessariService:
     async def cleanup(self):
         await self.third_party_service.cleanup()
 
-    async def get_asset_metrics(self, symbol='BTC'):
+    async def get_asset_metrics(self, symbol='BTC') -> AssetMetrics:
         symbol = symbol.upper()
         res = await self.third_party_service.get_metrics(symbol=symbol)
         return self.format_third_party_asset_metrics(res=res, symbol=symbol)

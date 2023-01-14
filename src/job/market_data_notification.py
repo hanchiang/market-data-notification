@@ -4,6 +4,7 @@ import sys
 from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
+from src.job.service.messari import format_messari_metrics
 from src.job.service.tradingview import get_tradingview_data, format_tradingview_message, get_datetime_from_redis_key
 from src.job.service.vix_central import format_vix_central_message
 from src.notification_destination.telegram_notification import send_message_to_channel
@@ -43,6 +44,12 @@ async def market_data_notification_job(argv):
             if vix_central_message is not None:
                 messages.append(vix_central_message)
 
+            messari_service = Dependencies.get_messari_service()
+            messari_res = await messari_service.get_asset_metrics()
+            messari_message = format_messari_metrics(messari_res)
+            if messari_message is not None:
+                messages.append(messari_message)
+
             telegram_message = format_messages_to_telegram(messages)
 
             res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_channel_id())
@@ -55,6 +62,8 @@ async def market_data_notification_job(argv):
             return None
         finally:
             await Redis.stop_redis()
+            await vix_central_service.cleanup()
+            await messari_service.cleanup()
 
 # run 1 hour before market open at 9.30am
 def should_run() -> bool:

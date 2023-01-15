@@ -11,7 +11,7 @@ from src.util.context_manager import TimeTrackerContext
 from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
-# TODO: test
+# TODO: test. abstract class
 async def market_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
 

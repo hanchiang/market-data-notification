@@ -19,6 +19,10 @@ class VixFuturesValue:
         self.raw_contango: float = None
         # in %. e.g. 5.11%
         self.formatted_contango: str = None
+        # e.g. 0.012
+        self.raw_contango_change_prev_day: float = None
+        # e.g. 1.20%
+        self.formatted_contango_change_prev_day: float = None
         self.is_contango_single_day_decrease_alert: bool = None
         self.contango_single_day_decrease_alert_ratio: float = contango_single_day_decrease_alert_ratio
 
@@ -97,6 +101,11 @@ class VixCentralService:
         for i in range(0, len(recent_values.vix_futures_values) - 1):
             curr_contango = recent_values.vix_futures_values[i].raw_contango
             prev_contango = recent_values.vix_futures_values[i + 1].raw_contango
+
+            contango_change = (curr_contango - prev_contango) / prev_contango
+            recent_values.vix_futures_values[i].raw_contango_change_prev_day = contango_change
+            recent_values.vix_futures_values[i].formatted_contango_change_prev_day = f"{contango_change:.2%}"
+
             delta_ratio = (curr_contango - prev_contango) / prev_contango
             if delta_ratio < 0 and abs(delta_ratio) >= recent_values.vix_futures_values[i].contango_single_day_decrease_alert_ratio:
                 recent_values.vix_futures_values[i].is_contango_single_day_decrease_alert = True

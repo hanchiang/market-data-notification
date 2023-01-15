@@ -47,7 +47,7 @@ def format_tradingview_message(payload: List[Any]):
                 if potential_overextended_by_symbol[symbol].get(close_ema20_direction) is not None:
                     overextended_threshold = potential_overextended_by_symbol[symbol][close_ema20_direction]
                     if abs(close_ema20_delta_ratio) > abs(overextended_threshold):
-                        message = f"{message}, *greater than overextended threshold {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
+                        message = f"{message}, *which is greater than the overextended threshold {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
             else:
                 vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['up']
                 vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['down']

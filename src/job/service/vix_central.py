@@ -17,8 +17,9 @@ def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
 
 def format_vix_futures_values(res, curr):
     message = f"{res}\ndate: {escape_markdown(curr.current_date)}, contango %: {escape_markdown(curr.formatted_contango)}"
+    message = f"{message}" if curr.formatted_contango_change_prev_day is None else f"{message}, changed by {escape_markdown(curr.formatted_contango_change_prev_day)} from the previous day"
     if curr.is_contango_single_day_decrease_alert:
         threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
-        message = f"{message}{escape_markdown('.')} *Contango changed by more than {escape_markdown(threshold)} from the previous day* ‼️"
+        message = f"{message}, *which is greater than the threshold{escape_markdown(threshold)}* ‼️"
     return message
 

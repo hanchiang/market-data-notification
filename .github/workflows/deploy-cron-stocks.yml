@@ -97,7 +97,10 @@ jobs:
           sudo chmod +x stocks.sh
           crontab -l > mycron
           echo "45 12,13 * * 2-6 ./stocks.sh market_data_notification src/job/stocks.py > stocks.log 2>&1" >> mycron
-          cat mycron | sort | uniq | crontab
+          
+          mv mycron mycron.bak
+          cat mycron.bak | sort | uniq > mycron
+          crontab mycron
           echo $?
           EOF
           

@@ -98,7 +98,10 @@ jobs:
           crontab -l > mycron
           echo "45 12,13 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py > crypto.log 2>&1" >> mycron
           echo "15 20,21 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py > crypto.log 2>&1" >> mycron
-          cat mycron | sort | uniq | crontab
+          
+          mv mycron mycron.bak
+          cat mycron.bak | sort | uniq > mycron
+          crontab mycron
           echo $?
           EOF
           

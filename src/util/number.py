@@ -1,4 +1,4 @@
-def friendly_number(num: float) -> object:
+def friendly_number(num: float, decimal_places: int) -> str:
     suffixes = ['', 'K', 'M', 'B', 'T']
 
     res = num
@@ -9,4 +9,6 @@ def friendly_number(num: float) -> object:
         if count == len(suffixes) - 1:
             break
 
+    if decimal_places is not None:
+        res = round(res, decimal_places)
     return f"{res} {suffixes[count]}"

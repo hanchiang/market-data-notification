@@ -101,7 +101,7 @@ jobs:
           sudo chmod +x crypto.sh
           crontab -l > mycron
           echo "45 12,13 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py > crypto.log 2>&1" >> mycron
-          crontab mycron
+          cat mycron | sort | uniq | crontab
           echo $?
           EOF
           

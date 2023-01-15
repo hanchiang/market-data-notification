@@ -8,13 +8,15 @@ def format_messari_metrics(res: AssetMetrics):
     curr = get_current_datetime()
     message = f"*Crypto market data at {escape_markdown(curr.strftime('%Y-%m-%d'))}:*\n"
     message = f"{message}*{res.symbol} price: {escape_markdown(str(res.price_usd))} USD*\n\n"
+    decimal_places = 3
 
     if res.exchange_net_flows is not None:
         message = f"{message}*Exchange net flows:*\n"
         for exchange, usd_quantity in res.exchange_net_flows.items():
             message = f"{message}{exchange}: "
             for k, v in usd_quantity.items():
-                message = f"{message}{k}: {escape_markdown(str(friendly_number(v)))}, "
+                formatted_number = friendly_number(num=v, decimal_places=decimal_places)
+                message = f"{message}{k}: {escape_markdown(formatted_number)}, "
             message = message[:len(message)-2]
             message = f"{message}\n"
         message = f"{message}\n"
@@ -24,8 +26,9 @@ def format_messari_metrics(res: AssetMetrics):
         for exchange, usd_quantity in res.exchange_supply.items():
             message = f"{message}{exchange}: "
             for k, v in usd_quantity.items():
-                message = f"{message}{k}: {escape_markdown(str(friendly_number(v)))}, "
-            message = message[:len(message)-3]
+                formatted_number = friendly_number(num=v, decimal_places=decimal_places)
+                message = f"{message}{k}: {escape_markdown(formatted_number)}, "
+            message = message[:len(message)-2]
             message = f"{message}\n"
 
     return message

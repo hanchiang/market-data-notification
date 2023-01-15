@@ -1,3 +1,4 @@
+import datetime
 import json
 import time
 
@@ -88,9 +89,13 @@ async def tradingview_webhook(request: Request):
 
     now = get_current_datetime()
     key = get_redis_key(now)
-    data = await Redis.get_client().set(key, json.dumps(filtered_body), ex=config.get_trading_view_ttl())
+    json_data = {}
+    json_data[json.dumps(filtered_body)] = now.timestamp()
+    data = await Redis.get_client().zadd(key, json_data)
+    expire_res = await Redis.get_client().expire(key, config.get_trading_view_ttl())
+    expire_at = now if not expire_res else now + datetime.timedelta(seconds=config.get_trading_view_ttl())
 
-    messages.append(f'Successfully saved trading view data at *{escape_markdown(str(get_current_datetime()))}*, key: *{escape_markdown(key)}*')
+    messages.append(f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, ttl: {config.get_trading_view_ttl() if expire_res else None}, expire at: {escape_markdown(str(expire_at))}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
     return {"data": data}
 

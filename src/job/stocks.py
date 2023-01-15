@@ -14,8 +14,6 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 # TODO: test
 async def market_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
-    if not force_run and not should_run():
-        return
 
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
@@ -26,6 +24,9 @@ async def market_data_notification_job(argv):
             messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
         try:
+            if not force_run and not should_run():
+                return
+
             await Redis.start_redis()
             await Dependencies.build()
             tradingview_data = await get_tradingview_data()
@@ -57,19 +58,19 @@ async def market_data_notification_job(argv):
             await Redis.stop_redis()
             await vix_central_service.cleanup()
 
-# run 1 hour before market open at 9.30am
+# run at 8.45am
 def should_run() -> bool:
     if config.get_is_testing_telegram():
         return True
 
     now = get_current_datetime()
     local = get_current_datetime()
-    local = local.replace(hour=config.get_notification_job_start_local_hour(), minute=config.get_notification_job_start_local_minute())
+    local = local.replace(hour=config.get_stocks_job_start_local_hour(), minute=config.get_stocks_job_start_local_minute())
     delta = now - local
 
-    should_run = abs(delta.total_seconds()) <= config.get_notification_job_delay_tolerance_second()
+    should_run = abs(delta.total_seconds()) <= config.get_job_delay_tolerance_second()
     print(
-        f'local time: {local}, current time: {now}, local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
+        f'local time: {local}, current time: {now}, local hour to run: {config.get_stocks_job_start_local_hour()}, local minute to run: {config.get_stocks_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
 

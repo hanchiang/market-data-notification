@@ -1,0 +1,139 @@
+name: Deploy cron crypto
+on:
+  workflow_run:
+    workflows: [Test and build]
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: false
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - warning
+          - debug
+env:
+  SSH_USER: ${{ secrets.SSH_USER }}
+  SSH_HOST: ${{ secrets.SSH_HOST }}
+  APP_NAME: market_data_notification
+jobs:
+  health_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check whether market data notification is up
+        id: health_check
+        run: |
+          curl $SSH_HOST/healthz
+  notify_unsuccessful_health_check:
+    runs-on: ubuntu-latest
+    needs: [health_check]
+    if: ${{ failure() }}
+    steps:
+      - name: Send telegram notification unsuccessful run
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification backend build and deploy failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          exit 1
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [health_check]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure SSH
+        id: ssh
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/market_data_notification_rsa
+          chmod 600 ~/.ssh/market_data_notification_rsa
+          SSH_HOST_IP=$(nslookup $SSH_HOST | tail -n 2 | head -n 1 | cut -d ' ' -f 2)
+          echo "host name: $SSH_HOST, host ip address: $SSH_HOST_IP"
+          cat << EOF >> ~/.ssh/config
+          Host production
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/market_data_notification_rsa
+            StrictHostKeyChecking no
+          EOF
+      - name: SSH into server, set my_crontab
+        id: deploy
+        run: |
+          ssh production <<-'EOF'
+          cat << 'EOF2' | sudo tee crypto.sh > /dev/null
+          #! /bin/bash
+
+          app_name=$1
+          file_path=$2
+          force_run=$3
+          if [ -z "$app_name" ];
+          then
+            echo "app name is required"
+            exit 1
+          fi
+        
+          if [ -z "$file_path" ];
+          then
+            echo "file path is required"
+            exit 1
+          fi
+          
+          docker exec -i $app_name bash << EOF3
+          . $(poetry env info --path)/bin/activate
+          poetry run python3 $file_path $force_run
+          EOF3
+          
+          EOF2
+
+          sudo chmod +x crypto.sh
+          crontab -l > mycron
+          echo "45 12,13 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py > crypto.log 2>&1" >> mycron
+          echo "15 20,21 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py > crypto.log 2>&1" >> mycron
+          cat mycron | sort | uniq | crontab
+          echo $?
+          EOF
+          
+          if [ $? -ne 0 ]
+          then
+            rm -rf ~/.ssh
+            echo "error"
+            exit 1
+          else
+            echo "all good"
+          fi
+          rm -rf ~/.ssh
+  notify_unsuccessful:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: ${{ failure() }}
+    steps:
+      - name: Send telegram notification unsuccessful run
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification backend deploy cron crypto failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+  notify_successful:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    steps:
+      - name: Send telegram notification successful run
+        env:
+          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
+          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+        run: |
+          now=$(date +%Y-%m-%dT%H:%M:%S)
+          text=$(echo "\[Github action\] Market data notification backend deploy cron crypto succeeded at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
+          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+

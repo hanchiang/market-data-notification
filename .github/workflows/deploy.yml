@@ -1,9 +1,5 @@
 name: Build and deploy
 on:
-  push:
-    branches:
-      - feature/*
-      - master
   workflow_run:
     workflows: [Test and build]
     types:

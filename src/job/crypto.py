@@ -13,8 +13,6 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 # TODO: test
 async def market_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
-    if not force_run and not should_run():
-        return
 
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
@@ -25,6 +23,9 @@ async def market_data_notification_job(argv):
             messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
         try:
+            if not force_run and not should_run():
+                return
+
             await Redis.start_redis()
             await Dependencies.build()
 
@@ -48,19 +49,33 @@ async def market_data_notification_job(argv):
             await Redis.stop_redis()
             await messari_service.cleanup()
 
-# run 1 hour before market open at 9.30am
+# run at 8.45am, 4.15pm
 def should_run() -> bool:
     if config.get_is_testing_telegram():
         return True
 
     now = get_current_datetime()
     local = get_current_datetime()
-    local = local.replace(hour=config.get_notification_job_start_local_hour(), minute=config.get_notification_job_start_local_minute())
-    delta = now - local
+    start_local_hours = config.get_crypto_job_start_local_hours().split(',')
+    start_local_minutes = config.get_crypto_job_start_local_minutes().split(',')
 
-    should_run = abs(delta.total_seconds()) <= config.get_notification_job_delay_tolerance_second()
+    if len(start_local_hours) != len(start_local_minutes):
+        raise RuntimeError("start local hours and start local minutes are not configured properly")
+
+    for i in range(0, len(start_local_hours)):
+        local_hour_int = int(start_local_hours[i])
+        local_minute_int = int(start_local_minutes[i])
+
+        local = local.replace(hour=local_hour_int, minute=local_minute_int)
+        delta = now - local
+        should_run = abs(delta.total_seconds()) <= config.get_job_delay_tolerance_second()
+        if should_run:
+            print(
+                f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
+            return should_run
+
     print(
-        f'local time: {local}, current time: {now}, local hour to run: {config.get_notification_job_start_local_hour()}, local minute to run: {config.get_notification_job_start_local_minute()}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
+        f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
 

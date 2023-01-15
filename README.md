@@ -1,5 +1,9 @@
 # Introduction
-This repository sends market data notification to channels like telegram. Data sources are trading view and vix central.
+This repository sends stocks and crypto market data to channels like telegram
+
+## Data sources
+* Stocks: Trading view, vix central
+* Crypto: Messari
 
 ![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
 ![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
@@ -10,12 +14,18 @@ This repository sends market data notification to channels like telegram. Data s
 * Framework: FastAPI
 
 # Sample
-## Test message
-![test message](images/telegram_test_message.png)
+## Stocks: Test message
+![stocks test message](images/telegram_stocks_test_message.png)
 
-## Simulate real message
-![test message](images/telegram_simulate_tradingview_traffic.png)
+## Stocks: Real message
+![stocks real message](images/telegram_stocks_real_message.png)
 
-# Workflow
+## Crypto: Real message
+![crypto real message](images/telegram_crypto_message.png)
+
+# Stocks workflow
 * Receive market data when market closes at 4pm local time -> save in redis
-* Before market open -> Send notification to telegram
+* Scheduled job before market open -> Send notification to telegram
+
+# Crypto workflow
+* Scheduled job send notification to telegram

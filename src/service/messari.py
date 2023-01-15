@@ -1,12 +1,25 @@
 from src.third_party_service.messari import ThirdPartyMessariService
 
+# TODO: type
 class AssetMetrics:
     def __init__(self):
         self.symbol = '' # BTC
         self.slug = '' # bitcoin
         self.price_usd: float = None
+        # key = exchange, value = { usd, quantity }
         self.exchange_supply = {}
+        # key = exchange, value = { usd, quantity }
         self.exchange_net_flows = {}
+
+    def sort_exchange_supply_and_net_flows_descending(self, absolute=False):
+        if self.exchange_supply is not None:
+            self.exchange_supply = {k: v for k, v in sorted(self.exchange_supply.items(),
+                                                               key=lambda exchange_obj: MessariService.exchange_usd_quantity_sorter(exchange_obj=exchange_obj, absolute=absolute),
+                                                               reverse=True)}
+        if self.exchange_net_flows is not None:
+            self.exchange_net_flows = {k: v for k, v in sorted(self.exchange_net_flows.items(),
+                                                                  key=lambda exchange_obj: MessariService.exchange_usd_quantity_sorter(exchange_obj=exchange_obj, absolute=absolute),
+                                                                  reverse=True)}
 
 class MessariService:
     def __init__(self, third_party_service = ThirdPartyMessariService):
@@ -18,10 +31,10 @@ class MessariService:
     async def get_asset_metrics(self, symbol='BTC') -> AssetMetrics:
         symbol = symbol.upper()
         res = await self.third_party_service.get_metrics(symbol=symbol)
-        return self.format_third_party_asset_metrics(res=res, symbol=symbol)
+        return self.transform_third_party_asset_metrics(res=res, symbol=symbol)
 
     # TODO: test
-    def format_third_party_asset_metrics(self, res, symbol) -> AssetMetrics:
+    def transform_third_party_asset_metrics(self, res, symbol) -> AssetMetrics:
         ret_val = AssetMetrics()
 
         metrics = res['data']['asset']['metrics']
@@ -46,22 +59,20 @@ class MessariService:
             'usd': exchange_supply.get(f'supplyOn{exchange}Usd', None),
             'quantity': exchange_supply.get(f'supplyOn{exchange}Native', None),
         } for exchange in exchanges})
-        ret_val.exchange_supply = {k: v for k, v in sorted(ret_val.exchange_supply.items(),
-                                                           key=MessariService.exchange_usd_quantity_sorter,
-                                                           reverse=True)}
 
         # Net flows
         ret_val.exchange_net_flows = dict(ret_val.exchange_net_flows, **{exchange: {
             'usd': exchange_net_flows.get(f'netFlows{exchange}Usd', None),
             'quantity': exchange_net_flows.get(f'netFlows{exchange}Native', None),
         } for exchange in exchanges})
-        ret_val.exchange_net_flows = { k: v for k, v in sorted(ret_val.exchange_net_flows.items(), key=MessariService.exchange_usd_quantity_sorter, reverse=True)}
 
         return ret_val
 
     @staticmethod
-    def exchange_usd_quantity_sorter(exchange_obj: dict):
+    def exchange_usd_quantity_sorter(exchange_obj: dict, absolute=False):
         [exchange, exchange_usd_quantity] = exchange_obj
-        return exchange_usd_quantity.get('quantity', 0)
+        ret_val = exchange_usd_quantity.get('quantity', 0)
+        if absolute:
+            return abs(ret_val)
 
 

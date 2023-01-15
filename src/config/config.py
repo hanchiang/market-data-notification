@@ -85,14 +85,20 @@ def get_redis_db():
 def get_trading_view_ttl():
     return os.getenv('TRADING_VIEW_TTL', 60*60*24*30)
 
-def get_notification_job_start_local_hour():
-    return int(os.getenv('NOTIFICATION_JOB_START_LOCAL_HOUR', 8))
+def get_stocks_job_start_local_hour():
+    return int(os.getenv('STOCKS_JOB_START_LOCAL_HOUR', 8))
 
-def get_notification_job_start_local_minute():
-    return int(os.getenv('NOTIFICATION_JOB_START_LOCAL_MINUTE', 30))
+def get_stocks_job_start_local_minute():
+    return int(os.getenv('STOCKS_JOB_START_LOCAL_MINUTE', 45))
 
-def get_notification_job_delay_tolerance_second():
-    return int(os.getenv('NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND', 60 * 15))
+def get_crypto_job_start_local_hours():
+    return os.getenv('CRYPTO_JOB_START_LOCAL_HOURS', '8,16')
+
+def get_crypto_job_start_local_minutes():
+    return os.getenv('CRYPTO_JOB_START_LOCAL_MINUTES', '45,15')
+
+def get_job_delay_tolerance_second():
+    return int(os.getenv('JOB_DELAY_TOLERANCE_SECOND', 60 * 30))
 
 def get_messari_asset_metrics_sha256():
     return os.getenv('MESSARI_ASSET_METRICS_SHA256', '')

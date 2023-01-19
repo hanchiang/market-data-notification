@@ -96,6 +96,7 @@ async def tradingview_webhook(request: Request):
     expire_at = now if not expire_res else now + datetime.timedelta(seconds=config.get_trading_view_ttl())
 
     messages.append(f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, ttl: {config.get_trading_view_ttl() if expire_res else None}, expire at: {escape_markdown(str(expire_at))}')
+    print(f'Successfully saved trading view data at *{now}*, key: *{key}*, ttl: {config.get_trading_view_ttl() if expire_res else None}, expire at: {expire_at}, data: {json_data}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
     return {"data": data}
 

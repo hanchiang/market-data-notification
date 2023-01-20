@@ -14,6 +14,8 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 # TODO: test. abstract class
 async def market_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
+    if not force_run and not should_run():
+        return
 
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
@@ -24,9 +26,6 @@ async def market_data_notification_job(argv):
             messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
         try:
-            if not force_run and not should_run():
-                return
-
             await Redis.start_redis()
             await Dependencies.build()
             tradingview_data = await get_tradingview_data()

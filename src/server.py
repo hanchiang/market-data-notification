@@ -1,4 +1,3 @@
-import datetime
 import json
 import time
 
@@ -7,12 +6,12 @@ import uvicorn
 import os
 
 from src.dependencies import Dependencies
-from src.job.service.tradingview import get_redis_key
+from src.job.service.tradingview import get_redis_key, save_tradingview_data
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 import src.config.config as config
 from src.event.event_emitter import async_ee
-from src.util.date_util import get_current_datetime
+from src.util.date_util import get_current_date
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.db.redis import Redis
 
@@ -87,18 +86,18 @@ async def tradingview_webhook(request: Request):
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
-    now = get_current_datetime()
-    key = get_redis_key(now)
+    now = get_current_date()
+    key = get_redis_key()
     json_data = {}
-    json_data[json.dumps(filtered_body)] = now.timestamp()
-    data = await Redis.get_client().zadd(key, json_data)
-    expire_res = await Redis.get_client().expire(key, config.get_trading_view_ttl())
-    expire_at = now if not expire_res else now + datetime.timedelta(seconds=config.get_trading_view_ttl())
+    [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), now.timestamp())
 
-    messages.append(f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, ttl: {config.get_trading_view_ttl() if expire_res else None}, expire at: {escape_markdown(str(expire_at))}')
-    print(f'Successfully saved trading view data at *{now}*, key: *{key}*, ttl: {config.get_trading_view_ttl() if expire_res else None}, expire at: {expire_at}, data: {json_data}')
+    save_message = f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{now.timestamp()}* days to store: *{config.get_trading_view_days_to_store()}*'
+    if remove_res is not None:
+        save_message = f'{save_message}, elements removed: *{remove_res}*'
+    messages.append(save_message)
+    print(f'Successfully saved trading view data at *{now}*, key: *{key}*, data: {json_data}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
-    return {"data": data}
+    return {"data": add_res}
 
 def filter_tradingview_request_body(body: dict) -> dict:
     return {k: v for k, v in body.items() if k != 'secret'}

@@ -13,7 +13,7 @@ async def get_tradingview_data() -> dict:
     try:
         key = get_redis_key(now)
         tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True)
-        return {"key": key, "data": json.loads(tradingview_data[0] if len(tradingview_data) > 0 else None)}
+        return {"key": key, "data": json.loads(tradingview_data[0]) if len(tradingview_data) > 0 else None}
     except Exception as e:
         print(e)
         return {}

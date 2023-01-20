@@ -59,6 +59,24 @@ def get_potential_overextended_by_symbol():
             'up': 0.04 if not get_is_testing_telegram() else 0.01,
             'down': -0.065 if not get_is_testing_telegram() else -0.01
         },
+        'QQQ': {
+
+        },
+        'DJIA': {
+
+        },
+        'IWM': {
+
+        },
+        'AAPL': {
+
+        },
+        'AMZN': {
+
+        },
+        'BABA': {
+
+        },
         'VIX': {
             'up': 36 if not get_is_testing_telegram() else 26,
             'down': 19.5 if not get_is_testing_telegram() else 26
@@ -82,8 +100,8 @@ def get_redis_port():
 
 def get_redis_db():
     return os.getenv('REDIS_DB', 0)
-def get_trading_view_ttl():
-    return os.getenv('TRADING_VIEW_TTL', 60*60*24*30)
+def get_trading_view_days_to_store():
+    return os.getenv('TRADING_VIEW_DAYS_TO_STORE', 30)
 
 def get_stocks_job_start_local_hour():
     return int(os.getenv('STOCKS_JOB_START_LOCAL_HOUR', 8))

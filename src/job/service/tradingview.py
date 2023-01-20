@@ -1,22 +1,42 @@
-import datetime
 import json
 from typing import List, Any
 
 from src.config import config
 from src.db.redis import Redis
-from src.util.date_util import get_current_datetime
 from src.util.my_telegram import escape_markdown
 
 
 async def get_tradingview_data() -> dict:
-    now = get_current_datetime()
     try:
-        key = get_redis_key(now)
+        key = get_redis_key()
         tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True)
         return {"key": key, "data": json.loads(tradingview_data[0]) if len(tradingview_data) > 0 else None}
     except Exception as e:
         print(e)
         return {}
+
+# score = timestamp of current date(without time)
+async def save_tradingview_data(data: str, score: int):
+    key = get_redis_key()
+    tradingview_data = await Redis.get_client().zrange(key, start=score, end=score, desc=True, byscore=True)
+    # data for the day is already saved
+    if tradingview_data is not None and len(tradingview_data) > 0:
+        print(f"trading view data for {score} already exist. skip saving to redis")
+        return []
+
+    json_data = {}
+    json_data[data] = score
+    add_res = await Redis.get_client().zadd(key, json_data)
+
+    # remove old keys
+    num_elements = await Redis.get_client().zcard(key)
+    if num_elements <= config.get_trading_view_days_to_store():
+        return [add_res]
+
+    num_elements_to_remove = num_elements - config.get_trading_view_days_to_store()
+    remove_res = await Redis.get_client().zremrangebyrank(key, 0, num_elements_to_remove - 1)
+
+    return [add_res, remove_res]
 
 def format_tradingview_message(payload: List[Any]):
     if len(payload) == 0:
@@ -64,12 +84,12 @@ def payload_sorter(item):
     return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'
 
 # key: <source>:<yyyy>-<mm>-<dd>
-def get_redis_key(date: datetime.datetime):
+def get_redis_key():
     is_testing_telegram = config.get_is_testing_telegram()
     key = 'tradingview'
     if is_testing_telegram:
         key = f'{key}-dev'
-    key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
+    # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
     return key
 
 def get_datetime_from_redis_key(key: str):

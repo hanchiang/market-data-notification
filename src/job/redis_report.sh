@@ -20,7 +20,7 @@ then
     echo "email sender is required"
     exit 1
 fi
-if [ -z "REDIS_KEY"  ];
+if [ -z "$REDIS_KEY"  ];
 then
     echo "redis key is required"
     exit 1
@@ -30,9 +30,10 @@ FROM_NAME="han"
 SUBJECT="market-data-notification: tradingview redis"
 
 redis_data=$(echo "zrange $REDIS_KEY 0 -1 withscores" | redis-cli)
-bodyHTML="<p><strong>Redis data for tradingview</strong></p><p>$redis_data</p>"
+redis_data=$(echo $redis_data | sed -e "s/\"/'/g" )
+bodyHTML="<p><strong>Redis data for tradingview</strong></p><pre>${redis_data}</pre>"
 
-maildata='{"personalizations": [{"to": [{"email": "'${$EMAIL_RECIPIENT}'"}]}],"from": {"email": "'${$EMAIL_SENDER}'",
+maildata='{"personalizations": [{"to": [{"email": "'${EMAIL_RECIPIENT}'"}]}],"from": {"email": "'${EMAIL_SENDER}'",
 	"name": "'${FROM_NAME}'"},"subject": "'${SUBJECT}'","content": [{"type": "text/html", "value": "'${bodyHTML}'"}]}'
 
 curl --request POST \

@@ -98,8 +98,9 @@ jobs:
           crontab -l > mycron
           echo "45 12,13 * * 1-6 ./stocks.sh market_data_notification src/job/stocks.py > stocks.log 2>&1" >> mycron
           
-          mv mycron mycron.bak
-          cat mycron.bak | sort | uniq > mycron
+          mv mycron mycron.temp
+          cat mycron.temp | sort | uniq > mycron
+          cp mycron mycron.bak
           crontab mycron
           echo $?
           EOF

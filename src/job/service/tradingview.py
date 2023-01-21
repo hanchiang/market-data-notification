@@ -9,8 +9,10 @@ from src.util.my_telegram import escape_markdown
 async def get_tradingview_data() -> dict:
     try:
         key = get_redis_key()
-        tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True)
-        return {"key": key, "data": json.loads(tradingview_data[0]) if len(tradingview_data) > 0 else None}
+        tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True, withscores=True)
+        if (len(tradingview_data) == 0):
+            return {"key": key, "data": None, "score": None}
+        return {"key": key, "data": json.loads(tradingview_data[0][0]), "score": int(tradingview_data[0][1])}
     except Exception as e:
         print(e)
         return {}

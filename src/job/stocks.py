@@ -8,7 +8,7 @@ from src.job.service.tradingview import get_tradingview_data, format_tradingview
 from src.job.service.vix_central import format_vix_central_message
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.util.context_manager import TimeTrackerContext
-from src.util.date_util import get_current_datetime
+from src.util.date_util import get_current_datetime, get_datetime_from_timestamp
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test. abstract class
@@ -33,8 +33,8 @@ async def market_data_notification_job(argv):
             if tradingview_data.get('data', None) is not None:
                 tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))
                 if tradingview_message is not None:
-                    key = tradingview_data['key']
-                    tradingview_message = f"*Trading view market data at {escape_markdown(get_datetime_from_redis_key(key))}:*{tradingview_message}"
+                    tradingview_date = get_datetime_from_timestamp(tradingview_data['score']).strftime("%Y-%m-%d")
+                    tradingview_message = f"*Trading view market data at {escape_markdown(tradingview_date)}:*{tradingview_message}"
                     messages.append(tradingview_message)
 
             vix_central_service = Dependencies.get_vix_central_service()

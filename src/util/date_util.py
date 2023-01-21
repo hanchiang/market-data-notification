@@ -11,6 +11,9 @@ def get_current_date():
     now = datetime.datetime.now().astimezone(tz=ny_tz).replace(hour=0, minute=0, second=0, microsecond=0)
     return now
 
+def get_datetime_from_timestamp(timestamp: int) -> datetime.datetime:
+    return datetime.datetime.fromtimestamp(timestamp, tz=ny_tz)
+
 # return the most recent non-weekend or today
 # TODO: exclude public holidays
 def get_most_recent_non_weekend_or_today(date: datetime.datetime) -> datetime.datetime:

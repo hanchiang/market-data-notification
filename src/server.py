@@ -89,13 +89,14 @@ async def tradingview_webhook(request: Request):
     now = get_current_date()
     key = get_redis_key()
     json_data = {}
-    [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), now.timestamp())
+    timestamp = int(now.timestamp())
+    [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp)
 
-    save_message = f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{now.timestamp()}* days to store: *{config.get_trading_view_days_to_store()}*'
+    save_message = f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}* days to store: *{config.get_trading_view_days_to_store()}*'
     if remove_res is not None:
         save_message = f'{save_message}, elements removed: *{remove_res}*'
     messages.append(save_message)
-    print(f'Successfully saved trading view data at *{now}*, key: *{key}*, data: {json_data}')
+    print(f'Successfully saved trading view data at {now}, key: {key}, score: {timestamp} days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_admin_id())
     return {"data": add_res}
 

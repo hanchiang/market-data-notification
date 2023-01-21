@@ -22,7 +22,7 @@ async def save_tradingview_data(data: str, score: int):
     # data for the day is already saved
     if tradingview_data is not None and len(tradingview_data) > 0:
         print(f"trading view data for {score} already exist. skip saving to redis")
-        return []
+        return [None, None]
 
     json_data = {}
     json_data[data] = score
@@ -31,7 +31,7 @@ async def save_tradingview_data(data: str, score: int):
     # remove old keys
     num_elements = await Redis.get_client().zcard(key)
     if num_elements <= config.get_trading_view_days_to_store():
-        return [add_res]
+        return [add_res, None]
 
     num_elements_to_remove = num_elements - config.get_trading_view_days_to_store()
     remove_res = await Redis.get_client().zremrangebyrank(key, 0, num_elements_to_remove - 1)

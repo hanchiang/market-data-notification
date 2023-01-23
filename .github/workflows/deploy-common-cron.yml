@@ -125,8 +125,9 @@ jobs:
           crontab -l > mycron
           echo "45 12 * * 0-6 ./redis_report.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $TEMPLATE_ID > common.log 2>&1" >> mycron
           
-          mv mycron mycron.bak
-          cat mycron.bak | sort | uniq > mycron
+          mv mycron mycron.temp
+          cat mycron.temp | sort | uniq > mycron
+          cp mycron mycron.bak
           crontab mycron
           echo \$?
           EOF

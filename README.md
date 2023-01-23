@@ -5,9 +5,10 @@ This repository sends stocks and crypto market data to channels like telegram
 * Stocks: Trading view, vix central
 * Crypto: Messari
 
-![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
-![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
-![example workflow](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron.yml/badge.svg)
+![test](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
+![deploy](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
+![deploy cron stocks](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron-stocks.yml/badge.svg)
+![deplyo cron crypto](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron-crypto.yml/badge.svg)
 
 # Tech stack
 * Language: Python

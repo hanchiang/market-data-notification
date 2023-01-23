@@ -66,6 +66,7 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           REDIS_KEY: ${{ secrets.REDIS_KEY }}
+          TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
         run: |
           ssh production <<-EOF
           
@@ -76,6 +77,7 @@ jobs:
           EMAIL_RECIPIENT=\$2
           EMAIL_SENDER=\$3
           REDIS_KEY=\$4
+          TEMPLATE_ID=\$5
           
           if [ -z "\$SENDGRID_API_KEY"  ];
           then
@@ -97,16 +99,20 @@ jobs:
               echo "redis key is required"
               exit 1
           fi
+          if [ -z "\$TEMPLATE_ID"  ];
+          then
+              echo "template id is required"
+              exit 1
+          fi
           
           FROM_NAME="han"
           SUBJECT="market-data-notification: tradingview redis"
           
           redis_data=\$(echo "zrange \$REDIS_KEY 0 -1 withscores" | redis-cli)
           redis_data=\$(echo \$redis_data | sed -e "s/\"/'/g" )
-          bodyHTML="<p><strong>Redis data for tradingview</strong></p><pre>\${redis_data}</pre>"
           
-          maildata='{"personalizations": [{"to": [{"email": "'\${EMAIL_RECIPIENT}'"}]}],"from": {"email": "'\${EMAIL_SENDER}'",
-              "name": "'\${FROM_NAME}'"},"subject": "'\${SUBJECT}'","content": [{"type": "text/html", "value": "'\${bodyHTML}'"}]}'
+          maildata='{"personalizations": [{"to": [{"email": "'\${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'${redis_data}'" } }],"from": {"email": "'\${EMAIL_SENDER}'",
+              "name": "'\${FROM_NAME}'"},"subject": "'\${SUBJECT}'", "template_id": "'${TEMPLATE_ID}'"}'
           
           curl --request POST \
             --url https://api.sendgrid.com/v3/mail/send \
@@ -117,7 +123,7 @@ jobs:
 
           sudo chmod +x redis_report.sh
           crontab -l > mycron
-          echo "45 12 * * 0-6 ./redis_report.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY > common.log 2>&1" >> mycron
+          echo "45 12 * * 0-6 ./redis_report.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $TEMPLATE_ID > common.log 2>&1" >> mycron
           
           mv mycron mycron.bak
           cat mycron.bak | sort | uniq > mycron

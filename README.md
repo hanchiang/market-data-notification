@@ -8,7 +8,8 @@ This repository sends stocks and crypto market data to channels like telegram
 ![test](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
 ![deploy](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
 ![deploy cron stocks](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron-stocks.yml/badge.svg)
-![deplyo cron crypto](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron-crypto.yml/badge.svg)
+![DEPLOY cron crypto](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-cron-crypto.yml/badge.svg)
+![DEPLOY cron crypto](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy-common-cron.yml/badge.svg)
 
 # Tech stack
 * Language: Python
@@ -24,9 +25,12 @@ This repository sends stocks and crypto market data to channels like telegram
 ## Crypto: Real message
 ![crypto real message](images/telegram_crypto_message.png)
 
-# Stocks workflow
-* Receive market data when market closes at 4pm local time -> save in redis
+# Stocks cron workflow
+* Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
 
-# Crypto workflow
+# Crypto cron workflow
 * Scheduled job send notification to telegram
+
+# Common cron workflow
+* Send redis data via email

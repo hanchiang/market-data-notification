@@ -4,6 +4,7 @@ SENDGRID_API_KEY=$1
 EMAIL_RECIPIENT=$2
 EMAIL_SENDER=$3
 REDIS_KEY=$4
+TEMPLATE_ID=$5
 
 if [ -z "$SENDGRID_API_KEY"  ];
 then
@@ -25,16 +26,20 @@ then
     echo "redis key is required"
     exit 1
 fi
+if [ -z "$TEMPLATE_ID"  ];
+then
+    echo "template id is required"
+    exit 1
+fi
 
 FROM_NAME="han"
 SUBJECT="market-data-notification: tradingview redis"
 
 redis_data=$(echo "zrange $REDIS_KEY 0 -1 withscores" | redis-cli)
 redis_data=$(echo $redis_data | sed -e "s/\"/'/g" )
-bodyHTML="<p><strong>Redis data for tradingview</strong></p><pre>${redis_data}</pre>"
 
-maildata='{"personalizations": [{"to": [{"email": "'${EMAIL_RECIPIENT}'"}]}],"from": {"email": "'${EMAIL_SENDER}'",
-	"name": "'${FROM_NAME}'"},"subject": "'${SUBJECT}'","content": [{"type": "text/html", "value": "'${bodyHTML}'"}]}'
+maildata='{"personalizations": [{"to": [{"email": "'${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'${redis_data}'" } }],"from": {"email": "'${EMAIL_SENDER}'",
+	"name": "'${FROM_NAME}'"},"subject": "'${SUBJECT}'", "template_id": "'${TEMPLATE_ID}'"}'
 
 curl --request POST \
   --url https://api.sendgrid.com/v3/mail/send \

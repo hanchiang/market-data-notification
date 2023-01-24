@@ -59,12 +59,12 @@ jobs:
     steps:
       - name: Send telegram notification unsuccessful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification backend build and deploy failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
           exit 1
   deploy:
     runs-on: ubuntu-latest
@@ -92,12 +92,18 @@ jobs:
         id: deploy
         env:
           DOCKER_PULL_PASSWORD: ${{ secrets.DOCKER_PULL_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-          TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}
-          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_ADMIN_ID }}
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_BOT_TOKEN }}
+          STOCKS_TELEGRAM_CHANNEL_ID: ${{ secrets.STOCKS_TELEGRAM_CHANNEL_ID }}
+          STOCKS_TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_ADMIN_BOT_TOKEN }}
+          STOCKS_TELEGRAM_ADMIN_ID: ${{ secrets.STOCKS_TELEGRAM_ADMIN_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
+          CRYPTO_TELEGRAM_BOT_TOKEN: ${{ secrets.CRYPTO_TELEGRAM_BOT_TOKEN }}
+          CRYPTO_TELEGRAM_CHANNEL_ID: ${{ secrets.CRYPTO_TELEGRAM_CHANNEL_ID }}
+          CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN }}
+          CRYPTO_TELEGRAM_ADMIN_ID: ${{ secrets.CRYPTO_TELEGRAM_ADMIN_ID }}
+          CRYPTO_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.CRYPTO_TELEGRAM_DEV_BOT_TOKEN }}
+          CRYPTO_TELEGRAM_DEV_ID: ${{ secrets.CRYPTO_TELEGRAM_DEV_ID }}
           SIMULATE_TRADINGVIEW_TRAFFIC: ${{ secrets.SIMULATE_TRADINGVIEW_TRAFFIC }}
           IS_TESTING_TELEGRAM: ${{ secrets.IS_TESTING_TELEGRAM }}
           TRADING_VIEW_IPS: ${{ secrets.TRADING_VIEW_IPS }}
@@ -106,9 +112,6 @@ jobs:
           REDIS_HOST: ${{ secrets.REDIS_HOST }}
           REDIS_PORT: ${{ secrets.REDIS_PORT }}
           REDIS_DB: ${{ secrets.REDIS_DB }}
-          NOTIFICATION_JOB_START_LOCAL_HOUR: 8
-          NOTIFICATION_JOB_START_LOCAL_MINUTE: 30
-          NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND: 900
           MESSARI_ASSET_METRICS_SHA256: ${{ secrets.MESSARI_ASSET_METRICS_SHA256 }}
         run: |
           ssh production << EOF
@@ -122,15 +125,17 @@ jobs:
           docker stop $APP_NAME && docker rm $APP_NAME
 
           echo "Starting new container"
-          docker run --name $APP_NAME -p 8080:8080 --network host -m 200m --cpus="0.5" -e TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN \
-          -e TELEGRAM_CHANNEL_ID=$TELEGRAM_CHANNEL_ID -e TELEGRAM_ADMIN_BOT_TOKEN=$TELEGRAM_ADMIN_BOT_TOKEN \
-          -e TELEGRAM_ADMIN_ID=$TELEGRAM_ADMIN_ID -e TELEGRAM_DEV_BOT_TOKEN=$TELEGRAM_DEV_BOT_TOKEN -e TELEGRAM_DEV_ID=$TELEGRAM_DEV_ID \
-          -e SIMULATE_TRADINGVIEW_TRAFFIC=$SIMULATE_TRADINGVIEW_TRAFFIC \
+          docker run --name $APP_NAME -p 8080:8080 --network host -m 200m --cpus="0.5" -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
+          -e STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_CHANNEL_ID -e STOCKS_TELEGRAM_ADMIN_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN \
+          -e STOCKS_TELEGRAM_ADMIN_ID=$STOCKS_TELEGRAM_ADMIN_ID -e STOCKS_TELEGRAM_DEV_BOT_TOKEN=STOCKS_TELEGRAM_DEV_BOT_TOKEN
+          -e STOCKS_TELEGRAM_DEV_ID=$STOCKS_TELEGRAM_DEV_ID -e CRYPTO_TELEGRAM_BOT_TOKEN=$CRYPTO_TELEGRAM_BOT_TOKEN \
+          -e CRYPTO_TELEGRAM_CHANNEL_ID=$CRYPTO_TELEGRAM_CHANNEL_ID -e CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN=$CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN \
+          -e CRYPTO_TELEGRAM_ADMIN_ID=$CRYPTO_TELEGRAM_ADMIN_ID -e CRYPTO_TELEGRAM_DEV_BOT_TOKEN=$CRYPTO_TELEGRAM_DEV_BOT_TOKEN \
+          -e CRYPTO_TELEGRAM_DEV_ID=$CRYPTO_TELEGRAM_DEV_ID -e SIMULATE_TRADINGVIEW_TRAFFIC=$SIMULATE_TRADINGVIEW_TRAFFIC \
           -e IS_TESTING_TELEGRAM=$IS_TESTING_TELEGRAM -e TRADING_VIEW_IPS=$TRADING_VIEW_IPS -e TRADING_VIEW_WEBHOOK_SECRET=$TRADING_VIEW_WEBHOOK_SECRET \
-          -e DISABLE_TELEGRAM=$DISABLE_TELEGRAM -e REDIS_HOST=$REDIS_HOST -e REDIS_PORT=$REDIS_PORT \
-          -e REDIS_DB=$REDIS_DB -e NOTIFICATION_JOB_START_LOCAL_HOUR=$NOTIFICATION_JOB_START_LOCAL_HOUR \
-          -e NOTIFICATION_JOB_START_LOCAL_MINUTE=$NOTIFICATION_JOB_START_LOCAL_MINUTE -e NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND=$NOTIFICATION_JOB_DELAY_TOLERANCE_SECOND \
-          -e MESSARI_ASSET_METRICS_SHA256=$MESSARI_ASSET_METRICS_SHA256 -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
+          -e DISABLE_TELEGRAM=$DISABLE_TELEGRAM -e REDIS_HOST=$REDIS_HOST -e REDIS_PORT=$REDIS_PORT REDIS_DB=$REDIS_DB \
+          -e MESSARI_ASSET_METRICS_SHA256=$MESSARI_ASSET_METRICS_SHA256 \
+          -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
 
           sleep 3
           docker ps
@@ -145,22 +150,22 @@ jobs:
     steps:
       - name: Send telegram notification unsuccessful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification backend build and deploy failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
   notify_successful:
     runs-on: ubuntu-latest
     needs: [deploy]
     steps:
       - name: Send telegram notification successful run
         env:
-          TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.TELEGRAM_DEV_BOT_TOKEN }}
-          TELEGRAM_DEV_ID: ${{ secrets.TELEGRAM_DEV_ID }}
+          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
+          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
           now=$(date +%Y-%m-%dT%H:%M:%S)
           text=$(echo "\[Github action\] Market data notification backend build and deploy succeeded at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_DEV_ID}&text=$text"
+          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
 

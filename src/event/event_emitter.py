@@ -15,7 +15,8 @@ async def send_to_telegram_handler(*args, **kwargs):
     try:
         channel = kwargs['channel']
         message = kwargs['message']
-        res = await telegram_notification.send_message_to_channel(message=message, chat_id=channel)
+        market_data_type = kwargs['market_data_type']
+        res = await telegram_notification.send_message_to_channel(message=message, chat_id=channel, market_data_type=market_data_type)
         if res:
             telegram_notification.print_telegram_message(res)
     except Exception as e:

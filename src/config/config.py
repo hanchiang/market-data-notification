@@ -33,6 +33,36 @@ def get_telegram_stocks_dev_id():
         raise RuntimeError("telegram stocks dev id is missing")
     return os.getenv('STOCKS_TELEGRAM_DEV_ID')
 
+def get_telegram_crypto_bot_token():
+    if not os.getenv('CRYPTO_TELEGRAM_BOT_TOKEN', None):
+        raise RuntimeError("telegram crypto bot token is missing")
+    return os.getenv('CRYPTO_TELEGRAM_BOT_TOKEN')
+
+def get_telegram_crypto_channel_id():
+    if not os.getenv('CRYPTO_TELEGRAM_CHANNEL_ID', None):
+        raise RuntimeError("telegram crypto channel is missing")
+    return os.getenv('CRYPTO_TELEGRAM_CHANNEL_ID')
+
+def get_telegram_crypto_admin_bot_token():
+    if not os.getenv('CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN', None):
+        raise RuntimeError("telegram crypto admin bot token is missing")
+    return os.getenv('CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN')
+
+def get_telegram_crypto_admin_id():
+    if not os.getenv('CRYPTO_TELEGRAM_ADMIN_ID', None):
+        raise RuntimeError("telegram crypto admin id is missing")
+    return os.getenv('CRYPTO_TELEGRAM_ADMIN_ID')
+
+def get_telegram_crypto_dev_bot_token():
+    if not os.getenv('CRYPTO_TELEGRAM_DEV_BOT_TOKEN', None):
+        raise RuntimeError("telegram crypto dev bot token is missing")
+    return os.getenv('CRYPTO_TELEGRAM_DEV_BOT_TOKEN')
+
+def get_telegram_crypto_dev_id():
+    if not os.getenv('CRYPTO_TELEGRAM_DEV_ID', None):
+        raise RuntimeError("telegram crypto dev id is missing")
+    return os.getenv('CRYPTO_TELEGRAM_DEV_ID')
+
 def get_is_testing_telegram():
     return os.getenv('IS_TESTING_TELEGRAM', False) == 'true'
 

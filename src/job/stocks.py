@@ -13,7 +13,7 @@ from src.util.date_util import get_current_datetime, get_datetime_from_timestamp
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test. abstract class
-async def market_data_notification_job(argv):
+async def stocks_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
     if not force_run and not should_run():
         return
@@ -76,5 +76,5 @@ def should_run() -> bool:
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    data = asyncio.run(market_data_notification_job(sys.argv))
+    data = asyncio.run(stocks_data_notification_job(sys.argv))
     print(data)

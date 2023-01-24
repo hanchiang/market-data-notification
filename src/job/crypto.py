@@ -12,7 +12,7 @@ from src.util.date_util import get_current_datetime
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test. abstract class
-async def market_data_notification_job(argv):
+async def crypto_data_notification_job(argv):
     force_run = argv[1] == 'true' if len(argv) > 1 else False
 
     with TimeTrackerContext('market_data_notification_job'):
@@ -38,13 +38,13 @@ async def market_data_notification_job(argv):
 
             telegram_message = format_messages_to_telegram(messages)
 
-            res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_stocks_channel_id(), market_data_type=MarketDataType.CRYPTO)
+            res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_crypto_channel_id(), market_data_type=MarketDataType.CRYPTO)
             return res
         except Exception as e:
             print(e)
             messages.append(f"{escape_markdown(str(e))}")
             message = format_messages_to_telegram(messages)
-            await send_message_to_channel(message=message, chat_id=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.CRYPTO)
+            await send_message_to_channel(message=message, chat_id=config.get_telegram_crypto_admin_id(), market_data_type=MarketDataType.CRYPTO)
             return None
         finally:
             await Redis.stop_redis()
@@ -82,5 +82,5 @@ def should_run() -> bool:
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    data = asyncio.run(market_data_notification_job(sys.argv))
+    data = asyncio.run(crypto_data_notification_job(sys.argv))
     print(data)

@@ -8,7 +8,7 @@ from src.util.my_telegram import escape_markdown
 
 async def get_tradingview_data() -> dict:
     try:
-        key = get_redis_key()
+        key = get_redis_key_for_stocks()
         tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True, withscores=True)
         if (len(tradingview_data) == 0):
             return {"key": key, "data": None, "score": None}
@@ -19,7 +19,7 @@ async def get_tradingview_data() -> dict:
 
 # score = timestamp of current date(without time)
 async def save_tradingview_data(data: str, score: int):
-    key = get_redis_key()
+    key = get_redis_key_for_stocks()
     tradingview_data = await Redis.get_client().zrange(key, start=score, end=score, desc=True, byscore=True)
     # data for the day is already saved
     if tradingview_data is not None and len(tradingview_data) > 0:
@@ -85,10 +85,17 @@ def payload_sorter(item):
     # VIX should appear last
     return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'
 
-# key: <source>:<yyyy>-<mm>-<dd>
-def get_redis_key():
+def get_redis_key_for_stocks():
     is_testing_telegram = config.get_is_testing_telegram()
-    key = 'tradingview'
+    key = 'tradingview-stocks'
+    if is_testing_telegram:
+        key = f'{key}-dev'
+    # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
+    return key
+
+def get_redis_key_for_crypto():
+    is_testing_telegram = config.get_is_testing_telegram()
+    key = 'tradingview-crypto'
     if is_testing_telegram:
         key = f'{key}-dev'
     # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'

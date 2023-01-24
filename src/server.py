@@ -6,7 +6,7 @@ import uvicorn
 import os
 
 from src.dependencies import Dependencies
-from src.job.service.tradingview import get_redis_key, save_tradingview_data
+from src.job.service.tradingview import get_redis_key_for_stocks, save_tradingview_data
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 import src.config.config as config
@@ -86,11 +86,21 @@ async def tradingview_webhook(request: Request):
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_admin_id())
         return {"data": "OK"}
 
+    # Save to redis
     now = get_current_date()
-    key = get_redis_key()
+    key = get_redis_key_for_stocks()
     json_data = {}
     timestamp = int(now.timestamp())
     [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp)
+
+    if add_res is None and remove_res is None:
+        message = f'trading view data for {timestamp} already exist. skip saving to redis'
+        async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_admin_id())
+        return {"data": None}
+    if add_res == 0:
+        message = f'0 element is added for {timestamp}. Please check redis'
+        async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_admin_id())
+        return {"data": None}
 
     save_message = f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}* days to store: *{config.get_trading_view_days_to_store()}*'
     if remove_res is not None:

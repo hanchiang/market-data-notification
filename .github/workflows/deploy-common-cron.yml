@@ -117,7 +117,7 @@ jobs:
           redis_data=\$(echo "zrange \$REDIS_KEY 0 -1 withscores" | redis-cli)
           redis_data=\$(echo \$redis_data | sed -e "s/\"/'/g" )
           
-          maildata='{"personalizations": [{"to": [{"email": "'\${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'${redis_data}'" } }],"from": {"email": "'\${EMAIL_SENDER}'",
+          maildata='{"personalizations": [{"to": [{"email": "'\${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'\${redis_data}'" } }],"from": {"email": "'\${EMAIL_SENDER}'",
               "name": "'\${FROM_NAME}'"},"subject": "'\${SUBJECT}'", "template_id": "'${TEMPLATE_ID}'"}'
           
           curl --request POST \

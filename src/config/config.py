@@ -108,8 +108,8 @@ def get_potential_overextended_by_symbol():
 
         },
         'VIX': {
-            'up': 36 if not get_is_testing_telegram() else 26,
-            'down': 19.5 if not get_is_testing_telegram() else 26
+            'up': 35 if not get_is_testing_telegram() else 26,
+            'down': 18 if not get_is_testing_telegram() else 26
         }
     }
     return potential_overextended_by_symbol

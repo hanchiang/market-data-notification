@@ -71,13 +71,12 @@ def format_tradingview_message(payload: List[Any]):
                     if abs(close_ema20_delta_ratio) > abs(overextended_threshold):
                         message = f"{message}, *which is greater than the overextended threshold {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
             else:
-                if potential_overextended_by_symbol[symbol].get(symbol) is not None:
-                    vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['up']
-                    vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['down']
-                    if close >= vix_overextended_up_threshold:
-                        message = f"{message}, *VIX is near the top around {f'{escape_markdown(str(vix_overextended_up_threshold))}'}, meaning market is near the bottom, watch for potential rebound* ‼️"
-                    elif close <= vix_overextended_down_threshold:
-                        message = f"{message}, *VIX is near the bottom around {f'{escape_markdown(str(vix_overextended_down_threshold))}'}, meaning market is near the top, watch for potential rebound* ‼️"
+                vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['up']
+                vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['down']
+                if close >= vix_overextended_up_threshold:
+                    message = f"{message}, *VIX is near the top around {f'{escape_markdown(str(vix_overextended_up_threshold))}'}, meaning market is near the bottom, watch for potential rebound* ‼️"
+                elif close <= vix_overextended_down_threshold:
+                    message = f"{message}, *VIX is near the bottom around {f'{escape_markdown(str(vix_overextended_down_threshold))}'}, meaning market is near the top, watch for potential rebound* ‼️"
     return message
 
 def payload_sorter(item):

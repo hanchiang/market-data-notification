@@ -5,6 +5,7 @@ from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
 from src.job.service.messari import format_messari_metrics
+from src.job.service.thirdparty_chainanalysis import format_thirdparty_chainanalysis_message
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.type.market_data_type import MarketDataType
 from src.util.context_manager import TimeTrackerContext
@@ -35,6 +36,12 @@ async def crypto_data_notification_job(argv):
             messari_message = format_messari_metrics(messari_res)
             if messari_message is not None:
                 messages.append(messari_message)
+
+            thirdparty_chainanalysis_service = Dependencies.get_thirdparty_chainanalysis_service()
+            thirdparty_chainanalysis_res = await thirdparty_chainanalysis_service.get_trade_intensity(symbol='BTC')
+            thirdparty_chainanalysis_message = format_thirdparty_chainanalysis_message(thirdparty_chainanalysis_res)
+            if thirdparty_chainanalysis_message is not None:
+                messages.append(thirdparty_chainanalysis_message)
 
             telegram_message = format_messages_to_telegram(messages)
 

@@ -1,5 +1,6 @@
 from src.http_client import HttpClient
 from src.service.messari import MessariService
+from src.third_party_service.chainanalysis import ThirdPartyChainanalysisService
 from src.third_party_service.messari import ThirdPartyMessariService
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
 from src.service.vix_central import VixCentralService
@@ -10,6 +11,7 @@ class Dependencies:
   vix_central_service: VixCentralService = None
   thirdparty_messari_service: ThirdPartyMessariService = None
   messari_service: MessariService = None
+  thirdparty_chainanalysis_service: ThirdPartyChainanalysisService = None
 
   @staticmethod
   async def build():
@@ -22,6 +24,9 @@ class Dependencies:
       messari_service_http_client = await HttpClient.create(base_url=ThirdPartyMessariService.BASE_URL)
       Dependencies.thirdparty_messari_service = ThirdPartyMessariService(http_client=messari_service_http_client)
       Dependencies.messari_service = MessariService(third_party_service=Dependencies.thirdparty_messari_service)
+
+      chainanalysis_service_http_client = await HttpClient.create(base_url=ThirdPartyChainanalysisService.BASE_URL)
+      Dependencies.thirdparty_chainanalysis_service = ThirdPartyChainanalysisService(http_client=chainanalysis_service_http_client)
 
       Dependencies.is_initialised = True
       print('Dependencies built')
@@ -48,3 +53,7 @@ class Dependencies:
   @staticmethod
   def get_messari_service():
     return Dependencies.messari_service
+
+  @staticmethod
+  def get_thirdparty_chainanalysis_service():
+    return Dependencies.thirdparty_chainanalysis_service

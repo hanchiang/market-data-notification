@@ -27,7 +27,6 @@ class ThirdPartyMessariService:
     async def cleanup(self):
         await self.http_client.cleanup()
 
-    # TODO: Pass in symbol, symbol to full name mapping
     # result object: { data -> asset -> metrics }
     # keys under metrics: ranks, pricing, allTimeHigh, cycleLow, returnOnInvestment, marketcap, volume, risk,
     # supply, issuance, supplyActivity, supplyDistribution, miningHashrate, miningSupply, miningDifficulty, addressesActivity,

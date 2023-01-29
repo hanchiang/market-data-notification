@@ -15,6 +15,11 @@ This repository sends stocks and crypto market data to channels like telegram
 * Language: Python
 * Framework: FastAPI
 
+# Structure
+* `src`
+  * `server`: API server
+  * `job`: Scheduled jobs that sends stocks and crypto notification
+
 # Sample
 ## Stocks: Test message
 ![stocks test message](images/telegram_stocks_test_message.png)

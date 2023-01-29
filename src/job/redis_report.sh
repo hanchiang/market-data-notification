@@ -35,9 +35,10 @@ fi
 FROM_NAME="han"
 SUBJECT="market-data-notification: tradingview redis"
 
-redis_data=$(echo "zrange $REDIS_KEY 0 -1 withscores" | redis-cli)
+redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
 redis_data=$(echo $redis_data | sed -e "s/\"/'/g" )
 
+# TODO: write in python
 maildata='{"personalizations": [{"to": [{"email": "'${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'${redis_data}'" } }],"from": {"email": "'${EMAIL_SENDER}'",
 	"name": "'${FROM_NAME}'"},"subject": "'${SUBJECT}'", "template_id": "'${TEMPLATE_ID}'"}'
 

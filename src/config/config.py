@@ -134,16 +134,16 @@ def get_trading_view_days_to_store():
     return os.getenv('TRADING_VIEW_DAYS_TO_STORE', 30)
 
 def get_stocks_job_start_local_hour():
-    return int(os.getenv('STOCKS_JOB_START_LOCAL_HOUR', 8))
+    return int(os.getenv('STOCKS_JOB_START_LOCAL_HOUR', 9))
 
 def get_stocks_job_start_local_minute():
-    return int(os.getenv('STOCKS_JOB_START_LOCAL_MINUTE', 45))
+    return int(os.getenv('STOCKS_JOB_START_LOCAL_MINUTE', 0))
 
 def get_crypto_job_start_local_hours():
-    return os.getenv('CRYPTO_JOB_START_LOCAL_HOURS', '8,16')
+    return os.getenv('CRYPTO_JOB_START_LOCAL_HOURS', '9,16')
 
 def get_crypto_job_start_local_minutes():
-    return os.getenv('CRYPTO_JOB_START_LOCAL_MINUTES', '45,15')
+    return os.getenv('CRYPTO_JOB_START_LOCAL_MINUTES', '0,15')
 
 def get_job_delay_tolerance_second():
     return int(os.getenv('JOB_DELAY_TOLERANCE_SECOND', 60 * 30))

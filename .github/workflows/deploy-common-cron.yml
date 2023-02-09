@@ -72,7 +72,7 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           REDIS_KEY: ${{ secrets.REDIS_KEY }}
-          TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
+          SENDGRID_TEMPLATE_ID: ${{ secrets.SENDGRID_TEMPLATE_ID }}
         run: |
           ssh production <<-EOF
           
@@ -83,7 +83,7 @@ jobs:
           EMAIL_RECIPIENT=\$2
           EMAIL_SENDER=\$3
           REDIS_KEY=\$4
-          TEMPLATE_ID=\$5
+          SENDGRID_TEMPLATE_ID=\$5
           
           if [ -z "\$SENDGRID_API_KEY"  ];
           then
@@ -105,7 +105,7 @@ jobs:
               echo "redis key is required"
               exit 1
           fi
-          if [ -z "\$TEMPLATE_ID"  ];
+          if [ -z "\$SENDGRID_TEMPLATE_ID"  ];
           then
               echo "template id is required"
               exit 1
@@ -118,7 +118,7 @@ jobs:
           redis_data=\$(echo \$redis_data | sed -e "s/\"/'/g" )
           
           maildata='{"personalizations": [{"to": [{"email": "'\${EMAIL_RECIPIENT}'"}], "dynamic_template_data": { "redis_data": "'\${redis_data}'" } }],"from": {"email": "'\${EMAIL_SENDER}'",
-              "name": "'\${FROM_NAME}'"},"subject": "'\${SUBJECT}'", "template_id": "'${TEMPLATE_ID}'"}'
+              "name": "'\${FROM_NAME}'"},"subject": "'\${SUBJECT}'", "template_id": "'${SENDGRID_TEMPLATE_ID}'"}'
           
           curl --request POST \
             --url https://api.sendgrid.com/v3/mail/send \

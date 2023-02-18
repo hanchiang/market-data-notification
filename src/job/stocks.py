@@ -4,7 +4,7 @@ import sys
 from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
-from src.job.service.tradingview import get_tradingview_data, format_tradingview_message, get_datetime_from_redis_key
+from src.job.service.tradingview import get_tradingview_daily_stocks_data, format_tradingview_message
 from src.job.service.vix_central import format_vix_central_message
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.type.market_data_type import MarketDataType
@@ -27,9 +27,9 @@ async def stocks_data_notification_job(argv):
             messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
         try:
-            await Redis.start_redis()
+            await Redis.start_redis(script_mode=True)
             await Dependencies.build()
-            tradingview_data = await get_tradingview_data()
+            tradingview_data = await get_tradingview_daily_stocks_data()
 
             if tradingview_data.get('data', None) is not None:
                 tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))

@@ -5,8 +5,14 @@ from src.config import config
 from src.db.redis import Redis
 from src.util.my_telegram import escape_markdown
 
+market_indices = ['SPY', 'QQQ', 'IWM', 'DJIA']
+market_indices = sorted(market_indices)
 
-async def get_tradingview_data() -> dict:
+market_indices_order_map = {}
+for i in range(len(market_indices)):
+    market_indices_order_map[market_indices[i]] = i + 1
+
+async def get_tradingview_daily_stocks_data() -> dict:
     try:
         key = get_redis_key_for_stocks()
         tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True, withscores=True)
@@ -59,37 +65,45 @@ def format_tradingview_message(payload: List[Any]):
         close_ema20_delta_percent = f"{close_ema20_delta_ratio:.2%}"
 
         if symbol != 'VIX':
-            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change from ema20: {escape_markdown(close_ema20_delta_percent)}"
-            close_ema20_direction = 'up' if close > ema20 else 'down'
+            message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change from ema20: {escape_markdown(close_ema20_delta_percent)}"
+            close_ema20_direction = 'above' if close > ema20 else 'below'
         else:
-            message = f"{message}\nsymbol: {symbol}, close: {escape_markdown(str(close))}"
+            message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}"
 
         if potential_overextended_by_symbol.get(symbol, None) is not None:
             if symbol != 'VIX':
                 if potential_overextended_by_symbol[symbol].get(close_ema20_direction) is not None:
                     overextended_threshold = potential_overextended_by_symbol[symbol][close_ema20_direction]
                     if abs(close_ema20_delta_ratio) > abs(overextended_threshold):
-                        message = f"{message}, *which is greater than the overextended threshold {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
+                        message = f"{message}, *which is greater than the median overextended threshold of {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential rebound* ‼️"
             else:
-                vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['up']
-                vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['down']
+                vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['above']
+                vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['below']
                 if close >= vix_overextended_up_threshold:
-                    message = f"{message}, *VIX is near the top around {f'{escape_markdown(str(vix_overextended_up_threshold))}'}, meaning market is near the bottom, watch for potential rebound* ‼️"
+                    message = f"{message}, *VIX is near the top around {f'{escape_markdown(str(vix_overextended_up_threshold))}'}, market could be near the bottom, watch for potential rebound* ‼️"
                 elif close <= vix_overextended_down_threshold:
-                    message = f"{message}, *VIX is near the bottom around {f'{escape_markdown(str(vix_overextended_down_threshold))}'}, meaning market is near the top, watch for potential rebound* ‼️"
+                    message = f"{message}, *VIX is near the bottom around {f'{escape_markdown(str(vix_overextended_down_threshold))}'}, market could be near the top, watch for potential rebound* ‼️"
     return message
 
 def payload_sorter(item):
     symbol = item['symbol'].upper()
+
+    # market indices should appear first
+    if market_indices_order_map.get(symbol, False):
+        return str(market_indices_order_map[symbol])
+
     # VIX should appear last
-    return symbol if symbol != 'VIX' else 'zzzzzzzzzzzzzz'
+    if symbol == 'VIX':
+        return 'zzzzzzzzzzzzzzzzzz'
+
+    return symbol
+
 
 def get_redis_key_for_stocks():
     is_testing_telegram = config.get_is_testing_telegram()
     key = 'tradingview-stocks'
     if is_testing_telegram:
         key = f'{key}-dev'
-    # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
     return key
 
 def get_redis_key_for_crypto():
@@ -99,6 +113,3 @@ def get_redis_key_for_crypto():
         key = f'{key}-dev'
     # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
     return key
-
-def get_datetime_from_redis_key(key: str):
-    return key.split(':')[-1]

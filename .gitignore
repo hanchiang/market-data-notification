@@ -234,3 +234,5 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 secrets/
+secret/
+my_readme.txt

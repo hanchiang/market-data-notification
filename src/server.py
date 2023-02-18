@@ -58,8 +58,9 @@ async def log_request_and_time_taken(request: Request, call_next):
 async def heath_check():
     return {"data": "Market data notification is running!"}
 
-@app.post("/tradingview-webhook")
-async def tradingview_webhook(request: Request):
+# TODO: rename to tradingview daily stocks data
+@app.post("/tradingview-daily-stocks")
+async def tradingview_daily_stocks_data(request: Request):
     # request body: { secret: '', data: [{ symbol, timeframe(e.g. 1d), close, ema20 }] }
 
     messages = []
@@ -114,6 +115,8 @@ async def tradingview_webhook(request: Request):
     print(f'Successfully saved trading view data at {now}, key: {key}, score: {timestamp} days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
     return {"data": add_res}
+
+# TODO: most active options, change in open interest
 
 def filter_tradingview_request_body(body: dict) -> dict:
     return {k: v for k, v in body.items() if k != 'secret'}

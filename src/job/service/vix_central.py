@@ -20,6 +20,6 @@ def format_vix_futures_values(res, curr):
     message = f"{message}" if curr.formatted_contango_change_prev_day is None else f"{message}, changed by {escape_markdown(curr.formatted_contango_change_prev_day)} from the previous day"
     if curr.is_contango_single_day_decrease_alert:
         threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
-        message = f"{message}, *which is greater than the threshold {escape_markdown(threshold)}* ‼️"
+        message = f"{message}, *which is greater than the threshold of {escape_markdown(threshold)}, market could be near the top ‼️*"
     return message
 

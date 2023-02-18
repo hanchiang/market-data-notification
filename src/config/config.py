@@ -81,37 +81,70 @@ def get_contango_decrease_past_n_days_threshold():
     return 5 if not get_is_testing_telegram() else 2
 
 def get_vix_central_number_of_days():
-    return 6
+    return 7
 
-def get_potential_overextended_by_symbol():
-    potential_overextended_by_symbol = {
-        'SPY': {
-            'up': 0.04 if not get_is_testing_telegram() else 0.01,
-            'down': -0.065 if not get_is_testing_telegram() else -0.01
-        },
-        'QQQ': {
+def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
+    if not get_is_testing_telegram():
+        return value
+    return default if not is_negative else -default
 
-        },
-        'DJIA': {
+# Use median
+potential_overextended_by_symbol = {
+    'DJIA': {
 
-        },
-        'IWM': {
+    },
+    'IWM': {
 
-        },
-        'AAPL': {
+    },
+    'QQQ': {
+        'above': overextended_helper(value=0.058),
+        'below': overextended_helper(value=-0.081, is_negative=True)
+    },
+    'SPY': {
+        'above': overextended_helper(value=0.0435),
+        'below': overextended_helper(value=-0.067, is_negative=True)
+    },
+    'AAPL': {
+        'above': overextended_helper(value=0.0735),
+        'below': overextended_helper(value=-0.081, is_negative=True)
+    },
+    'AMD': {
 
-        },
-        'AMZN': {
+    },
+    'AMZN': {
+        'above': overextended_helper(value=0.087),
+        'below': overextended_helper(value=-0.111, is_negative=True)
+    },
+    'BABA': {
 
-        },
-        'BABA': {
+    },
+    'COIN': {
 
-        },
-        'VIX': {
-            'up': 35 if not get_is_testing_telegram() else 26,
-            'down': 18 if not get_is_testing_telegram() else 26
-        }
+    },
+    'GOOGL': {
+
+    },
+    'META': {
+
+    },
+    'MSFT': {
+
+    },
+    'NFLX': {
+
+    },
+    'NVDA': {
+
+    },
+    'TSLA': {
+
+    },
+    'VIX': {
+        'above': 35 if not get_is_testing_telegram() else 26,
+        'below': 18 if not get_is_testing_telegram() else 26
     }
+}
+def get_potential_overextended_by_symbol():
     return potential_overextended_by_symbol
 
 def get_tradingview_webhook_secret():

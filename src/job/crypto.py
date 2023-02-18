@@ -28,7 +28,7 @@ async def crypto_data_notification_job(argv):
             if not force_run and not should_run():
                 return
 
-            await Redis.start_redis()
+            await Redis.start_redis(script_mode=True)
             await Dependencies.build()
 
             messari_service = Dependencies.get_messari_service()

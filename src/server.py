@@ -91,7 +91,7 @@ async def tradingview_daily_stocks_data(request: Request):
         return {"data": "OK"}
 
     # Save to redis
-    test_mode = body.get('test_mode', False)
+    test_mode = body.get('test_mode', 'false') == 'true'
     if test_mode:
         config.set_is_testing_telegram('true')
     now = get_current_date()

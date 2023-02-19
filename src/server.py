@@ -92,11 +92,13 @@ async def tradingview_daily_stocks_data(request: Request):
 
     # Save to redis
     test_mode = body.get('test_mode', False)
+    if test_mode:
+        config.set_is_testing_telegram('true')
     now = get_current_date()
-    key = get_redis_key_for_stocks(test_mode=test_mode)
+    key = get_redis_key_for_stocks()
     json_data = {}
     timestamp = int(now.timestamp())
-    [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp, test_mode=test_mode)
+    [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp)
 
     if add_res is None and remove_res is None:
         messages.append(f'trading view data for {timestamp} already exist. skip saving to redis')

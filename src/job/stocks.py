@@ -16,13 +16,12 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 # TODO: test. abstract class
 async def stocks_data_notification_job():
     parser = argparse.ArgumentParser(description='Sends daily stock data notification to telegram')
-    parser.add_argument('--force_run', type=bool, default=False, help='Run regardless of the timing it is scheduled to run at')
-    parser.add_argument('--test_mode', type=bool, default=False, help='Run in test mode for dev testing')
+    parser.add_argument('--force_run', type=int, choices=[0, 1], default=0, help='Run regardless of the timing it is scheduled to run at')
+    parser.add_argument('--test_mode', type=int, choices=[0, 1], default=0, help='Run in test mode for dev testing')
     cli_args = parser.parse_args()
 
-    force_run = cli_args.force_run
-    test_mode = cli_args.test_mode
-    print(cli_args)
+    force_run: bool = cli_args.force_run == 1
+    test_mode: bool = cli_args.test_mode == 1
 
     if not force_run and not should_run():
         return

@@ -23,6 +23,9 @@ async def stocks_data_notification_job():
     force_run: bool = cli_args.force_run == 1
     test_mode: bool = cli_args.test_mode == 1
 
+    if test_mode:
+        config.set_is_testing_telegram('true')
+
     if not force_run and not should_run():
         return
 
@@ -37,7 +40,7 @@ async def stocks_data_notification_job():
         try:
             await Redis.start_redis(script_mode=True)
             await Dependencies.build()
-            tradingview_data = await get_tradingview_daily_stocks_data(test_mode=test_mode)
+            tradingview_data = await get_tradingview_daily_stocks_data()
 
             if tradingview_data.get('data', None) is not None:
                 tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))

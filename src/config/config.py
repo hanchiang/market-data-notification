@@ -66,6 +66,9 @@ def get_telegram_crypto_dev_id():
 def get_is_testing_telegram():
     return os.getenv('IS_TESTING_TELEGRAM', False) == 'true'
 
+def set_is_testing_telegram(testing: str):
+    os.environ['IS_TESTING_TELEGRAM'] = testing
+
 def get_simulate_tradingview_traffic():
     return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', False) == 'true'
 

@@ -12,9 +12,9 @@ market_indices_order_map = {}
 for i in range(len(market_indices)):
     market_indices_order_map[market_indices[i]] = i + 1
 
-async def get_tradingview_daily_stocks_data(test_mode=False) -> dict:
+async def get_tradingview_daily_stocks_data() -> dict:
     try:
-        key = get_redis_key_for_stocks(test_mode=test_mode)
+        key = get_redis_key_for_stocks()
         tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True, withscores=True)
         if (len(tradingview_data) == 0):
             return {"key": key, "data": None, "score": None}
@@ -24,8 +24,8 @@ async def get_tradingview_daily_stocks_data(test_mode=False) -> dict:
         return {}
 
 # score = timestamp of current date(without time)
-async def save_tradingview_data(data: str, score: int, test_mode=False):
-    key = get_redis_key_for_stocks(test_mode=test_mode)
+async def save_tradingview_data(data: str, score: int):
+    key = get_redis_key_for_stocks()
     tradingview_data = await Redis.get_client().zrange(key, start=score, end=score, desc=True, byscore=True)
     # data for the day is already saved
     if tradingview_data is not None and len(tradingview_data) > 0:
@@ -99,10 +99,10 @@ def payload_sorter(item):
     return symbol
 
 
-def get_redis_key_for_stocks(test_mode=False):
+def get_redis_key_for_stocks():
     is_testing_telegram = config.get_is_testing_telegram()
     key = 'tradingview-stocks'
-    if is_testing_telegram or test_mode:
+    if is_testing_telegram:
         key = f'{key}-dev'
     return key
 

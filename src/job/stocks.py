@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 
@@ -13,8 +14,16 @@ from src.util.date_util import get_current_datetime, get_datetime_from_timestamp
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test. abstract class
-async def stocks_data_notification_job(argv):
-    force_run = argv[1] == 'true' if len(argv) > 1 else False
+async def stocks_data_notification_job():
+    parser = argparse.ArgumentParser(description='Sends daily stock data notification to telegram')
+    parser.add_argument('--force_run', type=bool, default=False, help='Run regardless of the timing it is scheduled to run at')
+    parser.add_argument('--test_mode', type=bool, default=False, help='Run in test mode for dev testing')
+    cli_args = parser.parse_args()
+
+    force_run = cli_args.force_run
+    test_mode = cli_args.test_mode
+    print(cli_args)
+
     if not force_run and not should_run():
         return
 
@@ -29,7 +38,7 @@ async def stocks_data_notification_job(argv):
         try:
             await Redis.start_redis(script_mode=True)
             await Dependencies.build()
-            tradingview_data = await get_tradingview_daily_stocks_data()
+            tradingview_data = await get_tradingview_daily_stocks_data(test_mode=test_mode)
 
             if tradingview_data.get('data', None) is not None:
                 tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))
@@ -74,7 +83,8 @@ def should_run() -> bool:
     return should_run
 
 
+# ENV=dev poetry run python src/job/stocks.py --force_run=true
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    data = asyncio.run(stocks_data_notification_job(sys.argv))
+    data = asyncio.run(stocks_data_notification_job())
     print(data)

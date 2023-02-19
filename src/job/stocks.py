@@ -85,7 +85,7 @@ def should_run() -> bool:
     return should_run
 
 
-# ENV=dev poetry run python src/job/stocks.py --force_run=true
+# ENV=dev poetry run python src/job/stocks.py --force_run=1 --test_mode=1
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     data = asyncio.run(stocks_data_notification_job())

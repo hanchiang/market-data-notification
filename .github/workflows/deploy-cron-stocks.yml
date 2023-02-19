@@ -75,6 +75,7 @@ jobs:
           app_name=$1
           file_path=$2
           force_run=$3
+          test_mode=$4
           if [ -z "$app_name" ];
           then
             echo "app name is required"
@@ -89,7 +90,7 @@ jobs:
           
           docker exec -i $app_name bash << EOF3
           . $(poetry env info --path)/bin/activate
-          poetry run python3 $file_path $force_run
+          poetry run python3 $file_path --force_run $force_run --test_mode $test_mode
           EOF3
           
           EOF2

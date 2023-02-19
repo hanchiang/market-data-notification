@@ -86,7 +86,7 @@ def should_run() -> bool:
         f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
-
+# ENV=dev poetry run python src/job/crypto.py true
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     data = asyncio.run(crypto_data_notification_job(sys.argv))

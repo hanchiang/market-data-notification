@@ -38,6 +38,8 @@ This repository sends stocks and crypto market data to channels like telegram
 * Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
 
+![Stocks data workflow](images/tradingview-daily-stocks-info.png)
+
 # Crypto cron workflow
 * Scheduled job send notification to telegram
 

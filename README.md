@@ -45,6 +45,6 @@ This repository sends stocks and crypto market data to channels like telegram
 * Send redis data via email
 
 # TODO
-* redis keys
 * diagram of workflow
 * Common cron: send attachment in email
+* Test

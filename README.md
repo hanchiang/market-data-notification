@@ -6,7 +6,7 @@ This repository sends stocks and crypto market data to channels like telegram
   * Basic info such as closing price, EMA20, closing price to EMA20 delta
   * Overextension from EMA20 based on the median delta when stock reverse in the next few days
 * Crypto
-  * BTC Exchange netflow, supply, median trade intensity 
+  * BTC Exchange netflow, supply, median trade intensity
 
 ![Test](https://github.com/hanchiang/market-data-notification/actions/workflows/test.yml/badge.svg)
 ![Deploy](https://github.com/hanchiang/market-data-notification/actions/workflows/deploy.yml/badge.svg)
@@ -17,6 +17,7 @@ This repository sends stocks and crypto market data to channels like telegram
 # Tech stack
 * Language: Python
 * Framework: FastAPI
+* Database: Redis
 
 # Structure
 * `src`
@@ -34,6 +35,10 @@ This repository sends stocks and crypto market data to channels like telegram
 ## Real message
 ![crypto real message](images/telegram_crypto_message.png)
 
+# How to do local development
+* Use a reverse prxoy like [ngrok](https://ngrok.com/)
+* Set is_testing_telegram to TRUE, which will save data to a dev key in redis and send notification to a dev telegram channel
+
 # Stocks cron workflow
 * Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
@@ -47,6 +52,5 @@ This repository sends stocks and crypto market data to channels like telegram
 * Send redis data via email
 
 # TODO
-* diagram of workflow
 * Common cron: send attachment in email
 * Test

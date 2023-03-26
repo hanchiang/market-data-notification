@@ -65,7 +65,7 @@ def format_tradingview_message(payload: List[Any]):
         close_ema20_delta_percent = f"{close_ema20_delta_ratio:.2%}"
 
         if symbol != 'VIX':
-            message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % change from ema20: {escape_markdown(close_ema20_delta_percent)}"
+            message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % diff from ema20: {escape_markdown(close_ema20_delta_percent)}"
             close_ema20_direction = 'above' if close > ema20 else 'below'
         else:
             message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}"
@@ -75,7 +75,7 @@ def format_tradingview_message(payload: List[Any]):
                 if potential_overextended_by_symbol[symbol].get(close_ema20_direction) is not None:
                     overextended_threshold = potential_overextended_by_symbol[symbol][close_ema20_direction]
                     if abs(close_ema20_delta_ratio) > abs(overextended_threshold):
-                        message = f"{message}, *which is greater than the median overextended threshold of {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'up' else 'below'} the ema20, watch for potential reversal* ‼️"
+                        message = f"{message}, *which is greater than the median overextended threshold of {escape_markdown(f'{overextended_threshold:.2%}')} when it is {'above' if close_ema20_direction == 'above' else 'below'} the ema20, watch for potential reversal* ‼️"
             else:
                 vix_overextended_up_threshold = potential_overextended_by_symbol[symbol]['above']
                 vix_overextended_down_threshold = potential_overextended_by_symbol[symbol]['below']

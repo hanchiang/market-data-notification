@@ -58,7 +58,6 @@ async def log_request_and_time_taken(request: Request, call_next):
 async def heath_check():
     return {"data": "Market data notification is running!"}
 
-# TODO: rename to tradingview daily stocks data
 @app.post("/tradingview-daily-stocks")
 async def tradingview_daily_stocks_data(request: Request):
     # request body: { secret: '', data: [{ symbol, timeframe(e.g. 1d), close, ema20 }] }

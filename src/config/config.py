@@ -91,8 +91,7 @@ def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
         return value
     return default if not is_negative else -default
 
-# Use median
-potential_overextended_by_symbol = {
+median_overextended_by_symbol = {
     'DJIA': {
 
     },
@@ -100,23 +99,23 @@ potential_overextended_by_symbol = {
 
     },
     'QQQ': {
-        'above': overextended_helper(value=0.058),
-        'below': overextended_helper(value=-0.081, is_negative=True)
+        'above': overextended_helper(value=0.058) if not get_is_testing_telegram() else overextended_helper(value=0.01),
+        'below': overextended_helper(value=-0.081, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True),
     },
     'SPY': {
-        'above': overextended_helper(value=0.0435),
-        'below': overextended_helper(value=-0.067, is_negative=True)
+        'above': overextended_helper(value=0.0435) if not get_is_testing_telegram() else overextended_helper(value=0.01),
+        'below': overextended_helper(value=-0.067, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True),
     },
     'AAPL': {
-        'above': overextended_helper(value=0.0735),
-        'below': overextended_helper(value=-0.081, is_negative=True)
+        'above': overextended_helper(value=0.0735) if not get_is_testing_telegram() else overextended_helper(value=0.01),
+        'below': overextended_helper(value=-0.081, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True)
     },
     'AMD': {
 
     },
     'AMZN': {
-        'above': overextended_helper(value=0.087),
-        'below': overextended_helper(value=-0.111, is_negative=True)
+        'above': overextended_helper(value=0.087) if not get_is_testing_telegram() else overextended_helper(value=0.01),
+        'below': overextended_helper(value=-0.111, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True)
     },
     'BABA': {
 
@@ -143,12 +142,12 @@ potential_overextended_by_symbol = {
 
     },
     'VIX': {
-        'above': 35 if not get_is_testing_telegram() else 26,
-        'below': 18 if not get_is_testing_telegram() else 26
+        'above': 34 if not get_is_testing_telegram() else 26,
+        'below': 18.5 if not get_is_testing_telegram() else 26
     }
 }
 def get_potential_overextended_by_symbol():
-    return potential_overextended_by_symbol
+    return median_overextended_by_symbol
 
 def get_tradingview_webhook_secret():
     if not os.getenv('TRADING_VIEW_WEBHOOK_SECRET', None):

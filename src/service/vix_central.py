@@ -63,6 +63,7 @@ class VixCentralService:
         self.clear_current_values()
 
         current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
+        # historical data doesn't change, just need to fetch current data
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
             print('Refreshing current vix central data')
             current = await self.third_party_service.get_current()

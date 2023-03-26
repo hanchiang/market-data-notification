@@ -51,6 +51,9 @@ This repository sends stocks and crypto market data to channels like telegram
 # Common cron workflow
 * Send redis data via email
 
+# Contributing
+See [CONTRIBUTING](CONTRIBUTING.md)
+
 # TODO
 * Common cron: send attachment in email
 * Test

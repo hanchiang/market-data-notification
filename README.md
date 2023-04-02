@@ -57,3 +57,5 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 # TODO
 * Common cron: send attachment in email
 * Test
+* Bot with pre-defined menu for user interaction
+* Get overextended levels using google sheet API instead of manually entering them.

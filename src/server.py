@@ -99,26 +99,24 @@ async def tradingview_daily_stocks_data(request: Request):
     timestamp = int(now.timestamp())
     [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp)
 
-    if add_res is None and remove_res is None:
-        messages.append(f'trading view data for {timestamp} already exist. skip saving to redis')
+    if add_res == 0 and remove_res == 0:
+        messages.append(f'trading view data for {now}, score: {timestamp} already exist. skip saving to redis')
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": None}
     if add_res == 0:
-        messages.append(f'0 element is added for {timestamp}. Please check redis')
+        messages.append(f'0 element is added for {now}, score: {timestamp}. Please check redis')
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": None}
     if remove_res > 0:
-        messages.append(f'{remove_res} elements is removed {timestamp}. Maximum number of records to store in redis: {config.get_trading_view_days_to_store()}.')
+        messages.append(f'{remove_res} elements is removed for score {timestamp}. Maximum number of records to store in redis: {config.get_trading_view_days_to_store()}.')
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=escape_markdown(message),channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
 
-    save_message = f'Successfully saved trading view data at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}* days to store: *{config.get_trading_view_days_to_store()}*'
-    if remove_res is not None:
-        save_message = f'{save_message}, elements removed: *{remove_res}*'
+    save_message = f'Successfully saved trading view data for *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}* days to store: *{config.get_trading_view_days_to_store()}*'
     messages.append(save_message)
-    print(f'Successfully saved trading view data at {now}, key: {key}, score: {timestamp} days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
+    print(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp} days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
     return {"data": add_res}
 

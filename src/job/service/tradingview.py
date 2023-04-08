@@ -30,7 +30,6 @@ async def save_tradingview_data(data: str, score: int):
     tradingview_data = await Redis.get_client().zrange(key, start=score, end=score, desc=True, byscore=True)
     # data for the day is already saved
     if tradingview_data is not None and len(tradingview_data) > 0:
-        print(f"trading view data for {score} already exist. skip saving to redis")
         return [0, 0]
 
     json_data = {}

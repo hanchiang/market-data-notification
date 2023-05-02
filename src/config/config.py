@@ -142,8 +142,8 @@ median_overextended_by_symbol = {
 
     },
     'VIX': {
-        'above': 34 if not get_is_testing_telegram() else 26,
-        'below': 18.5 if not get_is_testing_telegram() else 26
+        'above': 33 if not get_is_testing_telegram() else 26,
+        'below': 16.5 if not get_is_testing_telegram() else 26
     }
 }
 def get_potential_overextended_by_symbol():

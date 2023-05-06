@@ -6,9 +6,8 @@ from src.util.number import friendly_number
 
 def format_messari_metrics(res: AssetMetrics):
     res.sort_exchange_supply_and_net_flows_descending(absolute=True)
-    curr = get_current_datetime()
-    message = f"*Crypto market data at {escape_markdown(curr.strftime('%Y-%m-%d'))}:*\n"
-    message = f"{message}*{res.symbol} price: {escape_markdown(str(res.price_usd))} USD*\n\n"
+
+    message = f"*{res.symbol} price: {escape_markdown(str(res.price_usd))} USD*\n\n"
     decimal_places = 3
 
     if res.exchange_net_flows is not None:

@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 
@@ -5,7 +6,7 @@ from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
 from src.job.service.messari import format_messari_metrics
-from src.job.service.thirdparty_chainanalysis import format_thirdparty_chainanalysis_message
+from src.job.service.chainanalysis import format_thirdparty_chainanalysis_message
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.type.market_data_type import MarketDataType
 from src.util.context_manager import TimeTrackerContext
@@ -14,7 +15,20 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 
 # TODO: test. abstract class
 async def crypto_data_notification_job(argv):
-    force_run = argv[1] == 'true' if len(argv) > 1 else False
+    parser = argparse.ArgumentParser(description='Sends daily crypto data notification to telegram')
+    parser.add_argument('--force_run', type=int, choices=[0, 1], default=0,
+                        help='Run regardless of the timing it is scheduled to run at')
+    parser.add_argument('--test_mode', type=int, choices=[0, 1], default=0, help='Run in test mode for dev testing')
+    cli_args = parser.parse_args()
+
+    force_run: bool = cli_args.force_run == 1
+    test_mode: bool = cli_args.test_mode == 1
+
+    if test_mode:
+        config.set_is_testing_telegram('true')
+
+    if not force_run and not should_run():
+        return
 
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
@@ -25,11 +39,11 @@ async def crypto_data_notification_job(argv):
             messages.insert(0, '*SIMULATING TRAFFIC FROM TRADING VIEW*')
 
         try:
-            if not force_run and not should_run():
-                return
-
             await Redis.start_redis(script_mode=True)
             await Dependencies.build()
+
+            curr = get_current_datetime()
+            messages.append(f"*Crypto market data at {escape_markdown(curr.strftime('%Y-%m-%d'))}:*\n")
 
             messari_service = Dependencies.get_messari_service()
             messari_res = await messari_service.get_asset_metrics()
@@ -86,7 +100,7 @@ def should_run() -> bool:
         f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
     return should_run
 
-# ENV=dev poetry run python src/job/crypto.py true
+# ENV=dev poetry run python src/job/crypto.py --force_run=1 --test_mode=1
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     data = asyncio.run(crypto_data_notification_job(sys.argv))

@@ -111,8 +111,6 @@ async def tradingview_daily_stocks_data(request: Request):
         return {"data": None}
     if remove_res > 0:
         messages.append(f'*{remove_res}* elements is removed from redis, maximum number of records to store in redis: *{config.get_trading_view_days_to_store()}*')
-        message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
 
     save_message = f'Successfully saved trading view data for *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}*, days to store: *{config.get_trading_view_days_to_store()}*'
     messages.append(save_message)

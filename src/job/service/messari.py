@@ -7,7 +7,7 @@ from src.util.number import friendly_number
 def format_messari_metrics(res: AssetMetrics):
     res.sort_exchange_supply_and_net_flows_descending(absolute=True)
 
-    message = f"*{res.symbol} price: {escape_markdown(str(res.price_usd))} USD*\n\n"
+    message = f"*{res.symbol} price: {escape_markdown(friendly_number(num=res.price_usd, decimal_places=3))} USD*\n\n"
     decimal_places = 3
 
     if res.exchange_net_flows is not None:

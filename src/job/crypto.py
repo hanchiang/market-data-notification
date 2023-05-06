@@ -6,7 +6,7 @@ from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
 from src.job.service.messari import format_messari_metrics
-from src.job.service.chainanalysis import format_thirdparty_chainanalysis_message
+from src.job.service.chainanalysis import format_chainanalysis
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.type.market_data_type import MarketDataType
 from src.util.context_manager import TimeTrackerContext
@@ -30,6 +30,7 @@ async def crypto_data_notification_job(argv):
     if not force_run and not should_run():
         return
 
+    symbol = 'BTC'
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
         messages = []
@@ -43,7 +44,7 @@ async def crypto_data_notification_job(argv):
             await Dependencies.build()
 
             curr = get_current_datetime()
-            messages.append(f"*Crypto market data at {escape_markdown(curr.strftime('%Y-%m-%d'))}:*\n")
+            messages.append(f"*Crypto market data at {escape_markdown(curr.strftime('%Y-%m-%d'))}*")
 
             messari_service = Dependencies.get_messari_service()
             messari_res = await messari_service.get_asset_metrics()
@@ -52,8 +53,11 @@ async def crypto_data_notification_job(argv):
                 messages.append(messari_message)
 
             thirdparty_chainanalysis_service = Dependencies.get_thirdparty_chainanalysis_service()
-            thirdparty_chainanalysis_res = await thirdparty_chainanalysis_service.get_trade_intensity(symbol='BTC')
-            thirdparty_chainanalysis_message = format_thirdparty_chainanalysis_message(thirdparty_chainanalysis_res)
+            chainanalysis_service = Dependencies.get_chainanalysis_service()
+            chainanalysis_trade_intensity = await thirdparty_chainanalysis_service.get_trade_intensity(symbol=symbol)
+            chainanalysis_fees = await chainanalysis_service.get_fees(symbol=symbol)
+
+            thirdparty_chainanalysis_message = format_chainanalysis(trade_intensity=chainanalysis_trade_intensity, fees=chainanalysis_fees)
             if thirdparty_chainanalysis_message is not None:
                 messages.append(thirdparty_chainanalysis_message)
 

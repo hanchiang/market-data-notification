@@ -12,7 +12,7 @@ This repository sends stocks and crypto market data to channels like telegram
   * Basic info such as closing price, EMA20, difference between closing price and EMA20
   * Overextension from EMA20 based on the median delta when stock reverse in the next few days
 * Crypto
-  * BTC Exchange netflow, supply, median trade intensity
+  * BTC Exchange netflow, supply, median trade intensity, fees
 
 # Tech stack
 * Language: Python

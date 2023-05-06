@@ -7,7 +7,7 @@ import os
 
 from src.dependencies import Dependencies
 from src.job.service.tradingview import get_redis_key_for_stocks, save_tradingview_data
-from src.router.chainanalysis import thirdparty_chainanalysis
+from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 import src.config.config as config
@@ -23,6 +23,7 @@ app.include_router(vix_central.router)
 app.include_router(thirdparty_messari.router)
 app.include_router(messari.router)
 app.include_router(thirdparty_chainanalysis.router)
+app.include_router(chainanalysis.router)
 
 env = os.getenv('ENV')
 

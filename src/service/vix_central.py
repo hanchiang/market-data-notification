@@ -113,6 +113,11 @@ class VixCentralService:
             else:
                 recent_values.vix_futures_values[i].is_contango_single_day_decrease_alert = False
 
+            if curr_contango >= prev_contango:
+                # set to a negative value because once the current value is more than the previous value,
+                # is_decrease_for_past_n_days should not be True anymore
+                decrease_counter = -len(recent_values.vix_futures_values)
+                continue
             if decrease_counter < recent_values.contango_decrease_past_n_days and curr_contango < prev_contango:
                 decrease_counter += 1
                 if decrease_counter == recent_values.contango_decrease_past_n_days:

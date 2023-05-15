@@ -9,6 +9,7 @@ from src.job.service.tradingview import get_tradingview_daily_stocks_data, forma
 from src.job.service.vix_central import format_vix_central_message
 from src.notification_destination.telegram_notification import send_message_to_channel
 from src.type.market_data_type import MarketDataType
+from src.type.trading_view import TradingViewDataType
 from src.util.context_manager import TimeTrackerContext
 from src.util.date_util import get_current_datetime, get_datetime_from_timestamp
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
@@ -40,12 +41,13 @@ async def stocks_data_notification_job():
         try:
             await Redis.start_redis(script_mode=True)
             await Dependencies.build()
-            tradingview_data = await get_tradingview_daily_stocks_data()
+            tradingview_stocks_data = await get_tradingview_daily_stocks_data(type=TradingViewDataType.STOCKS)
+            tradingview_economy_indicator_data = await get_tradingview_daily_stocks_data(type=TradingViewDataType.ECONOMY_INDICATOR)
 
-            if tradingview_data.get('data', None) is not None:
-                tradingview_message = format_tradingview_message(tradingview_data['data'].get('data', []))
+            if tradingview_stocks_data.get('data', None) is not None:
+                tradingview_message = format_tradingview_message(stocks_payload=tradingview_stocks_data['data'], economy_indicator_payload=tradingview_economy_indicator_data['data'])
                 if tradingview_message is not None:
-                    tradingview_date = get_datetime_from_timestamp(tradingview_data['score']).strftime("%Y-%m-%d")
+                    tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data['score']).strftime("%Y-%m-%d")
                     tradingview_message = f"*Trading view market data at {escape_markdown(tradingview_date)}:*{tradingview_message}"
                     messages.append(tradingview_message)
 
@@ -60,14 +62,14 @@ async def stocks_data_notification_job():
             res = await send_message_to_channel(message=telegram_message, chat_id=config.get_telegram_stocks_channel_id(), market_data_type=MarketDataType.STOCKS)
             return res
         except Exception as e:
-            print(e)
+            print(f"exception: {e}")
             messages.append(f"{escape_markdown(str(e))}")
             message = format_messages_to_telegram(messages)
             await send_message_to_channel(message=message, chat_id=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
             return None
         finally:
             await Redis.stop_redis()
-            await vix_central_service.cleanup()
+            await Dependencies.get_vix_central_service().cleanup()
 
 # run at 8.45am
 def should_run() -> bool:

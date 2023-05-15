@@ -8,7 +8,7 @@ async_ee = AsyncIOEventEmitter()
 
 @async_ee.on('error')
 async def on_error(message):
-    print(message)
+    print(f"event emitter error: {message}")
     await telegram_notification.send_message_to_admin(escape_markdown(str(message)), market_data_type=MarketDataType.STOCKS)
 
 @async_ee.on('send_to_telegram')

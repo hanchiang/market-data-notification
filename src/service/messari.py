@@ -74,5 +74,6 @@ class MessariService:
         ret_val = exchange_usd_quantity.get('quantity', 0)
         if absolute:
             return abs(ret_val)
+        return ret_val
 
 

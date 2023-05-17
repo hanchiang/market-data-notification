@@ -32,6 +32,7 @@ async def stocks_data_notification_job():
 
     with TimeTrackerContext('market_data_notification_job'):
         # TODO: May need a lock in the future
+        # TODO: Split tradingview stocks and vix central
         messages = []
         if config.get_is_testing_telegram():
             messages.insert(0, '*THIS IS A TEST MESSAGE: Parameters have been adjusted*')

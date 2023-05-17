@@ -104,8 +104,7 @@ async def tradingview_daily_stocks_data(request: Request):
     key = get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
     json_data = {}
     timestamp = int(now.timestamp())
-    # [add_res, remove_res] = await save_tradingview_data(json.dumps(filtered_body), timestamp, test_mode)
-    [add_res, remove_res] = await save_tradingview_data(data=json.dumps(filtered_body), key=key, score=timestamp, test_mode=True)
+    [add_res, remove_res] = await save_tradingview_data(data=json.dumps(filtered_body), key=key, score=timestamp, test_mode=config.get_is_testing_telegram())
 
     if add_res == 0 and remove_res == 0:
         messages.append(f'trading view data for {now}, score: *{timestamp}* already exist. skip saving to redis')
@@ -118,7 +117,7 @@ async def tradingview_daily_stocks_data(request: Request):
         async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": None}
     if remove_res > 0:
-        messages.append(f'*{remove_res}* elements is removed from redis, maximum number of records to store in redis: *{config.get_trading_view_days_to_store()}*')
+        messages.append(f'*{remove_res}* elements of type *{escape_markdown(filtered_body.get("type"))}* is removed from redis, maximum number of records to store in redis: *{config.get_trading_view_days_to_store()}*')
 
     save_message = f'Successfully saved trading view data for type: *{escape_markdown(filtered_body.get("type"))}* at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}*, days to store: *{config.get_trading_view_days_to_store()}*'
     messages.append(save_message)

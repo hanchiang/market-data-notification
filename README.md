@@ -39,7 +39,18 @@ This repository sends stocks and crypto market data to channels like telegram
 ![crypto fees](images/telegram_crypto_fees.png)
 
 # How to do local development
-* Use a reverse prxoy like [ngrok](https://ngrok.com/)
+## Run docker containers
+Start backend and redis: `docker-compose up -d`
+
+**Send message to stocks telegram channel**:
+`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/stocks.py --force_run=1 --test_mode=1"`
+
+**Send message to crypto telegram channel**:
+`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto.py --force_run=1 --test_mode=1"`
+
+## Test TradingView webhook
+Webhooks have to be a HTTPS URL, so localhost does not work.
+* Use a reverse proxy like [ngrok](https://ngrok.com/)
 * Set is_testing_telegram to TRUE, which will save data to a dev key in redis and send notification to a dev telegram channel
 
 # Stocks cron workflow

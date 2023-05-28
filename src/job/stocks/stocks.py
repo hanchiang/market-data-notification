@@ -1,8 +1,8 @@
 import asyncio
 
 from src.job.job_wrapper import JobWrapper
-from src.job.stocks.VixCentralMessageSender import VixCentralMessageSender
-from src.job.stocks.TradingViewMessageSender import TradingViewMessageSender
+from src.job.stocks.vix_central_message_sender import VixCentralMessageSender
+from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
 from src.config import config
 from src.util.date_util import get_current_datetime
 from src.type.market_data_type import MarketDataType

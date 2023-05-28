@@ -2,7 +2,6 @@ from typing import List
 
 from src.dependencies import Dependencies
 from src.config import config
-from src.service.tradingview_service import TradingViewService
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.trading_view import TradingViewDataType, TradingViewData
 from src.util.date_util import get_datetime_from_timestamp

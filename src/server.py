@@ -62,7 +62,7 @@ async def heath_check():
 @app.post("/tradingview-daily-stocks")
 async def tradingview_daily_stocks_data(request: Request):
     # request body: { type(stocks, economy_indicator), secret, test_mode, unix_ms, data: [{ symbol, timeframe(e.g. 1d), close_prices: [], ema20s: [], volumes: [] }] }
-    # TODO:
+    # TODO: add threshold
     # vix spike threshold: 15-20%
     # baml high yield index spread spike: 5-10%
     # skew: 140-150

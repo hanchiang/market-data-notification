@@ -66,7 +66,6 @@ function send_mail() {
 
   backup_file=$(cat $REDIS_BACKUP_FILE_NAME | base64 -w0)
 
-  # TODO: write in python?
   # https://docs.sendgrid.com/api-reference/mail-send/mail-send
   maildata='{"personalizations":
     [

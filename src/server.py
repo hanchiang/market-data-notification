@@ -6,7 +6,6 @@ import uvicorn
 import os
 
 from src.dependencies import Dependencies
-from src.job.service.tradingview import get_redis_key_for_stocks, save_tradingview_data
 from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
@@ -99,12 +98,13 @@ async def tradingview_daily_stocks_data(request: Request):
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
 
+    tradingview_service = Dependencies.get_tradingview_service()
     # Save to redis
     now = get_current_date()
-    key = get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
+    key = tradingview_service.get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
     json_data = {}
     timestamp = int(now.timestamp())
-    [add_res, remove_res] = await save_tradingview_data(data=json.dumps(filtered_body), key=key, score=timestamp, test_mode=config.get_is_testing_telegram())
+    [add_res, remove_res] = await tradingview_service.save_tradingview_data(data=json.dumps(filtered_body), key=key, score=timestamp, test_mode=config.get_is_testing_telegram())
 
     if add_res == 0 and remove_res == 0:
         messages.append(f'trading view data for {now}, score: *{timestamp}* already exist. skip saving to redis')

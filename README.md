@@ -46,7 +46,7 @@ Start backend and redis: `docker-compose up -d`
 `docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1"`
 
 **Send message to crypto telegram channel**:
-`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto.py --force_run=1 --test_mode=1"`
+`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1"`
 
 ## Test TradingView webhook
 Webhooks have to be a HTTPS URL, so localhost does not work.

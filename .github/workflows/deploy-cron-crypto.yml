@@ -98,8 +98,8 @@ jobs:
 
           sudo chmod +x crypto.sh
           crontab -l > mycron
-          echo "0 13,14 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py 0 0 > crypto.log 2>&1" >> mycron
-          echo "15 20,21 * * 0-6 ./crypto.sh market_data_notification src/job/crypto.py 0 0 > crypto.log 2>&1" >> mycron
+          echo "0 13,14 * * 0-6 ./crypto.sh market_data_notification src/job/crypto/crypto.py 0 0 > crypto.log 2>&1" >> mycron
+          echo "15 20,21 * * 0-6 ./crypto.sh market_data_notification src/job/crypto/crypto.py 0 0 > crypto.log 2>&1" >> mycron
           
           mv mycron mycron.temp
           cat mycron.temp | sort | uniq > mycron

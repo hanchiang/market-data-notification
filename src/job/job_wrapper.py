@@ -6,10 +6,11 @@ from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
-from src.notification_destination.telegram_notification import send_message_to_channel
-from src.type.market_data_type import MarketDataType
+from src.notification_destination.telegram_notification import send_message_to_channel, market_data_type_to_admin_chat_id
 from src.util.context_manager import TimeTrackerContext
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
+from src.type.market_data_type import MarketDataType
+
 
 class JobWrapper(ABC):
     async def start(self):
@@ -28,7 +29,7 @@ class JobWrapper(ABC):
         if not force_run and not self.should_run():
             return
 
-        with TimeTrackerContext('stocks_notification_job'):
+        with TimeTrackerContext(f'{self.market_data_type.value.lower()}_notification_job'):
             # TODO: May need a lock in the future
             messages = []
             if config.get_is_testing_telegram():
@@ -51,12 +52,13 @@ class JobWrapper(ABC):
                 print(f"{self.__class__.__name__} exception: {e}")
                 messages.append(f"{escape_markdown(str(e))}")
                 message = format_messages_to_telegram(messages)
-                await send_message_to_channel(message=message, chat_id=config.get_telegram_stocks_admin_id(),
-                                              market_data_type=MarketDataType.STOCKS)
+                await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
+                                              market_data_type=self.market_data_type)
                 return None
             finally:
                 await Redis.stop_redis()
-                await Dependencies.get_vix_central_service().cleanup()
+                # await Dependencies.get_vix_central_service().cleanup()
+                await Dependencies.cleanup()
 
     @abstractmethod
     def should_run(self) -> bool:
@@ -64,5 +66,12 @@ class JobWrapper(ABC):
 
     @property
     @abstractmethod
+    def market_data_type(self) -> MarketDataType:
+        pass
+
+    @property
+    @abstractmethod
     def message_senders(self) -> List[MessageSenderWrapper]:
         pass
+
+

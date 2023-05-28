@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 
 from src.job.job_wrapper import JobWrapper
@@ -6,9 +5,10 @@ from src.job.stocks.VixCentralMessageSender import VixCentralMessageSender
 from src.job.stocks.TradingViewMessageSender import TradingViewMessageSender
 from src.config import config
 from src.util.date_util import get_current_datetime
+from src.type.market_data_type import MarketDataType
 
-# TODO: test. abstract class
-class StockDataNotificationJob(JobWrapper):
+# TODO: test
+class StocksNotificationJob(JobWrapper):
     # run at 8.45am
     def should_run(self) -> bool:
         if config.get_is_testing_telegram():
@@ -29,10 +29,14 @@ class StockDataNotificationJob(JobWrapper):
     def message_senders(self):
         return [TradingViewMessageSender(), VixCentralMessageSender()]
 
+    @property
+    def market_data_type(self):
+        return MarketDataType.STOCKS
+
 
 # ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    job = StockDataNotificationJob()
+    job = StocksNotificationJob()
     data = asyncio.run(job.start())
     print(data)

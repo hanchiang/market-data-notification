@@ -67,11 +67,11 @@ class VixCentralService:
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
             print('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
+            self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
         else:
             print('Retrieving current and historical vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self.current_to_vix_futures_value(current, current_date=current_date))
+            self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
             historical_dates = []
 
             for i in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
@@ -86,12 +86,12 @@ class VixCentralService:
 
             for i in range(0, len(res)):
                 self.recent_values.vix_futures_values.append(
-                    self.historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
+                    self._historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
 
-        return self.compute_contango_alert_threshold(self.recent_values)
+        return self._compute_contango_alert_threshold(self.recent_values)
 
     # Compute single day contango decrease and past n days decreaase
-    def compute_contango_alert_threshold(self, recent_values: RecentVixFuturesValues):
+    def _compute_contango_alert_threshold(self, recent_values: RecentVixFuturesValues):
         is_decrease_for_past_n_days = False
         decrease_counter = 0
 
@@ -129,17 +129,17 @@ class VixCentralService:
         recent_values.is_contango_decrease_for_past_n_days = is_decrease_for_past_n_days
         return recent_values
 
-    def current_to_vix_futures_value(self, current, current_date: datetime.datetime) -> VixFuturesValue:
+    def _current_to_vix_futures_value(self, current, current_date: datetime.datetime) -> VixFuturesValue:
         current_months = current[0]
         current_last_prices = current[2]
         if VixCentralService.MONTH_OF_INTEREST is None:
             VixCentralService.MONTH_OF_INTEREST = current_months[0]
         month_of_interest = current_months[0]
-        contango = self.calculate_contango(current_last_prices[0], current_last_prices[1])
+        contango = self._calculate_contango(current_last_prices[0], current_last_prices[1])
 
         ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self.format_futures_date(month_of_interest, current_date)
+        ret_val.futures_date = self._format_futures_date(month_of_interest, current_date)
         ret_val.futures_value = current_last_prices[0]
         ret_val.next_month_futures_value = current_last_prices[1]
         ret_val.raw_contango = contango
@@ -147,12 +147,12 @@ class VixCentralService:
         ret_val.is_contango_single_day_decrease_alert = False
         return ret_val
 
-    def historical_to_vix_futures_value(self, historical, current_date: datetime.datetime) -> VixFuturesValue:
-        contango = self.calculate_contango(historical[1], historical[2])
+    def _historical_to_vix_futures_value(self, historical, current_date: datetime.datetime) -> VixFuturesValue:
+        contango = self._calculate_contango(historical[1], historical[2])
 
         ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self.format_futures_date(VixCentralService.MONTH_OF_INTEREST, current_date)
+        ret_val.futures_date = self._format_futures_date(VixCentralService.MONTH_OF_INTEREST, current_date)
         ret_val.futures_value = historical[1]
         ret_val.next_month_futures_value = historical[2]
         ret_val.raw_contango = contango
@@ -161,11 +161,11 @@ class VixCentralService:
         return ret_val
 
     # the gradient of the next month futures compared to current
-    def calculate_contango(self, first: float, second: float) -> float:
+    def _calculate_contango(self, first: float, second: float) -> float:
         return (second / first) - 1
 
     # month: mmm. e.g. Jan
-    def format_futures_date(self, month: str, current_date: datetime.date) -> str:
+    def _format_futures_date(self, month: str, current_date: datetime.date) -> str:
         year = current_date.year
         if current_date.month == 12:
             year += 1

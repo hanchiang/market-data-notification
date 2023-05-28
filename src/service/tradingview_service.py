@@ -53,7 +53,7 @@ class TradingViewService:
 
         return key
 
-    def get_redis_key_for_crypto(self,):
+    def get_redis_key_for_crypto(self):
         is_testing_telegram = config.get_is_testing_telegram()
         key = 'tradingview-crypto'
         if is_testing_telegram:

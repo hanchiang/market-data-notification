@@ -1,4 +1,5 @@
 import json
+import random
 import time
 
 from fastapi import FastAPI, Request
@@ -122,9 +123,9 @@ async def tradingview_daily_stocks_data(request: Request):
     save_message = f'Successfully saved trading view data for type: *{escape_markdown(filtered_body.get("type"))}* at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}*, days to store: *{config.get_trading_view_days_to_store()}*'
     messages.append(save_message)
     print(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp}, days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
-    async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
     # sleep for a bit, telegram client will timeout if concurrent requests come in
-    time.sleep(0.5)
+    time.sleep(random.uniform(0.1, 0.9))
+    async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
     return {"data": add_res}
 
 # TODO: most active options, change in open interest

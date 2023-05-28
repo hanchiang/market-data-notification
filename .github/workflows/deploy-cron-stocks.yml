@@ -97,7 +97,7 @@ jobs:
 
           chmod +x stocks.sh
           crontab -l > mycron
-          echo "0 13,14 * * 1-6 ./stocks.sh market_data_notification src/job/stocks.py 0 0 > stocks.log 2>&1" >> mycron
+          echo "0 13,14 * * 1-6 ./stocks.sh market_data_notification src/job/stocks/stocks.py 0 0 > stocks.log 2>&1" >> mycron
           
           mv mycron mycron.temp
           cat mycron.temp | sort | uniq > mycron

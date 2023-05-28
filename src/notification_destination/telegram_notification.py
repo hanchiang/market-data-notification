@@ -3,7 +3,7 @@ import src.config.config as config
 from src.type.market_data_type import MarketDataType
 from src.util.my_telegram import escape_markdown
 
-# TODO: Can optimise by market data type and bot type in here and its usage
+# TODO: Clean up
 stocks_bot = telegram.Bot(token=config.get_telegram_stocks_bot_token())
 stocks_admin_bot = telegram.Bot(token=config.get_telegram_stocks_admin_bot_token())
 stocks_dev_bot = telegram.Bot(token=config.get_telegram_stocks_dev_bot_token())
@@ -20,6 +20,14 @@ chat_id_to_telegram_client[config.get_telegram_stocks_dev_id()] = stocks_dev_bot
 chat_id_to_telegram_client[config.get_telegram_crypto_channel_id()] = crypto_bot
 chat_id_to_telegram_client[config.get_telegram_crypto_admin_id()] = crypto_admin_bot
 chat_id_to_telegram_client[config.get_telegram_crypto_dev_id()] = crypto_dev_bot
+
+market_data_type_to_admin_chat_id = {}
+market_data_type_to_admin_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_admin_id()
+market_data_type_to_admin_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_admin_id()
+
+market_data_type_to_chat_id = {}
+market_data_type_to_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_channel_id()
+market_data_type_to_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_channel_id()
 
 async def send_message_to_channel(message: str, chat_id, market_data_type: MarketDataType):
     if config.get_disable_telegram():

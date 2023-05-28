@@ -1,3 +1,4 @@
+from src.service.tradingview_service import TradingViewService
 from src.http_client import HttpClient
 from src.service.chainanalysis import ChainAnalysisService
 from src.service.messari import MessariService
@@ -8,8 +9,13 @@ from src.service.vix_central import VixCentralService
 
 class Dependencies:
   is_initialised: bool = False
+
+  # stocks
+  tradingview_service: TradingViewService = None
   thirdparty_vix_central_service: ThirdPartyVixCentralService = None
   vix_central_service: VixCentralService = None
+
+  # crypto
   thirdparty_messari_service: ThirdPartyMessariService = None
   messari_service: MessariService = None
   thirdparty_chainanalysis_service: ThirdPartyChainAnalysisService = None
@@ -18,6 +24,8 @@ class Dependencies:
   @staticmethod
   async def build():
     if not Dependencies.is_initialised:
+      Dependencies.tradingview_service = TradingViewService()
+
       vix_central_service_http_client = await HttpClient.create(base_url=ThirdPartyVixCentralService.BASE_URL, headers=ThirdPartyVixCentralService.HEADERS)
       Dependencies.thirdparty_vix_central_service = ThirdPartyVixCentralService(http_client=vix_central_service_http_client)
       Dependencies.vix_central_service = VixCentralService(third_party_service=Dependencies.thirdparty_vix_central_service)
@@ -40,6 +48,10 @@ class Dependencies:
     await Dependencies.vix_central_service.cleanup()
     await Dependencies.messari_service.cleanup()
     await Dependencies.chainanalysis_service.cleanup()
+
+  @staticmethod
+  def get_tradingview_service():
+    return Dependencies.tradingview_service
 
   @staticmethod
   def get_thirdparty_vix_central_service():

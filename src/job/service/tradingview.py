@@ -13,6 +13,7 @@ market_indices_order_map = {}
 for i in range(len(market_indices)):
     market_indices_order_map[market_indices[i]] = i + 1
 
+# TODO: Refactor with job/stocks/
 async def get_tradingview_daily_stocks_data(type: TradingViewDataType) -> dict:
     try:
         key = get_redis_key_for_stocks(type)

@@ -4,7 +4,7 @@ from src.service.vix_central import RecentVixFuturesValues
 from src.util.my_telegram import escape_markdown
 
 
-# TODO: cleanup trading view webhook code
+# TODO: Refactor with job/stocks/
 def format_vix_central_message(vix_central_value: RecentVixFuturesValues):
     if vix_central_value is None or len(vix_central_value.vix_futures_values) == 0:
         return None

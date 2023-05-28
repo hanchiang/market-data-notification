@@ -39,14 +39,23 @@ This repository sends stocks and crypto market data to channels like telegram
 ![crypto fees](images/telegram_crypto_fees.png)
 
 # How to do local development
-## Run docker containers
-Start backend and redis: `docker-compose up -d`
+## 1. No docker
+* Install python: https://www.python.org/downloads/
+* Install poetry: https://python-poetry.org/docs/
+* Install dependencies: `poetry install`
+* Run server: `poetry run python3 main.py`
+* Run stocks job: `poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1`
+* Run crypto job: `poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1`
 
-**Send message to stocks telegram channel**:
-`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1"`
+## 2. With docker
+* Install docker: https://docs.docker.com/engine/install/
+* Run server: `docker-compose up -d`
+* Run stocks job: `docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1"`
+* Run crypto job: `docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1"`
 
-**Send message to crypto telegram channel**:
-`docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1"`
+## Run tests
+* Run test: `coverage run --branch -m pytest`
+* Coverage report: `coverage report --show-missing`
 
 ## Test TradingView webhook
 Webhooks have to be a HTTPS URL, so localhost does not work.

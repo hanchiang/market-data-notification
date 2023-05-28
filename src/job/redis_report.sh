@@ -57,6 +57,7 @@ function cleanup() {
 }
 
 function send_mail() {
+  # TODO: include economy indicator
   redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
   redis_data=$(echo $redis_data | sed -e "s/\"/'/g")
   unix_timestamp=$(echo $redis_data | sed -r "s/.* ([0-9]+)/\1/g")

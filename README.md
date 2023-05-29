@@ -78,7 +78,6 @@ Webhooks have to be a HTTPS URL, so localhost does not work.
 See [CONTRIBUTING](CONTRIBUTING.md)
 
 # TODO
-* Common cron: send attachment in email
-* Test
+* Code coverage in github action
 * Bot with pre-defined menu for user interaction
 * Get overextended levels using google sheet API instead of manually entering them.

@@ -1,0 +1,10 @@
+[run]
+include =
+    src/*
+omit =
+    # omit anything in a .local directory anywhere
+    */tests/*
+    src/config/config.py
+    src/db/redis.py
+    src/dependencies.py
+    src/http_client.py

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "asset": {
+      "slug": "bitcoin",
+      "symbol": "BTC",
+      "metrics": {
+        "pricing": {
+          "priceUsd": 27211.96317732537,
+          "priceBtc": 1,
+          "priceEth": 14.719281095886952
+        },
+        "exchangeNetFlows": {
+          "netFlowsBitfinexUsd": 1143684.2554402228,
+          "netFlowsBitfinexNative": 42.58811507,
+          "netFlowsBinanceUsd": -9598667.656584863,
+          "netFlowsBinanceNative": -357.43183552
+        },
+        "exchangeSupply": {
+          "supplyOnExchangesUsd": 20518558275.015102,
+          "supplyOnExchangesNative": 768160.97457554,
+          "supplyOnBitfinexUsd": 6828052692.647112,
+          "supplyOnBitfinexNative": 255579.81175424,
+          "supplyOnBinanceUsd": 13690505582.36799,
+          "supplyOnBinanceNative": 512581.1628213
+        }
+      }
+    }
+  }
+}

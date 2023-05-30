@@ -45,6 +45,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
         return messages
 
+    # TODO: type
     def _format_tradingview_message(self, stocks_payload: dict, economy_indicator_payload: dict):
         if len(stocks_payload.get('data', [])) == 0:
             return None

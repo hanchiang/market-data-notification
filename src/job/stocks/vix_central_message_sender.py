@@ -1,10 +1,11 @@
 from functools import reduce
 
+from src.config import config
 from src.service.vix_central import RecentVixFuturesValues
 from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.market_data_type import MarketDataType
-from src.util.my_telegram import escape_markdown
+from src.util.my_telegram import escape_markdown, exclamation_mark
 
 
 class VixCentralMessageSender(MessageSenderWrapper):
@@ -32,8 +33,8 @@ class VixCentralMessageSender(MessageSenderWrapper):
             return None
         message = reduce(self._format_vix_futures_values, vix_central_value.vix_futures_values,
                          f"*VIX central data for {vix_central_value.vix_futures_values[0].futures_date} futures:*")
-        if vix_central_value.is_contango_decrease_for_past_n_days:
-            message = f"{message}\n*Contango has been decreasing for the past {vix_central_value.contango_decrease_past_n_days} days ‼️*"
+        if config.get_display_vix_futures_contango_decrease_past_n_days() and vix_central_value.is_contango_decrease_for_past_n_days:
+            message = f"{message}\n*Contango has been decreasing for the past {vix_central_value.actual_contango_decrease_past_n_days} days {exclamation_mark()}*"
         return message
 
     def _format_vix_futures_values(self, res, curr):
@@ -41,6 +42,6 @@ class VixCentralMessageSender(MessageSenderWrapper):
         message = f"{message}" if curr.formatted_contango_change_prev_day is None else f"{message}, changed by {escape_markdown(curr.formatted_contango_change_prev_day)} from the previous day"
         if curr.is_contango_single_day_decrease_alert:
             threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
-            message = f"{message}, *which is greater than the threshold of {escape_markdown(threshold)}, market could be near the top ‼️*"
+            message = f"{message}, *which is greater than the threshold {escape_markdown(threshold)}, watch for potential reversal {exclamation_mark()}*"
         return message
 

@@ -32,7 +32,8 @@ class RecentVixFuturesValues:
         # list of dict in reverse chronological order of current_date.
         self.vix_futures_values: List[VixFuturesValue] = []
         self.is_contango_decrease_for_past_n_days: bool = None
-        self.contango_decrease_past_n_days = decrease_past_n_days
+        self.contango_decrease_past_n_days_threshold = decrease_past_n_days
+        self.actual_contango_decrease_past_n_days = None
 
     def clear_current_value(self):
         if len(self.vix_futures_values) > 1:
@@ -88,7 +89,23 @@ class VixCentralService:
                 self.recent_values.vix_futures_values.append(
                     self._historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
 
+        if config.get_is_testing_telegram():
+            self._modify_contango_testing_mode()
+
         return self._compute_contango_alert_threshold(self.recent_values)
+
+    def _modify_contango_testing_mode(self):
+        next_month_futures_value = 50
+        futures_value = 47
+        diff = next_month_futures_value - futures_value
+        for vix_futures_value in self.recent_values.vix_futures_values:
+            vix_futures_value.futures_value = futures_value
+            vix_futures_value.next_month_futures_value = next_month_futures_value
+            vix_futures_value.raw_contango = self._calculate_contango(futures_value, next_month_futures_value)
+            vix_futures_value.formatted_contango = f"{self._calculate_contango(futures_value, next_month_futures_value):.2%}"
+            vix_futures_value.is_contango_single_day_decrease_alert = False
+            next_month_futures_value = futures_value
+            futures_value -= diff
 
     # Compute single day contango decrease and past n days decreaase
     def _compute_contango_alert_threshold(self, recent_values: RecentVixFuturesValues):
@@ -116,17 +133,20 @@ class VixCentralService:
             if curr_contango >= prev_contango:
                 # set to a negative value because once the current value is more than the previous value,
                 # is_decrease_for_past_n_days should not be True anymore
-                decrease_counter = -len(recent_values.vix_futures_values)
+                if not is_decrease_for_past_n_days:
+                    decrease_counter = -len(recent_values.vix_futures_values)
                 continue
-            if decrease_counter < recent_values.contango_decrease_past_n_days and curr_contango < prev_contango:
+            else:
                 decrease_counter += 1
-                if decrease_counter == recent_values.contango_decrease_past_n_days:
+                if decrease_counter >= recent_values.contango_decrease_past_n_days_threshold and not is_decrease_for_past_n_days:
                     is_decrease_for_past_n_days = True
 
-        # No previous item to compare to, so it is always false
+        # For the last item, there is no previous item to compare to, so it is always false
         recent_values.vix_futures_values[len(recent_values.vix_futures_values) - 1].is_contango_single_day_decrease_alert = False
 
         recent_values.is_contango_decrease_for_past_n_days = is_decrease_for_past_n_days
+        if is_decrease_for_past_n_days:
+            recent_values.actual_contango_decrease_past_n_days = decrease_counter
         return recent_values
 
     def _current_to_vix_futures_value(self, current, current_date: datetime.datetime) -> VixFuturesValue:

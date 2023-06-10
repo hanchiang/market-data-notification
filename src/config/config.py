@@ -92,6 +92,10 @@ def get_should_compare_stocks_volume_rank() -> bool:
     val = os.getenv('SHOULD_COMPARE_STOCKS_VOLUME_RANK', 'true')
     return True if val == 'true' or not val else False
 
+def get_display_vix_futures_contango_decrease_past_n_days() -> bool:
+    val = os.getenv('DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS', 'true')
+    return True if val == 'true' or not val else False
+
 def get_number_of_past_days_range_for_stock_volume_rank() -> Tuple[int, int]:
     data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', '5,30')
     string_list = data.replace(' ', '').split(',')

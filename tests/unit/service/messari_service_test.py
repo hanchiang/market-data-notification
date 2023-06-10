@@ -18,6 +18,7 @@ class TestMessariService:
 
     @classmethod
     def setup_class(cls):
+        # TODO: Should mock Dependencies
         asyncio.run(Dependencies.build())
 
     @classmethod

@@ -1,4 +1,6 @@
 import os
+from typing import Tuple
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -64,13 +66,13 @@ def get_telegram_crypto_dev_id():
     return os.getenv('CRYPTO_TELEGRAM_DEV_ID')
 
 def get_is_testing_telegram():
-    return os.getenv('IS_TESTING_TELEGRAM', False) == 'true'
+    return os.getenv('IS_TESTING_TELEGRAM', 'false') == 'true'
 
 def set_is_testing_telegram(testing: str):
     os.environ['IS_TESTING_TELEGRAM'] = testing
 
 def get_simulate_tradingview_traffic():
-    return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', False) == 'true'
+    return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', 'false') == 'true'
 
 def get_trading_view_ips():
     if not os.getenv('TRADING_VIEW_IPS', None):
@@ -81,18 +83,26 @@ def get_contango_single_day_decrease_threshold_ratio():
     return 0.4 if not get_is_testing_telegram() else 0.01
 
 def get_contango_decrease_past_n_days_threshold():
-    return 5 if not get_is_testing_telegram() else 2
+    return 5
 
 def get_vix_central_number_of_days():
     return 7
 
+def get_should_compare_stocks_volume_rank() -> bool:
+    val = os.getenv('SHOULD_COMPARE_STOCKS_VOLUME_RANK', 'true')
+    return True if val == 'true' or not val else False
+
+def get_number_of_past_days_range_for_stock_volume_rank() -> Tuple[int, int]:
+    data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', '5,30')
+    string_list = data.replace(' ', '').split(',')
+    return tuple(map(lambda x: int(x), string_list))
 def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
     if not get_is_testing_telegram():
         return value
     return default if not is_negative else -default
 
 median_overextended_by_symbol = {
-    'DJIA': {
+    'DIA': {
 
     },
     'IWM': {
@@ -155,7 +165,7 @@ def get_tradingview_webhook_secret():
     return os.getenv('TRADING_VIEW_WEBHOOK_SECRET')
 
 def get_disable_telegram():
-    return os.getenv('DISABLE_TELEGRAM', False) == 'true'
+    return os.getenv('DISABLE_TELEGRAM', 'false') == 'true'
 
 def get_redis_host():
     return os.getenv('REDIS_HOST', 'localhost')

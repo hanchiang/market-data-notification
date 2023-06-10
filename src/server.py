@@ -7,6 +7,7 @@ import uvicorn
 import os
 
 from src.dependencies import Dependencies
+from src.notification_destination.telegram_notification import init_telegram_bots
 from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
@@ -40,6 +41,7 @@ def start_server():
 async def startup_event():
     await Dependencies.build()
     await Redis.start_redis()
+    init_telegram_bots()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -62,6 +64,7 @@ async def heath_check():
 
 @app.post("/tradingview-daily-stocks")
 async def tradingview_daily_stocks_data(request: Request):
+    # for economy_indicator type, there is no ema20s, volumes
     # request body: { type(stocks, economy_indicator), secret, test_mode, unix_ms, data: [{ symbol, timeframe(e.g. 1d), close_prices: [], ema20s: [], volumes: [] }] }
     # TODO: add threshold
     # vix spike threshold: 15-20%

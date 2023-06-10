@@ -4,30 +4,48 @@ from src.type.market_data_type import MarketDataType
 from src.util.my_telegram import escape_markdown
 
 # TODO: Clean up
-stocks_bot = telegram.Bot(token=config.get_telegram_stocks_bot_token())
-stocks_admin_bot = telegram.Bot(token=config.get_telegram_stocks_admin_bot_token())
-stocks_dev_bot = telegram.Bot(token=config.get_telegram_stocks_dev_bot_token())
-crypto_bot = telegram.Bot(token=config.get_telegram_crypto_bot_token())
-crypto_admin_bot = telegram.Bot(token=config.get_telegram_crypto_admin_bot_token())
-crypto_dev_bot = telegram.Bot(token=config.get_telegram_crypto_dev_bot_token())
+
+stocks_bot = None
+stocks_admin_bot = None
+stocks_dev_bot = None
+crypto_bot = None
+crypto_admin_bot = None
+crypto_dev_bot = None
 
 chat_id_to_telegram_client = {}
-
-chat_id_to_telegram_client[config.get_telegram_stocks_channel_id()] = stocks_bot
-chat_id_to_telegram_client[config.get_telegram_stocks_admin_id()] = stocks_admin_bot
-chat_id_to_telegram_client[config.get_telegram_stocks_dev_id()] = stocks_dev_bot
-
-chat_id_to_telegram_client[config.get_telegram_crypto_channel_id()] = crypto_bot
-chat_id_to_telegram_client[config.get_telegram_crypto_admin_id()] = crypto_admin_bot
-chat_id_to_telegram_client[config.get_telegram_crypto_dev_id()] = crypto_dev_bot
-
 market_data_type_to_admin_chat_id = {}
-market_data_type_to_admin_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_admin_id()
-market_data_type_to_admin_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_admin_id()
-
 market_data_type_to_chat_id = {}
-market_data_type_to_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_channel_id()
-market_data_type_to_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_channel_id()
+
+def init_telegram_bots():
+    global stocks_bot, stocks_admin_bot, stocks_dev_bot, crypto_bot, crypto_admin_bot, crypto_dev_bot
+    print('Initialising telegram bots')
+    stocks_bot = telegram.Bot(token=config.get_telegram_stocks_bot_token())
+    stocks_admin_bot = telegram.Bot(token=config.get_telegram_stocks_admin_bot_token())
+    stocks_dev_bot = telegram.Bot(token=config.get_telegram_stocks_dev_bot_token())
+    crypto_bot = telegram.Bot(token=config.get_telegram_crypto_bot_token())
+    crypto_admin_bot = telegram.Bot(token=config.get_telegram_crypto_admin_bot_token())
+    crypto_dev_bot = telegram.Bot(token=config.get_telegram_crypto_dev_bot_token())
+
+    global chat_id_to_telegram_client
+    chat_id_to_telegram_client[config.get_telegram_stocks_channel_id()] = stocks_bot
+    chat_id_to_telegram_client[config.get_telegram_stocks_admin_id()] = stocks_admin_bot
+    chat_id_to_telegram_client[config.get_telegram_stocks_dev_id()] = stocks_dev_bot
+
+    chat_id_to_telegram_client[config.get_telegram_crypto_channel_id()] = crypto_bot
+    chat_id_to_telegram_client[config.get_telegram_crypto_admin_id()] = crypto_admin_bot
+    chat_id_to_telegram_client[config.get_telegram_crypto_dev_id()] = crypto_dev_bot
+
+    global market_data_type_to_admin_chat_id
+    market_data_type_to_admin_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_admin_id()
+    market_data_type_to_admin_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_admin_id()
+
+    global market_data_type_to_chat_id
+    market_data_type_to_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_channel_id()
+    market_data_type_to_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_channel_id()
+
+
+
+
 
 async def send_message_to_channel(message: str, chat_id, market_data_type: MarketDataType):
     if config.get_disable_telegram():

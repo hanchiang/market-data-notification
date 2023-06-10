@@ -19,7 +19,9 @@ services:
       ENV: dev
   redis:
     container_name: redis
-    image: redis:7.0.7
+    build:
+      context: .
+      dockerfile: Dockerfile-redis
     volumes:
       - redis_data:/data
     ports:

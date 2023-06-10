@@ -1,0 +1,4 @@
+FROM redis:7.0.11
+
+COPY redis.conf /etc/redis/conf.d/redis.conf
+CMD [ "redis-server", "/etc/redis/conf.d/redis.conf" ]

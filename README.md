@@ -11,6 +11,7 @@ This repository sends stocks and crypto market data to channels like telegram
 * Stocks
   * Basic info such as closing price, EMA20, difference between closing price and EMA20
   * [Overextension from EMA20 based on the median delta when stock reverse in the next few days](https://github.com/hanchiang/market-data-notification/blob/master/CONTRIBUTING.md#overextendedpositive--negative-levels-from-ema20)
+  * Highest volume in the past few consecutive days
   * Sudden large drop in VIX futures, or a decline for 5 consecutive days
 * Crypto
   * BTC Exchange netflow, supply, median trade intensity, fees
@@ -27,14 +28,13 @@ This repository sends stocks and crypto market data to channels like telegram
   * `job`: Scheduled jobs that sends stocks and crypto notification
 
 # Example message for stocks
-## Test message
-![stocks test message](images/telegram_stocks_test_message.png)
+## EMA20 overextension, highest volume
+![stocks ema overextension highest volume](images/stocks/tradingview-stocks-ema-overextension-highest-volume.png)
+## VIX futures single day and consecutive days decrease
+![stocks ema overextension highest volume](images/stocks/tradingview-vix-central-single-day-and-consecutive-days-decrease.png)
 
-## Actual message
-![stocks real message](images/telegram_stocks_real_message.png)
 
 # Example message for crypto
-## Actual message
 ![crypto exchange supply](images/telegram_crypto_exchange_supply.png)
 ![crypto fees](images/telegram_crypto_fees.png)
 

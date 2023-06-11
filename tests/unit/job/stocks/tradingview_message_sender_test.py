@@ -40,8 +40,8 @@ class TestTradingviewMessageSender:
             ([10], (5, 15), None),
             # current day volume is the smallest
             ([1, 3], (2, 6), 1),
-            # current day volume no need to be greater than consecutive past days
-            ([10, 3, 2, 11, 5, 7], (2, 6), 5),
+            # current day volume needs to be greater than consecutive past days
+            ([10, 3, 2, 11, 5, 7], (2, 6), 3),
             # data has more elements than min days
             ([10, 3, 5, 6, 7, 8, 2, 1, 13, 12], (2, 6), 6),
             # data has fewer elements than min days

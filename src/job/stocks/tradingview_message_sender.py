@@ -127,7 +127,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
     # data is ordered in descending order of date. First element is the current day
     # return the number of consecutive past days for which the current volume is greater
-    # for test mode, allow non-consecutive days and first day greater count is less than minimum threshold
+    # for test mode, return value event if first day greater count is less than minimum threshold
     def get_current_data_highest_volume_info(self, data_by_date: List[float],
                                              num_days_range=config.get_number_of_past_days_range_for_stock_volume_rank()) -> int:
         if data_by_date is None or len(data_by_date) < 2:
@@ -141,7 +141,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         for i in range(1, max_days_to_compare):
             if data_by_date[0] >= data_by_date[i]:
                 first_day_greater_count += 1
-            elif not config.get_is_testing_telegram():
+            else:
                 break
 
         if not config.get_is_testing_telegram():

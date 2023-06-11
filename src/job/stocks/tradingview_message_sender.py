@@ -21,6 +21,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
     def __init__(self):
         super().__init__()
         self.tradingview_service = Dependencies.get_tradingview_service()
+        self.barchart_service = Dependencies.get_barchart_service()
         self.market_indices = ['SPY', 'QQQ', 'IWM', 'DIA']
         self.market_indices = sorted(self.market_indices)
 
@@ -35,7 +36,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
             type=TradingViewDataType.ECONOMY_INDICATOR)
 
         if tradingview_stocks_data.get('data', None) is not None:
-            tradingview_message = self._format_tradingview_message(stocks_payload=tradingview_stocks_data['data'],
+            tradingview_message = await self._format_tradingview_message(stocks_payload=tradingview_stocks_data['data'],
                                                              economy_indicator_payload=tradingview_economy_indicator_data['data'])
             if tradingview_message is not None:
                 tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data['score']).strftime("%Y-%m-%d")
@@ -45,7 +46,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         return messages
 
     # TODO: type
-    def _format_tradingview_message(self, stocks_payload: dict, economy_indicator_payload: dict):
+    async def _format_tradingview_message(self, stocks_payload: dict, economy_indicator_payload: dict):
         if len(stocks_payload.get('data', [])) == 0:
             return None
 
@@ -56,13 +57,13 @@ class TradingViewMessageSender(MessageSenderWrapper):
         sorted_stocks = sorted(stocks_list, key=self._payload_sorter)
         sorted_economy_indicators = sorted(economy_indicator_list, key=self._payload_sorter)
 
-        message = self._format_message_for_stocks(sorted_stocks)
+        message = await self._format_message_for_stocks(sorted_stocks)
         message = f"{message}{escape_markdown(message_separator())}"
         message = f"{message}{self._format_message_for_economy_indicators(sorted_economy_indicators)}"
         return message
 
     # TODO: refactor this with _format_message_for_economy_indicators
-    def _format_message_for_stocks(self, sorted_payload: List[TradingViewData]):
+    async def _format_message_for_stocks(self, sorted_payload: List[TradingViewData]):
         message = ''
         for p in sorted_payload:
             symbol = p.symbol.upper()
@@ -81,6 +82,8 @@ class TradingViewMessageSender(MessageSenderWrapper):
                 message = f"{message}, volume: {escape_markdown(friendly_number(volumes[0], decimal_places=2))}"
                 # volume rank for recent days
                 if config.get_should_compare_stocks_volume_rank():
+                    stock_prices = await self.barchart_service.get_stock_price(symbol=symbol, num_days=30)
+                    volumes = list(map(lambda x: x['volume'], stock_prices['data']))
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
                         volume_ratio_diff = abs((volumes[0] - volumes[1]) / volumes[1])
@@ -122,9 +125,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
             message = f'{message}\n'
         return message
 
-    # TODO: use other data source to get volumes because tradingview has limit on payload length
     # data is ordered in descending order of date. First element is the current day
     # return the number of consecutive past days for which the current volume is greater
+    # for test mode, allow non-consecutive days and first day greater count is less than minimum threshold
     def get_current_data_highest_volume_info(self, data_by_date: List[float],
                                              num_days_range=config.get_number_of_past_days_range_for_stock_volume_rank()) -> int:
         if data_by_date is None or len(data_by_date) < 2:

@@ -1,7 +1,9 @@
+from src.service.barchart import BarchartService
 from src.service.tradingview_service import TradingViewService
 from src.http_client import HttpClient
 from src.service.chainanalysis import ChainAnalysisService
 from src.service.messari import MessariService
+from src.third_party_service.barchart import ThirdPartyBarchartService
 from src.third_party_service.chainanalysis import ThirdPartyChainAnalysisService
 from src.third_party_service.messari import ThirdPartyMessariService
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
@@ -14,6 +16,8 @@ class Dependencies:
   tradingview_service: TradingViewService = None
   thirdparty_vix_central_service: ThirdPartyVixCentralService = None
   vix_central_service: VixCentralService = None
+  thirdparty_barchart_service: ThirdPartyBarchartService = None
+  barchart_service: BarchartService = None
 
   # crypto
   thirdparty_messari_service: ThirdPartyMessariService = None
@@ -24,12 +28,17 @@ class Dependencies:
   @staticmethod
   async def build():
     if not Dependencies.is_initialised:
+      # stocks
       Dependencies.tradingview_service = TradingViewService()
 
       vix_central_service_http_client = await HttpClient.create(base_url=ThirdPartyVixCentralService.BASE_URL, headers=ThirdPartyVixCentralService.HEADERS)
       Dependencies.thirdparty_vix_central_service = ThirdPartyVixCentralService(http_client=vix_central_service_http_client)
       Dependencies.vix_central_service = VixCentralService(third_party_service=Dependencies.thirdparty_vix_central_service)
 
+      Dependencies.thirdparty_barchart_service = ThirdPartyBarchartService()
+      Dependencies.barchart_service = BarchartService(third_party_service=Dependencies.thirdparty_barchart_service)
+
+    # crypto
       messari_service_http_client = await HttpClient.create(base_url=ThirdPartyMessariService.BASE_URL)
       Dependencies.thirdparty_messari_service = ThirdPartyMessariService(http_client=messari_service_http_client)
       Dependencies.messari_service = MessariService(third_party_service=Dependencies.thirdparty_messari_service)
@@ -46,9 +55,11 @@ class Dependencies:
   @staticmethod
   async def cleanup():
     await Dependencies.vix_central_service.cleanup()
+    await Dependencies.barchart_service.cleanup()
     await Dependencies.messari_service.cleanup()
     await Dependencies.chainanalysis_service.cleanup()
 
+  # stocks
   @staticmethod
   def get_tradingview_service():
     return Dependencies.tradingview_service
@@ -61,6 +72,15 @@ class Dependencies:
   def get_vix_central_service():
     return Dependencies.vix_central_service
 
+  @staticmethod
+  def get_thirdparty_barchart_service():
+    return Dependencies.thirdparty_barchart_service
+
+  @staticmethod
+  def get_barchart_service():
+    return Dependencies.barchart_service
+
+  # crypto
   @staticmethod
   def get_thirdparty_messari_service():
     return Dependencies.thirdparty_messari_service

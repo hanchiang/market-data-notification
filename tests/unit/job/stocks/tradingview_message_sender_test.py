@@ -3,6 +3,7 @@ from unittest.mock import patch, AsyncMock, Mock
 import pytest
 
 from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
+from src.service.barchart import BarchartService
 from src.service.tradingview_service import TradingViewService
 
 
@@ -56,7 +57,8 @@ class TestTradingviewMessageSender:
 
     @pytest.mark.asyncio
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
-    async def test_format_tradingview_message(self, get_tradingview_service_mock):
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    async def test_format_tradingview_message(self, get_barchart_service_mock, get_tradingview_service_mock):
         stocks_data = {
             'data': {
                 'data': [
@@ -75,9 +77,17 @@ class TestTradingviewMessageSender:
             },
             'score': 1686392956
         }
-        get_tradingview_service_mock.return_value = TradingViewService()
+        # get_tradingview_service_mock.return_value = TradingViewService()
+        # get_barchart_service_mock.return_value = BarchartService()
+
         tradingview_message_sender = TradingViewMessageSender()
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(side_effect=[stocks_data, economy_indicator_data])
+        tradingview_message_sender.barchart_service.get_stock_price = AsyncMock(return_value='''SPY,2023-06-09,429.96,431.99,428.87,429.9,85647200
+SPY,2023-06-08,426.62,429.6,425.82,429.13,61952800
+SPY,2023-06-07,428.44,429.62,426.11,426.55,85373200
+SPY,2023-06-06,426.67,428.5772,425.99,428.03,64022100
+SPY,2023-06-05,428.28,429.62,426.37,427.1,65460100
+''')
         res = await tradingview_message_sender.format_message()
 
         assert res is not None and len(res) > 0

@@ -8,6 +8,7 @@ import os
 
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import init_telegram_bots
+from src.router.barchart import thirdparty_barchart
 from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
@@ -20,9 +21,12 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.db.redis import Redis
 
 app = FastAPI()
+# stocks
 app.include_router(thirdparty_vix_central.router)
 app.include_router(vix_central.router)
 app.include_router(thirdparty_messari.router)
+app.include_router(thirdparty_barchart.router)
+# crypto
 app.include_router(messari.router)
 app.include_router(thirdparty_chainanalysis.router)
 app.include_router(chainanalysis.router)

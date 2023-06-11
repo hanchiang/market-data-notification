@@ -81,3 +81,4 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 * Code coverage in github action
 * Bot with pre-defined menu for user interaction
 * Get overextended levels using google sheet API instead of manually entering them.
+* log

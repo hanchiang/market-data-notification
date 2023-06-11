@@ -6,6 +6,8 @@ services:
     build:
       context: .
       target: dev
+      args:
+        BARCHART_API_TAG: 0.7.1
     working_dir: /app
     env_file: .env
     command: poetry run python3 main.py

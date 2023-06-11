@@ -6,6 +6,11 @@ services:
     build:
       context: .
       target: test
+      secrets:
+        - source: ssh_private_key
+          mode: 0600
+      args:
+        MARKET_DATA_API_TAG: 0.7.1
     working_dir: /app
     env_file: .env.test
     command: poetry run pytest
@@ -23,3 +28,7 @@ services:
 
 volumes:
   redis_data:
+
+secrets:
+  ssh_private_key:
+    file: secret/id_rsa

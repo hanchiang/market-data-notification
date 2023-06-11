@@ -36,14 +36,27 @@ jobs:
           # Can't use self-defined environment variables for some reason
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKER_BUILD_PUSH_TOKEN }}
+      - name: Setup SSH key
+        env:
+          REPO_SSH_PRIVATE_KEY: ${{ secrets.REPO_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir secret
+          echo "$REPO_SSH_PRIVATE_KEY" > secret/id_rsa
       - name: Build and push image
         uses: docker/build-push-action@v3
         with:
+          build-args: |
+            MARKET_DATA_API_TAG=0.7.1
+          secret-files: |
+            "ssh_private_key=secret/id_rsa"
           push: true
           target: release
           tags: ghcr.io/${{ github.repository_owner }}/market_data_notification:${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/market_data_notification:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/market_data_notification:buildcache,mode=max
+      - name: Teardown SSH key
+        run: |
+          rm -rf secret/id_rsa
   health_check:
     runs-on: ubuntu-latest
     needs: [build_and_upload]

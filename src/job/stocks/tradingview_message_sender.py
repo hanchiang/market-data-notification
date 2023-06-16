@@ -87,8 +87,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
                         volume_ratio_diff = abs((volumes[0] - volumes[1]) / volumes[1])
-                        volume_ratio_text_escaped = escape_markdown(f"(+{volume_ratio_diff:.2%} vs ytd)")
-                        message = f"{message}{escape_markdown('.')}\nHighest*{volume_ratio_text_escaped}* volume for the past *{max_days_to_compare} days {exclamation_mark()}*"
+                        if volume_ratio_diff > 0.2:
+                            volume_ratio_text_escaped = escape_markdown(f"(+{volume_ratio_diff:.2%} vs ytd)")
+                            message = f"{message}{escape_markdown('.')}\nHighest*{volume_ratio_text_escaped}* volume for the past *{max_days_to_compare} days {exclamation_mark()}*"
 
 
             # check for overextension for both sides

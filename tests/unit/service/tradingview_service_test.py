@@ -5,7 +5,7 @@ import pytest
 
 from src.dependencies import Dependencies
 from src.service.tradingview_service import TradingViewService
-from src.type.trading_view import TradingViewDataType, TradingViewData
+from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
 
 class TestTradingViewService:
@@ -23,30 +23,18 @@ class TestTradingViewService:
         'redis_data, expected',
         [
             (
-                    [['{"type": "stocks", "data": [{"symbol": "SPY", "close_prices": [100, 200], "ema20s": [100, 200], "volumes": [1, 2] }] }', 1234567890]],
-                    {
-                        'key': 'key',
-                        'score': 1234567890,
-                        'data': {
-                            'type': 'stocks',
-                            'data': [
-                                {
-                                    'symbol': 'SPY',
-                                    'close_prices': [100, 200],
-                                    'ema20s': [100, 200],
-                                    'volumes': [1, 2]
-                                }
-                            ]
-                        }
-                    }
+                    [['{"type": "stocks", "unix_ms": 1, "data": [{"symbol": "SPY", "timeframe": "1D", "close_prices": [100, 200], "ema20s": [100, 200], "volumes": [1, 2] }] }', 1234567890]],
+                    TradingViewRedisData(key='key', score=1234567890, data=TradingViewData(
+                        type=TradingViewDataType.STOCKS,
+                        unix_ms=1,
+                        data=[
+                            TradingViewStocksData(symbol='SPY', timeframe='1D', close_prices=[100, 200], ema20s=[100, 200], volumes=[1, 2])
+                        ]
+                    ))
             ),
-            ([], {
-                    'key': 'key',
-                    'data': None,
-                    'score': None
-                }
+            ([], TradingViewRedisData(key='key', score=None, data=None)
              ),
-            (None, {})
+            (None, None)
         ]
     )
     @patch("src.service.tradingview_service.Redis")
@@ -82,16 +70,15 @@ class TestTradingViewService:
         assert res == expected
 
     @pytest.mark.parametrize(
-        'data_list, type, expected',
+        'data, expected',
         [
-            ([{ 'symbol': 'SPY', 'timeframe': '1d', 'close_prices': [100, 200], 'ema20s': [1, 2], 'volumes': [1, 2] }],
-             TradingViewDataType.STOCKS,
-             [TradingViewData(type=TradingViewDataType.STOCKS, symbol='SPY', timeframe='1d', close_prices=[100, 200], ema20s=[1, 2], volumes=[1, 2])]
+            ({ 'type': 'stocks', 'unix_ms': 1, 'data': [{'symbol': 'SPY', 'timeframe': '1d', 'close_prices': [100, 200], 'ema20s': [1, 2], 'volumes': [1, 2]}] },
+             TradingViewData(type=TradingViewDataType.STOCKS, unix_ms=1, data=[TradingViewStocksData(symbol='SPY', timeframe='1d', close_prices=[100, 200], ema20s=[1, 2], volumes=[1, 2])])
              )
         ]
     )
-    def test_hydrate_data_list(self, data_list, type, expected):
-        res = self.tradingview_service.hydrate_data_list(data_list=data_list, type=type)
+    def test_hydrate_data_list(self, data, expected):
+        res = self.tradingview_service.hydrate_tradingview_data(data=data)
         assert res == expected
 
     @pytest.mark.parametrize(

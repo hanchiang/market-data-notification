@@ -1,22 +1,23 @@
 import json
-from typing import List
+from typing import List, Optional
 
 from src.config import config
 from src.db.redis import Redis
-from src.type.trading_view import TradingViewDataType, TradingViewData
+from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
 class TradingViewService:
     # TODO: data type
-    async def get_tradingview_daily_stocks_data(self, type: TradingViewDataType) -> dict:
+    async def get_tradingview_daily_stocks_data(self, type: TradingViewDataType) -> Optional[TradingViewRedisData]:
         try:
             key = self.get_redis_key_for_stocks(type)
             tradingview_data = await Redis.get_client().zrange(key, start=0, end=0, desc=True, withscores=True)
             if (len(tradingview_data) == 0):
-                return {"key": key, "data": None, "score": None}
-            return {"key": key, "data": json.loads(tradingview_data[0][0]), "score": int(tradingview_data[0][1])}
+                return TradingViewRedisData(key=key, data=None, score=None)
+            data_parsed = json.loads(tradingview_data[0][0])
+            return TradingViewRedisData(key=key, data=self.hydrate_tradingview_data(data_parsed), score=int(tradingview_data[0][1]))
         except Exception as e:
             print(e)
-            return {}
+            return None
 
     # score = timestamp of current date(without time)
     # return: [<add count>, <remove count>]
@@ -40,11 +41,11 @@ class TradingViewService:
 
         return [add_res, remove_res]
 
-    def hydrate_data_list(self, data_list: List[dict], type: TradingViewDataType) -> List[TradingViewData]:
-        return [TradingViewData(type=type, symbol=x.get('symbol'), timeframe=x.get('timeframe'),
-                                close_prices=x.get('close_prices'), ema20s=x.get('ema20s'), volumes=x.get('volumes')
-                                ) for x in data_list
-                ]
+    def hydrate_tradingview_data(self, data) -> TradingViewData:
+        return TradingViewData(type=TradingViewDataType(data.get('type')), unix_ms=data.get('unix_ms'), data=[
+            TradingViewStocksData(symbol=x.get('symbol'), timeframe=x.get('timeframe'), close_prices=x.get('close_prices'), ema20s=x.get('ema20s'), volumes=x.get('volumes'))
+            for x in data.get('data')
+        ])
 
     def get_redis_key_for_stocks(self, type: TradingViewDataType):
         is_testing_telegram = config.get_is_testing_telegram()

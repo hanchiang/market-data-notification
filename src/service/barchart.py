@@ -26,7 +26,7 @@ class BarchartService:
             'date': date,
             'open': float(open),
             'high': float(high),
-            'low': float(high),
+            'low': float(low),
             'close': float(close),
             'volume': float(volume)
         }

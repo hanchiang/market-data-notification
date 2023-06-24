@@ -3,7 +3,7 @@ from typing import List
 from src.dependencies import Dependencies
 from src.config import config
 from src.job.message_sender_wrapper import MessageSenderWrapper
-from src.type.trading_view import TradingViewDataType, TradingViewData
+from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData
 from src.util.date_util import get_datetime_from_timestamp
 from src.util.my_telegram import escape_markdown, message_separator, exclamation_mark
 from src.type.market_data_type import MarketDataType
@@ -35,27 +35,26 @@ class TradingViewMessageSender(MessageSenderWrapper):
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(
             type=TradingViewDataType.ECONOMY_INDICATOR)
 
-        if tradingview_stocks_data.get('data', None) is not None:
-            tradingview_message = await self._format_tradingview_message(stocks_payload=tradingview_stocks_data['data'],
-                                                             economy_indicator_payload=tradingview_economy_indicator_data['data'])
+        if tradingview_stocks_data is not None and tradingview_stocks_data.data is not None:
+            tradingview_message = await self._format_tradingview_message(stocks_payload=tradingview_stocks_data.data,
+                                                             economy_indicator_payload=tradingview_economy_indicator_data.data)
             if tradingview_message is not None:
-                tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data['score']).strftime("%Y-%m-%d")
+                tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data.score).strftime("%Y-%m-%d")
                 tradingview_message = f"*Trading view market data at {escape_markdown(tradingview_date)}:*{tradingview_message}"
                 messages.append(tradingview_message)
 
         return messages
 
     # TODO: type
-    async def _format_tradingview_message(self, stocks_payload: dict, economy_indicator_payload: dict):
-        if len(stocks_payload.get('data', [])) == 0:
+    async def _format_tradingview_message(self, stocks_payload: TradingViewData, economy_indicator_payload: TradingViewData):
+        if len(stocks_payload.data) == 0 and len(economy_indicator_payload.data) == 0:
             return None
 
-        stocks_list = self.tradingview_service.hydrate_data_list(data_list=stocks_payload.get('data'), type=TradingViewDataType.STOCKS)
-        economy_indicator_list = self.tradingview_service.hydrate_data_list(data_list=economy_indicator_payload.get('data'),
-                                                   type=TradingViewDataType.ECONOMY_INDICATOR)
+        stocks_list = stocks_payload.data
+        economy_indicator_list = economy_indicator_payload.data
 
-        sorted_stocks = sorted(stocks_list, key=self._payload_sorter)
-        sorted_economy_indicators = sorted(economy_indicator_list, key=self._payload_sorter)
+        sorted_stocks = sorted(stocks_list, key=lambda x: self._payload_sorter(x, stocks_payload.type))
+        sorted_economy_indicators = sorted(economy_indicator_list, key=lambda x: self._payload_sorter(x, economy_indicator_payload.type))
 
         message = await self._format_message_for_stocks(sorted_stocks)
         message = f"{message}{escape_markdown(message_separator())}"
@@ -63,7 +62,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         return message
 
     # TODO: refactor this with _format_message_for_economy_indicators
-    async def _format_message_for_stocks(self, sorted_payload: List[TradingViewData]):
+    async def _format_message_for_stocks(self, sorted_payload: List[TradingViewStocksData]):
         message = ''
         for p in sorted_payload:
             symbol = p.symbol.upper()
@@ -82,6 +81,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
                 message = f"{message}, volume: {escape_markdown(friendly_number(volumes[0], decimal_places=2))}"
                 # volume rank for recent days
                 if config.get_should_compare_stocks_volume_rank():
+                    # TODO: type
                     stock_prices = await self.barchart_service.get_stock_price(symbol=symbol, num_days=30)
                     volumes = list(map(lambda x: x['volume'], stock_prices['data']))
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
@@ -152,10 +152,10 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
         return first_day_greater_count + 1
 
-    def _payload_sorter(self, item: TradingViewData):
+    def _payload_sorter(self, item: TradingViewData, type: TradingViewDataType):
         symbol = item.symbol.upper()
 
-        if item.type == TradingViewDataType.STOCKS:
+        if type == TradingViewDataType.STOCKS:
             # market indices should appear first
             if self.market_indices_order_map.get(symbol, False):
                 return str(self.market_indices_order_map[symbol])

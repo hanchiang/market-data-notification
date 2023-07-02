@@ -19,6 +19,7 @@ from src.type.trading_view import TradingViewDataType
 from src.util.date_util import get_current_date
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.db.redis import Redis
+from src.util.sleep import sleep
 
 app = FastAPI()
 # stocks
@@ -131,7 +132,7 @@ async def tradingview_daily_stocks_data(request: Request):
     messages.append(save_message)
     print(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp}, days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     # sleep for a bit, telegram client will timeout if concurrent requests come in
-    time.sleep(random.uniform(0.1, 0.9))
+    await sleep()
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
     return {"data": add_res}
 

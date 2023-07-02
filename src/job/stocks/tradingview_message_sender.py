@@ -8,6 +8,8 @@ from src.util.date_util import get_datetime_from_timestamp
 from src.util.my_telegram import escape_markdown, message_separator, exclamation_mark
 from src.type.market_data_type import MarketDataType
 from src.util.number import friendly_number
+from src.util.sleep import sleep
+
 
 class TradingViewMessageSender(MessageSenderWrapper):
     @property
@@ -83,6 +85,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
                 if config.get_should_compare_stocks_volume_rank():
                     # TODO: type
                     stock_prices = await self.barchart_service.get_stock_price(symbol=symbol, num_days=30)
+                    await sleep(max_sec=0.2)
                     volumes = list(map(lambda x: x['volume'], stock_prices['data']))
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
@@ -139,6 +142,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         max_days_to_compare = max(min(num_days_min, len(data_by_date)), min(num_days_max, len(data_by_date)))
         first_day_greater_count = 0
 
+        # count number of consecutive days for which the current day has higher volume
         for i in range(1, max_days_to_compare):
             if data_by_date[0] >= data_by_date[i]:
                 first_day_greater_count += 1

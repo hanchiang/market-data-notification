@@ -22,9 +22,6 @@ RUN apt update && apt install -y curl git && curl -sSL https://install.python-po
 RUN mkdir -p /root/.ssh
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
 
-ARG MARKET_DATA_API_TAG
-RUN if [ -z "$MARKET_DATA_API_TAG" ]; then echo "MARKET_DATA_API_TAG is required"; exit 1; fi
-
 RUN poetry env use python3.10 && . $(poetry env info --path)/bin/activate
 
 RUN --mount=type=secret,id=ssh_private_key,target=/root/.ssh/id_rsa poetry install

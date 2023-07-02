@@ -52,8 +52,6 @@ jobs:
         id: build_image
         uses: docker/build-push-action@v3
         with:
-          build-args: |
-            MARKET_DATA_API_TAG=0.7.1
           secret-files: |
             "ssh_private_key=secret/id_rsa"
           push: false

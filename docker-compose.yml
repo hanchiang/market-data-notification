@@ -9,8 +9,6 @@ services:
       secrets:
         - source: ssh_private_key
           mode: 0600
-      args:
-        MARKET_DATA_API_TAG: 0.7.2
     working_dir: /app
     env_file: .env
     command: poetry run python3 main.py

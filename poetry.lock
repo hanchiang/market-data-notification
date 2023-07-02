@@ -575,8 +575,8 @@ pytz = "2022.7.1"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "0.9.1"
-resolved_reference = "12ea878bb7f7469f708c0edfb61a1a505f86577b"
+reference = "0.10.0"
+resolved_reference = "cd699af8dbd5a6d51045c5d11168aad6bacb0650"
 
 [[package]]
 name = "multidict"
@@ -1022,4 +1022,4 @@ redis = []
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10.0,<3.11.0"
-content-hash = "f09cfee90f28e2a916f056f4a4e405f091c1385fd68feabdef023ac5d4744ed6"
+content-hash = "7b037f7861c1d590a45fcd01ed2baf133753fa1d58414a823c1a21e8df4e5370"

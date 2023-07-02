@@ -55,6 +55,14 @@ jobs:
       - name: Teardown SSH key
         run: |
           rm -rf secret/id_rsa
+      - name: Delete old github package versions
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: 'market_data_notification'
+          package-type: 'container'
+          min-versions-to-keep: 50
+          token: ${{ secrets.DELETE_OLD_PACKAGE_TOKEN }}
+
   health_check:
     runs-on: ubuntu-latest
     needs: [build_and_upload]

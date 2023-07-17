@@ -1,10 +1,11 @@
+import datetime
 from typing import List
 
 from src.dependencies import Dependencies
 from src.config import config
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData
-from src.util.date_util import get_datetime_from_timestamp
+from src.util.date_util import get_datetime_from_timestamp, get_current_date, get_most_recent_non_weekend_or_today
 from src.util.my_telegram import escape_markdown, message_separator, exclamation_mark
 from src.type.market_data_type import MarketDataType
 from src.util.number import friendly_number
@@ -34,6 +35,11 @@ class TradingViewMessageSender(MessageSenderWrapper):
     async def format_message(self):
         messages = []
         tradingview_stocks_data = await self.tradingview_service.get_tradingview_daily_stocks_data(type=TradingViewDataType.STOCKS)
+        now = get_current_date()
+        most_recent_day = get_most_recent_non_weekend_or_today(now - datetime.timedelta(days=1))
+        if (now - most_recent_day).total_seconds() > 86400:
+            return messages
+
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(
             type=TradingViewDataType.ECONOMY_INDICATOR)
 

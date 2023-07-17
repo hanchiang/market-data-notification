@@ -1,3 +1,4 @@
+import datetime
 from unittest.mock import patch, AsyncMock, Mock
 
 import pytest
@@ -57,10 +58,22 @@ class TestTradingviewMessageSender:
         assert res == expected
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'redis_score, curr_timestamp, is_empty',
+        [
+            (
+                    1686392956, 1686392956, False
+            ),
+            (
+                    1686392956, 1686479357, True
+            ),
+        ]
+    )
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
-    async def test_format_tradingview_message(self, get_barchart_service_mock, get_tradingview_service_mock):
-        stocks_data = TradingViewRedisData(key='key', score=1686392956, data=TradingViewData(
+    async def test_format_tradingview_message(self, get_barchart_service, get_tradingview_service, get_current_date, redis_score, curr_timestamp, is_empty):
+        stocks_data = TradingViewRedisData(key='key', score=redis_score, data=TradingViewData(
                 type=TradingViewDataType.STOCKS,
                 unix_ms=1,
                 data=[
@@ -69,7 +82,7 @@ class TestTradingviewMessageSender:
                                           volumes=[100, 200, 300])
                 ]
             ))
-        economy_indicator_data = TradingViewRedisData(key='key', score=1686392956, data=TradingViewData(
+        economy_indicator_data = TradingViewRedisData(key='key', score=redis_score, data=TradingViewData(
                 type=TradingViewDataType.ECONOMY_INDICATOR,
                 unix_ms=1,
                 data=[
@@ -77,8 +90,8 @@ class TestTradingviewMessageSender:
                     TradingViewStocksData(symbol='SKEW', timeframe='1D', close_prices=[11, 12, 13])
                 ]
             ))
-        # get_tradingview_service_mock.return_value = TradingViewService()
-        # get_barchart_service_mock.return_value = BarchartService()
+
+        get_current_date.return_value = datetime.datetime.fromtimestamp(curr_timestamp)
 
         tradingview_message_sender = TradingViewMessageSender()
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(side_effect=[stocks_data, economy_indicator_data])
@@ -90,4 +103,7 @@ class TestTradingviewMessageSender:
         })
         res = await tradingview_message_sender.format_message()
 
-        assert res is not None and len(res) > 0
+        if is_empty:
+            assert len(res) == 0
+        else:
+            assert len(res) > 0

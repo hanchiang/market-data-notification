@@ -60,19 +60,32 @@ class TestTradingviewMessageSender:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         'redis_score, curr_timestamp, is_empty',
+        # 1689685800: tuesday 13:10 UTC
+        # 1689945000: friday 13:10 UTC
         [
             (
-                    1686392956, 1686392956, False
+                    1689685800, 1689685800, False
             ),
             (
-                    1686392956, 1686479357, True
+                    1689685800, 1689685800 + 86400, False
+            ),
+            # data saved on friday, try to retrieve on next monday
+            (
+                    1689945000, 1689945000 + 86400 + 86400 + 86400, False
+            ),
+            # data saved on friday, try to retrieve on sunday
+            (
+                    1689945000, 1689945000 + 86400 + 86400, False
+            ),
+            (
+                    1689685800, 1689685800 + 86400 + 86401, True
             ),
         ]
     )
-    @patch('src.job.stocks.tradingview_message_sender.get_current_date')
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
-    async def test_format_tradingview_message(self, get_barchart_service, get_tradingview_service, get_current_date, redis_score, curr_timestamp, is_empty):
+    async def test_format_tradingview_message(self, get_barchart_service, get_tradingview_service, get_current_date_preserve_time, redis_score, curr_timestamp, is_empty):
         stocks_data = TradingViewRedisData(key='key', score=redis_score, data=TradingViewData(
                 type=TradingViewDataType.STOCKS,
                 unix_ms=1,
@@ -91,7 +104,7 @@ class TestTradingviewMessageSender:
                 ]
             ))
 
-        get_current_date.return_value = datetime.datetime.fromtimestamp(curr_timestamp)
+        get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(curr_timestamp, tz=datetime.timezone.utc)
 
         tradingview_message_sender = TradingViewMessageSender()
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(side_effect=[stocks_data, economy_indicator_data])

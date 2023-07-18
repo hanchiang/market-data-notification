@@ -11,6 +11,10 @@ def get_current_date():
     now = datetime.datetime.now().astimezone(tz=ny_tz).replace(hour=0, minute=0, second=0, microsecond=0)
     return now
 
+def get_current_date_preserve_time():
+    now = datetime.datetime.now().astimezone(tz=ny_tz)
+    return now
+
 def get_datetime_from_timestamp(timestamp: int, use_ny_tz=True) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(timestamp, tz=ny_tz if use_ny_tz else None)
 

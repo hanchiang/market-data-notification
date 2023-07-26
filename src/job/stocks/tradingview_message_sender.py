@@ -39,7 +39,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         now = get_current_date_preserve_time()
         most_recent_day = get_most_recent_non_weekend_or_today(now - datetime.timedelta(days=1))
         time_diff = abs(int(most_recent_day.timestamp()) - tradingview_stocks_data.score)
-        if time_diff > 86400:
+        if not config.get_is_testing_telegram() and time_diff > 86400:
             return messages
 
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(

@@ -109,6 +109,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
     tradingview_service = Dependencies.get_tradingview_service()
     # Save to redis
+    # TODO: use unix_ms as the score
     now = get_current_date()
     key = tradingview_service.get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
     json_data = {}

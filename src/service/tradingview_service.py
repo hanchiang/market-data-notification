@@ -6,7 +6,6 @@ from src.db.redis import Redis
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
 class TradingViewService:
-    # TODO: data type
     async def get_tradingview_daily_stocks_data(self, type: TradingViewDataType) -> Optional[TradingViewRedisData]:
         try:
             key = self.get_redis_key_for_stocks(type)

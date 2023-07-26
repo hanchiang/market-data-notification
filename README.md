@@ -8,12 +8,12 @@
 This repository sends stocks and crypto market data to channels like telegram
 
 ## Features
-* Stocks
+* Stocks telegram channel
   * Basic info such as closing price, EMA20, difference between closing price and EMA20
   * [Overextension from EMA20 based on the median delta when stock reverse in the next few days](https://github.com/hanchiang/market-data-notification/blob/master/CONTRIBUTING.md#overextendedpositive--negative-levels-from-ema20)
   * Highest volume in the past few consecutive days
   * Sudden large drop in VIX futures, or a decline for 5 consecutive days
-* Crypto
+* Crypto telegram channel
   * BTC Exchange netflow, supply, median trade intensity, fees
 
 # Tech stack

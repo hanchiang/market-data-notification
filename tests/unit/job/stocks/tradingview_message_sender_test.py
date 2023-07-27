@@ -85,7 +85,8 @@ class TestTradingviewMessageSender:
     @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
-    async def test_format_tradingview_message(self, get_barchart_service, get_tradingview_service, get_current_date_preserve_time, redis_score, curr_timestamp, is_empty):
+    @patch('src.job.stocks.tradingview_message_sender.config.get_is_testing_telegram')
+    async def test_format_tradingview_message(self, get_is_testing_telegram, get_barchart_service, get_tradingview_service, get_current_date_preserve_time, redis_score, curr_timestamp, is_empty):
         stocks_data = TradingViewRedisData(key='key', score=redis_score, data=TradingViewData(
                 type=TradingViewDataType.STOCKS,
                 unix_ms=1,
@@ -105,6 +106,7 @@ class TestTradingviewMessageSender:
             ))
 
         get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(curr_timestamp, tz=datetime.timezone.utc)
+        get_is_testing_telegram.return_value = False
 
         tradingview_message_sender = TradingViewMessageSender()
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(side_effect=[stocks_data, economy_indicator_data])

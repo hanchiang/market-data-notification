@@ -39,7 +39,6 @@ class RecentVixFuturesValues:
         if len(self.vix_futures_values) > 1:
             self.vix_futures_values.pop(0)
 
-# TODO: test
 class VixCentralService:
     # month of the vix futures we are interested in. e.g. "Jan"
     MONTH_OF_INTEREST = None

@@ -12,4 +12,4 @@ def message_separator() -> str:
     return '-----------------------------------------------------------------'
 
 def exclamation_mark() -> str:
-    return '‼️'
+    return '❗'

@@ -5,8 +5,7 @@ class ThirdPartyBarchartService:
         self.barchart_stocks = MarketDataAPI().barchart_stocks
 
     async def cleanup(self):
-        # TODO:
-        pass
+        self.barchart_stocks.cleanup()
 
     async def get_stock_price(self, symbol: str, num_days = 30):
         data = await self.barchart_stocks.get_stock_prices(symbol=symbol, max_records=num_days)

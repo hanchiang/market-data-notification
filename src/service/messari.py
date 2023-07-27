@@ -38,7 +38,6 @@ class MessariService:
         res.sort_exchange_supply_and_net_flows_descending()
         return res
 
-    # TODO: test
     def _transform_third_party_asset_metrics(self, res, symbol) -> AssetMetrics:
         ret_val = AssetMetrics()
 

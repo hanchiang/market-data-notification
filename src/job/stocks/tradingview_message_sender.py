@@ -97,6 +97,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
                     volumes = list(map(lambda x: x['volume'], stock_prices['data']))
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
+                        # TODO: configure a separate volume ratio threshold for each symbol
                         volume_ratio_diff = abs((volumes[0] - volumes[1]) / volumes[1])
                         if volume_ratio_diff > 0.2:
                             volume_ratio_text_escaped = escape_markdown(f"(+{volume_ratio_diff:.2%} vs ytd)")
@@ -139,7 +140,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
     # data is ordered in descending order of date. First element is the current day
     # return the number of consecutive past days for which the current volume is greater
-    # for test mode, return value event if first day greater count is less than minimum threshold
+    # for test mode, return value even if first day greater count is less than minimum threshold
     def get_current_data_highest_volume_info(self, data_by_date: List[float],
                                              num_days_range=config.get_number_of_past_days_range_for_stock_volume_rank()) -> int:
         if data_by_date is None or len(data_by_date) < 2:

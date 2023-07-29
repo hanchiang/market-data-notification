@@ -14,7 +14,7 @@ python-dotenv = "^0.21.0"
 pyee = "^9.0.4"
 redis = "^4.4.0"
 python-telegram-bot = {version = "20.3", allow-prereleases = true}
-market-data-library = {git = "ssh://git@github.com/hanchiang/market_data_api.git", rev = "0.10.0"}
+market-data-library = {git = "ssh://git@github.com/hanchiang/market_data_api.git", rev = "0.15.1"}
 
 [tool.poetry.extras]
 redis = ["hiredis"]

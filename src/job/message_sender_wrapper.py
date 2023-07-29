@@ -1,3 +1,4 @@
+import traceback
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -22,6 +23,7 @@ class MessageSenderWrapper(ABC):
             return res
         except Exception as e:
             print(f"{self.__class__.__name__} exception: {e}")
+            traceback.print_exc()
             messages = [f"{escape_markdown(str(e))}"]
             message = format_messages_to_telegram(messages)
             await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],

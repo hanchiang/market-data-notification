@@ -10,10 +10,12 @@ from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import init_telegram_bots
 from src.router.barchart import thirdparty_barchart
 from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
+from src.router.sentiment import sentiment
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 import src.config.config as config
 from src.event.event_emitter import async_ee
+
 from src.type.market_data_type import MarketDataType
 from src.type.trading_view import TradingViewDataType
 from src.util.date_util import get_current_date
@@ -31,6 +33,7 @@ app.include_router(thirdparty_barchart.router)
 app.include_router(messari.router)
 app.include_router(thirdparty_chainanalysis.router)
 app.include_router(chainanalysis.router)
+app.include_router(sentiment.router)
 
 env = os.getenv('ENV')
 

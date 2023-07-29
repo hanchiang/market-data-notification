@@ -1,5 +1,3 @@
-from market_data_library import MarketDataAPI
-
 from src.third_party_service.barchart import ThirdPartyBarchartService
 
 
@@ -12,6 +10,7 @@ class BarchartService:
 
     # TODO: Cache results
     async def get_stock_price(self, symbol: str, num_days = 30):
+        # TODO: format data in market data library
         data = await self.third_party_service.get_stock_price(symbol=symbol, num_days=num_days)
         data['data'] = data['data'].rstrip()
         formatted_prices = list(map(BarchartService.format_stock_price_object, data['data'].split('\n')))

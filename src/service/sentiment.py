@@ -17,9 +17,6 @@ class SentimentService:
     async def get_crypto_fear_greed_index(self, days=365) -> FearGreedResult:
         fear_greed_res: AlternativeMeFearGreedIndex = await self.get_crypto_fear_greed_index_from_source(days=days)
 
-
-
-
         if fear_greed_res.data.datasets is None or fear_greed_res.data.datasets[0].data is None:
             return None
 

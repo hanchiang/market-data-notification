@@ -8,6 +8,7 @@ from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreed
 
 from src.dependencies import Dependencies
 from src.service.sentiment import SentimentService
+from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
 
@@ -31,25 +32,22 @@ class TestSentimentService:
                         labels=['30 Jul, 2022', '31 Jul, 2022', '1 Aug, 2022']
                     ),
                 ),
-                {
-                    'data': [
-                        {
-                            "relative_date_text": "Now",
-                            "date": datetime.datetime(2022, 8, 1, 0, 0, 0, tzinfo=datetime.timezone.utc),
-                            "value": 3,
-                            "sentiment_text": "Extreme fear",
-                            "emoji": "🥵🥵"
-                        },
-                        {
-                            "relative_date_text": "Yesterday",
-                            "date": datetime.datetime(2022, 7, 31, 0, 0, 0, tzinfo=datetime.timezone.utc),
-                            "value": 2,
-                            "sentiment_text": "Extreme fear",
-                            "emoji": "🥵🥵"
-                        }
-                    ],
-                    'average': []
-                }
+                FearGreedResult(data=[
+                    FearGreedData(
+                        relative_date_text='Now',
+                        date=datetime.datetime(2022, 8, 1, 0, 0, 0, tzinfo=datetime.timezone.utc),
+                        value=3,
+                        sentiment_text='Extreme fear',
+                        emoji='🥵🥵'
+                    ),
+                    FearGreedData(
+                        relative_date_text='Yesterday',
+                        date=datetime.datetime(2022, 7, 31, 0, 0, 0, tzinfo=datetime.timezone.utc),
+                        value=2,
+                        sentiment_text='Extreme fear',
+                        emoji="🥵🥵"
+                    )
+                ], average=[])
             )
         ]
     )

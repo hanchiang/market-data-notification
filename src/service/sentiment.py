@@ -1,9 +1,10 @@
 from statistics import mean
-from typing import List, Any
+from typing import List
 
 from market_data_library import AlternativeMeAPI
 from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreedIndex
 
+from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.date_util import parse
 from src.util.list_util import is_list_out_of_range
 
@@ -13,14 +14,22 @@ class SentimentService:
         self.alternativeme_service = AlternativeMeAPI().alternativeme_service
 
     # { average: [ {timeframe, value, sentiment_text, emoji } ], data: [{ relative_date_text, date, value, sentiment_text, emoji }] }
-    async def get_crypto_fear_greed_index(self, from_source=False, days=365) -> AlternativeMeFearGreedIndex:
-        if days is None or type(days) is not int:
-            days = 365
-        data: AlternativeMeFearGreedIndex = await self.alternativeme_service.get_fear_greed_index(days=days)
+    async def get_crypto_fear_greed_index(self, days=365) -> FearGreedResult:
+        fear_greed_res: AlternativeMeFearGreedIndex = await self.get_crypto_fear_greed_index_from_source(days=days)
 
-        if from_source:
-            return data
 
+
+
+        if fear_greed_res.data.datasets is None or fear_greed_res.data.datasets[0].data is None:
+            return None
+
+        data = self.transform_data(data=fear_greed_res)
+        average = self.transform_average(data=fear_greed_res)
+        res = FearGreedResult(data=data, average=average)
+
+        return res
+
+    def transform_data(self, data: AlternativeMeFearGreedIndex) -> List[FearGreedData]:
         parse_params = [
             {'text': 'Now', 'list_index': -1},
             {'text': 'Yesterday', 'list_index': -2},
@@ -29,50 +38,60 @@ class SentimentService:
             {'text': 'Last 3 months', 'list_index': -91},
         ]
 
-        res = { 'data': [], 'average': [] }
-        if data.data.datasets is None or data.data.datasets[0].data is None:
-            return None
+        res: List[FearGreedData] = []
 
-        for parse_param in parse_params:
-            if is_list_out_of_range(data=data.data.datasets[0].data, index=parse_param['list_index']):
+        for param in parse_params:
+            if is_list_out_of_range(data=data.data.datasets[0].data, index=param['list_index']):
                 continue
-            date = parse(dt=data.data.labels[parse_param['list_index']], format='%d %b, %Y')
-            value = data.data.datasets[0].data[parse_param['list_index']]
+            date = parse(dt=data.data.labels[param['list_index']], format='%d %b, %Y')
+            value = data.data.datasets[0].data[param['list_index']]
             sentiment = self.alternativeme_service.map_fear_greed_to_text(value=value)
 
-            parsed_res = {
-                'relative_date_text': parse_param['text'],
-                'date': date,
-                'value': value
-            }
+            parsed = FearGreedData(
+                relative_date_text=param['text'],
+                date=date,
+                value=value
+            )
             if sentiment is not None:
-                parsed_res['sentiment_text'] = sentiment['text']
-                parsed_res['emoji'] = sentiment['emoji']
+                parsed.sentiment_text = sentiment['text']
+                parsed.emoji = sentiment['emoji']
 
-            res['data'].append(parsed_res)
+            res.append(parsed)
+        return res
 
-        summary_params = [
+    def transform_average(self, data: AlternativeMeFearGreedIndex) -> List[FearGreedAverage]:
+        average_params = [
             {'timeframe': '7d', 'list_end_index': -7},
             {'timeframe': '30d', 'list_end_index': -30},
             {'timeframe': '90d', 'list_end_index': -90}
         ]
 
-        for summary_param in summary_params:
-            if is_list_out_of_range(data=data.data.datasets[0].data, index=summary_param['list_end_index']):
+        res: List[FearGreedAverage] = []
+
+        for param in average_params:
+            if is_list_out_of_range(data=data.data.datasets[0].data, index=param['list_end_index']):
                 continue
-            average = mean(data.data.datasets[0].data[summary_param['list_end_index']:-1])
+            average = mean(data.data.datasets[0].data[param['list_end_index']:-1])
             sentiment = self.alternativeme_service.map_fear_greed_to_text(value=average)
 
-            parsed_summary = {
-                'timeframe': summary_param['timeframe'],
-                'value': average
-            }
+            parsed = FearGreedAverage(
+                timeframe=param['timeframe'],
+                value=average
+            )
 
             if sentiment is not None:
-                parsed_summary['sentiment_text'] = sentiment['text']
-                parsed_summary['emoji'] = sentiment['emoji']
+                parsed.sentiment_text = sentiment['text']
+                parsed.emoji = sentiment['emoji']
 
-            res['average'].append(parsed_summary)
+            res.append(parsed)
 
         return res
+
+
+    # returns data in chronological order
+    async def get_crypto_fear_greed_index_from_source(self, days=365) -> AlternativeMeFearGreedIndex:
+        if days is None or type(days) is not int:
+            days = 365
+        data = await self.alternativeme_service.get_fear_greed_index(days=days)
+        return data
 

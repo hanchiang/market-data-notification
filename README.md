@@ -14,7 +14,9 @@ This repository sends stocks and crypto market data to channels like telegram
   * Highest volume in the past few consecutive days
   * Sudden large drop in VIX futures, or a decline for 5 consecutive days
 * Crypto telegram channel
-  * BTC Exchange netflow, supply, median trade intensity, fees
+  * BTC Exchange netflow, supply
+  * BTC median trade intensity, fees
+  * Fear greed index
 
 # Tech stack
 * Language: Python
@@ -35,8 +37,12 @@ This repository sends stocks and crypto market data to channels like telegram
 
 
 # Example message for crypto
-![crypto exchange supply](images/telegram_crypto_exchange_supply.png)
-![crypto fees](images/telegram_crypto_fees.png)
+## Exchange supply
+![crypto exchange supply](images/crypto/messari-exchange-flow.png)
+## Fees
+![crypto fees](images/crypto/chainanalysis-fees.png)
+## Fear greed index
+![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
 
 # How to do local development
 ## 1. No docker
@@ -66,7 +72,7 @@ Webhooks have to be a HTTPS URL, so localhost does not work.
 * Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
 
-![Stocks data workflow](images/tradingview-daily-stocks-info.png)
+![Stocks data workflow](images/stocks-workflow.png)
 
 # Crypto cron workflow
 * Scheduled job send notification to telegram
@@ -81,7 +87,5 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 * API to send message to telegram, backup data
 * Code coverage in github action
 * Bot with pre-defined menu for user interaction
-* Get overextended levels using google sheet API instead of manually entering them.
 * log
-* Delete old github package versions: https://github.com/actions/delete-package-versions
 * Cache barchart stock price

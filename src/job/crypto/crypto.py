@@ -2,6 +2,7 @@ import asyncio
 
 from src.job.crypto.chain_analysis_message_sender import ChainAnalysisMessageSender
 from src.job.crypto.messari_message_sender import MessariMessageSender
+from src.job.crypto.sentiment_message_sender import SentimentMessageSender
 from src.job.job_wrapper import JobWrapper
 from src.config import config
 from src.type.market_data_type import MarketDataType
@@ -41,7 +42,7 @@ class CryptoNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        return [MessariMessageSender(), ChainAnalysisMessageSender()]
+        return [MessariMessageSender(), ChainAnalysisMessageSender(), SentimentMessageSender()]
 
     @property
     def market_data_type(self):

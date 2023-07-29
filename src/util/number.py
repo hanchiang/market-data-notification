@@ -9,6 +9,9 @@ def friendly_number(num: float, decimal_places = 2) -> str:
         if count == len(suffixes) - 1:
             break
 
-    if decimal_places is not None and decimal_places > 0:
+    if decimal_places is not None and decimal_places >= 0:
         res = round(res, decimal_places)
-    return f"{res} {suffixes[count]}"
+    if count > 0:
+        return f"{res} {suffixes[count]}"
+    else:
+        return f"{res}"

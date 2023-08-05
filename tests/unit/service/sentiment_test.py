@@ -7,7 +7,7 @@ from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreed
     FearGreedIndexData
 
 from src.dependencies import Dependencies
-from src.service.sentiment import SentimentService
+from src.service.crypto_sentiment import CryptoSentimentService
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
@@ -53,7 +53,7 @@ class TestSentimentService:
     )
     @pytest.mark.asyncio
     async def test_get_crypto_fear_greed_index(self, data, expected):
-        service = SentimentService()
+        service = CryptoSentimentService()
         service.alternativeme_service = Mock()
 
         service.alternativeme_service.get_fear_greed_index = AsyncMock(return_value=data)

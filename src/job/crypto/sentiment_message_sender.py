@@ -17,7 +17,7 @@ class SentimentMessageSender(MessageSenderWrapper):
     async def format_message(self):
         messages = []
 
-        service = Dependencies.get_sentiment_service()
+        service = Dependencies.get_crypto_sentiment_service()
         data = await service.get_crypto_fear_greed_index()
 
         if data is None or data.data is None or len(data.data) == 0:

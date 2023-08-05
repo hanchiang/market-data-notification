@@ -8,8 +8,7 @@ from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.date_util import parse
 from src.util.list_util import is_list_out_of_range
 
-
-class SentimentService:
+class CryptoSentimentService:
     def __init__(self):
         self.alternativeme_service = AlternativeMeAPI().alternativeme_service
 

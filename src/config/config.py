@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def get_env():
+    return os.getenv('ENV', 'dev')
+
 def get_telegram_stocks_bot_token():
     if not os.getenv('STOCKS_TELEGRAM_BOT_TOKEN', None):
         raise RuntimeError("telegram stocks bot token is missing")

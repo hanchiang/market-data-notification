@@ -143,10 +143,13 @@ jobs:
           docker pull "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
 
           echo "Stopping existing container"
-          docker stop $APP_NAME && docker rm $APP_NAME
+          docker stop $APP_NAME || true
+          docker rm $APP_NAME || true
+          docker stop chrome || true
+          docker rm chrome || true
 
           echo "Starting new container"
-          docker run --name $APP_NAME -p 8080:8080 --network host -m 200m --cpus="0.5" -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
+          docker run --name $APP_NAME -p 8080:8080 --network host -m 512m --cpus="0.5" -e ENV=prod -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
           -e STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_CHANNEL_ID -e STOCKS_TELEGRAM_ADMIN_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN \
           -e STOCKS_TELEGRAM_ADMIN_ID=$STOCKS_TELEGRAM_ADMIN_ID -e STOCKS_TELEGRAM_DEV_BOT_TOKEN=$STOCKS_TELEGRAM_DEV_BOT_TOKEN \
           -e STOCKS_TELEGRAM_DEV_ID=$STOCKS_TELEGRAM_DEV_ID -e CRYPTO_TELEGRAM_BOT_TOKEN=$CRYPTO_TELEGRAM_BOT_TOKEN \
@@ -158,6 +161,9 @@ jobs:
           -e MESSARI_ASSET_METRICS_SHA256=$MESSARI_ASSET_METRICS_SHA256 -e SHOULD_COMPARE_STOCKS_VOLUME_RANK=$SHOULD_COMPARE_STOCKS_VOLUME_RANK \
           -e DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS=$DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS \
           -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
+          
+          echo "Starting chrome container"
+          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host -m 512m seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3
           docker ps

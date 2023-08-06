@@ -1,6 +1,6 @@
 from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
-from src.type.sentiment import FearGreedResult
+from src.type.sentiment import CryptoFearGreedResult
 from src.type.market_data_type import MarketDataType
 from src.util.my_telegram import escape_markdown
 import src.util.date_util as date_util
@@ -31,7 +31,7 @@ class SentimentMessageSender(MessageSenderWrapper):
 
         return messages
 
-    def _format_message(self, res: FearGreedResult):
+    def _format_message(self, res: CryptoFearGreedResult):
         message = 'Sentiment:\n'
         for data in res.data:
             message = f'{message}{data.relative_date_text}: {data.sentiment_text}{escape_markdown("(")}{data.value} {data.emoji}{escape_markdown(")")}\n'

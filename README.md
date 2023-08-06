@@ -13,6 +13,7 @@ This repository sends stocks and crypto market data to channels like telegram
   * [Overextension from EMA20 based on the median delta when stock reverse in the next few days](https://github.com/hanchiang/market-data-notification/blob/master/CONTRIBUTING.md#overextendedpositive--negative-levels-from-ema20)
   * Highest volume in the past few consecutive days
   * Sudden large drop in VIX futures, or a decline for 5 consecutive days
+  * Fear greed index
 * Crypto telegram channel
   * BTC Exchange netflow, supply
   * BTC median trade intensity, fees
@@ -32,15 +33,20 @@ This repository sends stocks and crypto market data to channels like telegram
 # Example message for stocks
 ## EMA20 overextension, highest volume
 ![stocks ema overextension highest volume](images/stocks/tradingview-stocks-ema-overextension-highest-volume.png)
+
 ## VIX futures single day and consecutive days decrease
 ![stocks ema overextension highest volume](images/stocks/tradingview-vix-central-single-day-and-consecutive-days-decrease.png)
 
+## Fear greed index
+![stocks fear greed index](images/stocks.cnn-fear-greed.png)
 
 # Example message for crypto
 ## Exchange supply
 ![crypto exchange supply](images/crypto/messari-exchange-flow.png)
+
 ## Fees
 ![crypto fees](images/crypto/chainanalysis-fees.png)
+
 ## Fear greed index
 ![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
 

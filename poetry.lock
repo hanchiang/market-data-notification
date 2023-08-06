@@ -652,8 +652,8 @@ selenium-stealth = "^1.0.6"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "0.16.10"
-resolved_reference = "4b12be9a739be07c8a3c4834a680475ab8f9e478"
+reference = "0.16.11"
+resolved_reference = "de58be8f36bb6d48cdcb49ed26a2199d360d3b7c"
 
 [[package]]
 name = "multidict"
@@ -1250,4 +1250,4 @@ redis = []
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10.0,<3.11.0"
-content-hash = "2f66ac6e5714cc1cf2a5adb1bf842bffbc62870f3eb15968297655dc6010993a"
+content-hash = "2dc936e3b0cf5e6583f296cbbe87e4c0073e9aae20165449ff316ef568a8c845"

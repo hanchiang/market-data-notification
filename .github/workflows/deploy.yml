@@ -163,7 +163,7 @@ jobs:
           -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
           
           echo "Starting chrome container"
-          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host -m 512m seleniarm/standalone-chromium:114.0-20230615
+          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host -m 512m -d seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3
           docker ps

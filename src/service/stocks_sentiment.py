@@ -12,7 +12,7 @@ from src.util.logger import logger
 
 class StocksSentimentService:
     def __init__(self):
-        cnn_api = CNNAPI()
+        cnn_api = CNNAPI(server_host='http://localhost:4444')
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_api.cnn_type
 

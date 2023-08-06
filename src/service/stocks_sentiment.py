@@ -4,6 +4,7 @@ from typing import List
 from market_data_library import CNNAPI
 from market_data_library.stocks.cnn_fear_greed.type import CnnFearGreedIndex, FearAndGreedHistoricalData
 import src.util.date_util as date_util
+from src.config.config import get_env
 
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.list_util import is_list_out_of_range
@@ -12,7 +13,8 @@ from src.util.logger import logger
 
 class StocksSentimentService:
     def __init__(self):
-        cnn_api = CNNAPI(server_host='http://localhost:4444')
+        env = get_env()
+        cnn_api = CNNAPI(server_host='http://localhost:4444' if env == 'prod' else 'http://chrome:4444')
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_api.cnn_type
 

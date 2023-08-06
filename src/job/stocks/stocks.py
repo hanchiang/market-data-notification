@@ -1,6 +1,7 @@
 import asyncio
 
 from src.job.job_wrapper import JobWrapper
+from src.job.stocks.sentiment_message_sender import StocksSentimentMessageSender
 from src.job.stocks.vix_central_message_sender import VixCentralMessageSender
 from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
 from src.config import config
@@ -27,7 +28,7 @@ class StocksNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        return [TradingViewMessageSender(), VixCentralMessageSender()]
+        return [TradingViewMessageSender(), VixCentralMessageSender(), StocksSentimentMessageSender()]
 
     @property
     def market_data_type(self):

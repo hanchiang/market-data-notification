@@ -22,9 +22,9 @@ class MessageSenderWrapper(ABC):
                                                 market_data_type=self.market_data_type)
             return res
         except Exception as e:
-            print(f"{self.__class__.__name__} exception: {e}")
-            traceback.print_exc()
-            messages = [f"{escape_markdown(str(e))}"]
+            tb = traceback.format_exc()
+            print(f"{self.__class__.__name__} exception: {e}, stack: {tb}")
+            messages = [f"{escape_markdown(str(e))}, stack: {tb}"]
             message = format_messages_to_telegram(messages)
             await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
                                           market_data_type=self.market_data_type)

@@ -21,8 +21,11 @@ def get_datetime_from_timestamp(timestamp: int, use_ny_tz=True) -> datetime.date
 def format(dt: datetime.datetime, format = '%Y-%m-%d') -> str:
     return dt.strftime(format)
 
-def parse(dt: str, format: str) -> datetime.datetime:
-    return datetime.datetime.strptime(dt, format).replace(tzinfo=datetime.timezone.utc)
+def parse_timestamp(unix_ts: float, tz: datetime.timezone = datetime.timezone.utc) -> datetime.datetime:
+    return datetime.datetime.fromtimestamp(unix_ts, tz=tz)
+
+def parse(dt: str, format: str, tz: datetime.timezone=datetime.timezone.utc) -> datetime.datetime:
+    return datetime.datetime.strptime(dt, format).replace(tzinfo=tz)
 
 # return the most recent non-weekend or today
 # TODO: exclude public holidays

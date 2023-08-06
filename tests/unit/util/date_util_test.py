@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import patch
 
 import pytest
+import pytz
 
 from src.util import date_util
 from src.util.date_util import ny_tz
@@ -62,4 +63,26 @@ class TestDateUtil:
     ])
     def test_get_most_recent_non_weekend_or_today(self, input, expected):
         res = date_util.get_most_recent_non_weekend_or_today(date=input)
+        assert res == expected
+
+    @pytest.mark.parametrize('input, expected', [
+        (1691107200000, datetime.datetime.utcnow().replace(year=2023, month=8, day=4, hour=0, minute=0, second=0, tzinfo=datetime.timezone.utc))
+    ])
+    def test_parse_utc_timestamp(self, input, expected):
+        res = date_util.parse_timestamp(input / 1000)
+        assert res.year == expected.year
+        assert res.month == expected.month
+        assert res.day == expected.day
+        assert res.hour == expected.hour
+        assert res.minute == expected.minute
+        assert res.second == expected.second
+        assert res.tzinfo == expected.tzinfo
+
+    @pytest.mark.parametrize('date, format_string, expected', [
+        ('4 Aug, 2023', '%d %b, %Y', datetime.datetime.utcnow().replace(year=2023, month=8, day=4, hour=0, minute=0, second=0,
+                                                   microsecond=0, tzinfo=datetime.timezone.utc),
+         )
+    ])
+    def test_parse(self, date, format_string, expected):
+        res = date_util.parse(dt=date, format=format_string)
         assert res == expected

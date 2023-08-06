@@ -14,6 +14,7 @@ services:
     command: poetry run python3 main.py
     depends_on:
       - redis
+      - chrome
     ports:
       - "8080:8080"
     volumes:
@@ -29,6 +30,17 @@ services:
       - redis_data:/data
     ports:
       - 6379:6379
+  chrome:
+    # https://github.com/seleniumhq-community/docker-seleniarm
+    image: seleniarm/standalone-chromium:114.0-20230615
+    container_name: chrome
+#    shm_size: 2gb
+    ports:
+      - "4444:4444"
+      - "5900:5900"
+      - "7900:7900"
+#    volumes:
+#      - /dev/shm
 
 volumes:
   redis_data:

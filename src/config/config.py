@@ -208,3 +208,6 @@ def get_job_delay_tolerance_second():
 
 def get_messari_asset_metrics_sha256():
     return os.getenv('MESSARI_ASSET_METRICS_SHA256', '')
+
+def get_should_send_stocks_sentiment_message():
+    return os.getenv('SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE', 'true') == 'true'

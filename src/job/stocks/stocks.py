@@ -28,7 +28,10 @@ class StocksNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        return [TradingViewMessageSender(), VixCentralMessageSender(), StocksSentimentMessageSender()]
+        senders = [TradingViewMessageSender(), VixCentralMessageSender()]
+        if config.get_should_send_stocks_sentiment_message():
+            senders.append(StocksSentimentMessageSender())
+        return senders
 
     @property
     def market_data_type(self):

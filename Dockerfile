@@ -1,7 +1,7 @@
 # Dockerfile
 
 # pull the official docker image
-FROM python:3.10-slim-bullseye as base
+FROM --platform=linux/amd64 python:3.10-slim-bullseye as base
 
 # set work directory
 WORKDIR /app
@@ -15,18 +15,21 @@ ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 
 COPY pyproject.toml poetry.lock ./
 
-# install dependencies
-RUN apt update && apt install -y curl git && curl -sSL https://install.python-poetry.org | python3
+# Install dependencies
+RUN apt update -y && apt install -y curl git wget unzip gnupg && curl -sSL https://install.python-poetry.org | python3
 
-# set up ssh, install market data library
+# install google chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
+RUN echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
+RUN apt update -y && apt install -y google-chrome-stable
+
+# set up ssh for market data library
 RUN mkdir -p /root/.ssh
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 RUN poetry env use python3.10 && . $(poetry env info --path)/bin/activate
 
 RUN --mount=type=secret,id=ssh_private_key,target=/root/.ssh/id_rsa poetry install
-
-RUN poetry install
 
 COPY . .
 

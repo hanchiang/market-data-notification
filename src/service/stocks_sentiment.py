@@ -16,7 +16,8 @@ class StocksSentimentService:
         env = config.get_env()
         selenium_server_mode = config.get_selenium_server_mode()
         selenium_stealth = config.get_selenium_stealth()
-        cnn_api = CNNAPI(server_host='http://localhost:4444' if env == 'prod' else 'http://chrome:4444', is_stealth=selenium_stealth, server_mode=selenium_server_mode)
+        server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
+        cnn_api = CNNAPI(server_host=server_host, is_stealth=selenium_stealth, server_mode=selenium_server_mode)
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_api.cnn_type
 

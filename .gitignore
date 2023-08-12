@@ -236,3 +236,4 @@ fabric.properties
 secrets/
 secret/
 my_readme.txt
+local-build-push-dockerfile.sh

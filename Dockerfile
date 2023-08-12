@@ -3,6 +3,15 @@
 # pull the official docker image
 FROM --platform=linux/amd64 python:3.10-slim-bullseye as base
 
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG TARGETVARIANT
+RUN printf "I'm building for TARGETPLATFORM=${TARGETPLATFORM}" \
+    && printf ", TARGETARCH=${TARGETARCH}" \
+    && printf ", TARGETVARIANT=${TARGETVARIANT} \n" \
+    && printf "With uname -s : " && uname -s \
+    && printf "and  uname -m : " && uname -m
+
 # set work directory
 WORKDIR /app
 

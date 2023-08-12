@@ -47,13 +47,22 @@ fi
 REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
 
+LETSENCRYPT_DATA_PATH="/etc/letsencrypt"
+LETSENCRYPT_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
+
 function backup_redis() {
   sudo sh -c "cd $REDIS_DATA_PATH && zip -r $REDIS_BACKUP_FILE_NAME ."
   sudo mv "$REDIS_DATA_PATH/$REDIS_BACKUP_FILE_NAME" .
 }
 
+function backup_letsencrypt() {
+  sudo sh -c "cd $LETSENCRYPT_DATA_PATH && zip --symlinks -r $LETSENCRYPT_FILE_NAME ."
+  sudo mv "$LETSENCRYPT_DATA_PATH/$LETSENCRYPT_FILE_NAME" .
+}
+
 function cleanup() {
   sudo rm -rf $REDIS_BACKUP_FILE_NAME
+  sudo rm -rf $LETSENCRYPT_FILE_NAME
 }
 
 function send_mail() {
@@ -64,7 +73,8 @@ function send_mail() {
 
   FROM_NAME="han@market-data-notification"
 
-  backup_file=$(cat $REDIS_BACKUP_FILE_NAME | base64 -w0)
+  redis_file=$(cat $REDIS_BACKUP_FILE_NAME | base64 -w0)
+  letsencrypt_file=$(cat $LETSENCRYPT_FILE_NAME | base64 -w0)
 
   # https://docs.sendgrid.com/api-reference/mail-send/mail-send
   maildata='{"personalizations":
@@ -84,8 +94,14 @@ function send_mail() {
     "template_id": "'${SENDGRID_TEMPLATE_ID}'",
     "attachments": [
       {
-        "content": "'${backup_file}'",
+        "content": "'${redis_file}'",
         "filename": "'${REDIS_BACKUP_FILE_NAME}'",
+        "type": "application/zip",
+        "disposition": "attachment"
+      },
+      {
+        "content": "'${letsencrypt_file}'",
+        "filename": "'${LETSENCRYPT_FILE_NAME}'",
         "type": "application/zip",
         "disposition": "attachment"
       }
@@ -107,6 +123,7 @@ function notify_telegram() {
 }
 
 backup_redis
+backup_letsencrypt
 send_mail
 notify_telegram
 cleanup

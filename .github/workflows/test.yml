@@ -73,6 +73,6 @@ jobs:
     steps:
       - name: Send telegram notification unsuccessful run
         run: |
-          now=$(date +%Y-%m-%dT%H:%M:%S)
+          now=$(date +%Y-%m-%dT%H:%M:%S%:z)
           text=$(echo "\[Github action\] Market data notification backend test and build failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"

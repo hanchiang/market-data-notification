@@ -1,5 +1,5 @@
 import os
-from typing import Tuple
+from typing import Tuple, List
 
 from dotenv import load_dotenv
 
@@ -87,6 +87,14 @@ def get_trading_view_ips():
     if not os.getenv('TRADING_VIEW_IPS', None):
         raise RuntimeError("trading view ips is missing")
     return os.getenv('TRADING_VIEW_IPS').split(',')
+
+def get_auth_exclude_endpoints() -> List[str]:
+    return os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
+
+def get_api_auth_token():
+    if not os.getenv('API_AUTH_TOKEN', None):
+        raise RuntimeError("api auth token is missing")
+    return os.getenv('API_AUTH_TOKEN')
 
 def get_contango_single_day_decrease_threshold_ratio():
     return 0.4 if not get_is_testing_telegram() else 0.01

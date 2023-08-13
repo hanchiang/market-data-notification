@@ -139,6 +139,8 @@ jobs:
           SELENIUM_STEALTH: ${{ vars.SELENIUM_STEALTH }}
           ENV: ${{ vars.ENV }}
           SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE: ${{ vars.SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE }}
+          API_AUTH_TOKEN: ${{ secrets.API_AUTH_TOKEN }}
+          AUTH_EXCLUDE_ENDPOINTS: ${{ secrets.AUTH_EXCLUDE_ENDPOINTS }}
         run: |
           ssh production << EOF
           echo "Logging into container registry"
@@ -155,7 +157,7 @@ jobs:
           docker rm chrome || true
 
           echo "Starting new container"
-          docker run --name $APP_NAME -p 8080:8080 --network host -m 512m --cpus="0.5" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
+          docker run --name $APP_NAME -p 8080:8080 --network host --memory="512m" --cpus="0.5" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
           -e STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_CHANNEL_ID -e STOCKS_TELEGRAM_ADMIN_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN \
           -e STOCKS_TELEGRAM_ADMIN_ID=$STOCKS_TELEGRAM_ADMIN_ID -e STOCKS_TELEGRAM_DEV_BOT_TOKEN=$STOCKS_TELEGRAM_DEV_BOT_TOKEN \
           -e STOCKS_TELEGRAM_DEV_ID=$STOCKS_TELEGRAM_DEV_ID -e CRYPTO_TELEGRAM_BOT_TOKEN=$CRYPTO_TELEGRAM_BOT_TOKEN \
@@ -168,10 +170,11 @@ jobs:
           -e DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS=$DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS \
           -e SELENIUM_REMOTE_MODE=$SELENIUM_REMOTE_MODE -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
           -e SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE=$SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE \
+          -e API_AUTH_TOKEN=$API_AUTH_TOKEN -e AUTH_EXCLUDE_ENDPOINTS=$AUTH_EXCLUDE_ENDPOINTS
           -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
           
           echo "Starting chrome container"
-          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host -m 512m --cpus="0.5" -d seleniarm/standalone-chromium:114.0-20230615
+          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1g" --cpus="1" -d seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3
           docker ps

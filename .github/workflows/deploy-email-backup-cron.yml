@@ -73,6 +73,7 @@ jobs:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           REDIS_KEY: ${{ secrets.REDIS_KEY }}
           SENDGRID_REDIS_TEMPLATE_ID: ${{ secrets.SENDGRID_REDIS_TEMPLATE_ID }}
+          SENDGRID_LETSENCRYPT_TEMPLATE_ID: ${{ secrets.SENDGRID_LETSENCRYPT_TEMPLATE_ID }}
           STOCKS_TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_ADMIN_BOT_TOKEN }}
           STOCKS_TELEGRAM_ADMIN_ID: ${{ secrets.STOCKS_TELEGRAM_ADMIN_ID }}
         run: |
@@ -132,10 +133,10 @@ jobs:
           fi
           
           REDIS_DATA_PATH="/var/lib/redis"
-          REDIS_BACKUP_FILE_NAME="redis_backup_\$(date "+%Y-%m-%dT%H%M%S%z").zip"
+          REDIS_BACKUP_FILE_NAME="redis_backup_\$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
           
           LETSENCRYPT_DATA_PATH="/etc/letsencrypt"
-          LETSENCRYPT_FILE_NAME="letsencrypt_backup_\$(date "+%Y-%m-%dT%H%M%S%z").zip"
+          LETSENCRYPT_FILE_NAME="letsencrypt_backup_\$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
           
           function backup_redis() {
             sudo sh -c "cd \$REDIS_DATA_PATH && zip -r \$REDIS_BACKUP_FILE_NAME ."
@@ -200,6 +201,7 @@ jobs:
           
             FROM_NAME="han@market-data-notification"
             letsencrypt_file=\$(cat \$LETSENCRYPT_FILE_NAME | base64 -w0)
+            data=\$letsencrypt_file
           
             # https://docs.sendgrid.com/api-reference/mail-send/mail-send
             maildata='{"personalizations":
@@ -207,8 +209,8 @@ jobs:
                 {
                   "to": [{"email": "'\${EMAIL_RECIPIENT}'"}],
                   "dynamic_template_data": {
-                    "data": "'${data}'",
-                    "date": "'${date}'"
+                    "data": "'\${data}'",
+                    "date": "'\${date}'"
                   }
                 }
               ],
@@ -216,7 +218,7 @@ jobs:
                 "email": "'\${EMAIL_SENDER}'",
                 "name": "'\${FROM_NAME}'"
               },
-              "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID_TEMPLATE_ID}'",
+              "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID}'",
               "attachments": [
                 {
                   "content": "'\${letsencrypt_file}'",
@@ -242,6 +244,7 @@ jobs:
           }
           
           backup_redis
+          backup_letsencrypt
           send_redis_mail
           notify_telegram "redis data /var/lib/redis"
           send_letsencrypt_mail
@@ -253,7 +256,7 @@ jobs:
           chmod +x email_backup.sh
           crontab -l > mycron
           # around 4pm local time
-          echo "5 20,21 * * 0-6 ./email_backup.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_REDIS_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
+          echo "5 20,21 * * 0-6 ./email_backup.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_REDIS_TEMPLATE_ID $SENDGRID_LETSENCRYPT_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
           
           mv mycron mycron.temp
           cat mycron.temp | sort | uniq > mycron

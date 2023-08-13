@@ -51,10 +51,10 @@ then
 fi
 
 REDIS_DATA_PATH="/var/lib/redis"
-REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
+REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
 
 LETSENCRYPT_DATA_PATH="/etc/letsencrypt"
-LETSENCRYPT_FILE_NAME="letsencrypt_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
+LETSENCRYPT_FILE_NAME="letsencrypt_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
 
 function backup_redis() {
   sudo sh -c "cd $REDIS_DATA_PATH && zip -r $REDIS_BACKUP_FILE_NAME ."
@@ -120,8 +120,8 @@ function send_letsencrypt_mail() {
 
   FROM_NAME="han@market-data-notification"
 
-
   letsencrypt_file=$(cat $LETSENCRYPT_FILE_NAME | base64 -w0)
+  data=$letsencrypt_file
 
   # https://docs.sendgrid.com/api-reference/mail-send/mail-send
   maildata='{"personalizations":
@@ -138,7 +138,7 @@ function send_letsencrypt_mail() {
       "email": "'${EMAIL_SENDER}'",
       "name": "'${FROM_NAME}'"
     },
-    "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID_TEMPLATE_ID}'",
+    "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID}'",
     "attachments": [
       {
         "content": "'${letsencrypt_file}'",

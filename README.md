@@ -38,7 +38,7 @@ This repository sends stocks and crypto market data to channels like telegram
 ![stocks ema overextension highest volume](images/stocks/tradingview-vix-central-single-day-and-consecutive-days-decrease.png)
 
 ## Fear greed index
-![stocks fear greed index](images/stocks.cnn-fear-greed.png)
+![stocks fear greed index](images/stocks/cnn-fear-greed.png)
 
 # Example message for crypto
 ## Exchange supply

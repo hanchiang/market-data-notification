@@ -174,6 +174,7 @@ jobs:
           -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
           
           echo "Starting chrome container"
+          # peak memory usage is around 600m
           docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1g" --cpus="1" -d seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3

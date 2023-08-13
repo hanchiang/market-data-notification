@@ -28,7 +28,7 @@ then
     echo "redis key is required"
     exit 1
 fi
-if [ -z "$TEMPLATE_ID"  ];
+if [ -z "$SENDGRID_TEMPLATE_ID"  ];
 then
     echo "template id is required"
     exit 1
@@ -48,7 +48,7 @@ REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
 
 LETSENCRYPT_DATA_PATH="/etc/letsencrypt"
-LETSENCRYPT_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
+LETSENCRYPT_FILE_NAME="letsencrypt_backup_$(date "+%Y-%m-%dT%H%M%S%z").zip"
 
 function backup_redis() {
   sudo sh -c "cd $REDIS_DATA_PATH && zip -r $REDIS_BACKUP_FILE_NAME ."
@@ -65,7 +65,7 @@ function cleanup() {
   sudo rm -rf $LETSENCRYPT_FILE_NAME
 }
 
-function send_mail() {
+function send_redis_mail() {
   redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
   redis_data=$(echo $redis_data | sed -e "s/\"/'/g")
   unix_timestamp=$(echo $redis_data | sed -r "s/.* ([0-9]+)/\1/g")
@@ -74,7 +74,6 @@ function send_mail() {
   FROM_NAME="han@market-data-notification"
 
   redis_file=$(cat $REDIS_BACKUP_FILE_NAME | base64 -w0)
-  letsencrypt_file=$(cat $LETSENCRYPT_FILE_NAME | base64 -w0)
 
   # https://docs.sendgrid.com/api-reference/mail-send/mail-send
   maildata='{"personalizations":
@@ -98,7 +97,34 @@ function send_mail() {
         "filename": "'${REDIS_BACKUP_FILE_NAME}'",
         "type": "application/zip",
         "disposition": "attachment"
-      },
+      }
+    ]
+  }'
+
+  curl --request POST \
+    --url https://api.sendgrid.com/v3/mail/send \
+    --header 'Authorization: Bearer '$SENDGRID_API_KEY \
+    --header 'Content-Type: application/json' \
+    --data "$maildata"
+}
+
+function send_letsencrypt_mail() {
+  FROM_NAME="han@market-data-notification"
+
+  letsencrypt_file=$(cat $LETSENCRYPT_FILE_NAME | base64 -w0)
+
+  # https://docs.sendgrid.com/api-reference/mail-send/mail-send
+  maildata='{"personalizations":
+    [
+      {
+        "to": [{"email": "'${EMAIL_RECIPIENT}'"}],
+      }
+    ],
+    "from": {
+      "email": "'${EMAIL_SENDER}'",
+      "name": "'${FROM_NAME}'"
+    },
+    "attachments": [
       {
         "content": "'${letsencrypt_file}'",
         "filename": "'${LETSENCRYPT_FILE_NAME}'",
@@ -116,14 +142,17 @@ function send_mail() {
 }
 
 function notify_telegram() {
+  data=$1
   now=$(date +%Y-%m-%dT%H:%M:%S)
 
-  text=$(echo "\[Redis report\] Market data notification redis report backed up to email at $now." | sed 's~[[:blank:]]~%20~g')
+  text=$(echo "\[Email backup\] Market data notification $data backed up to email at $now." | sed 's~[[:blank:]]~%20~g')
   curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_CHANNEL_ID}&text=$text"
 }
 
 backup_redis
 backup_letsencrypt
-send_mail
-notify_telegram
+send_redis_mail
+notify_telegram "redis data /var/lib/redis"
+send_letsencrypt_mail
+notify_telegram "letsencrypt /etc/letsencrypt"
 cleanup

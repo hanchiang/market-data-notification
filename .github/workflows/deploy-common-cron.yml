@@ -78,7 +78,7 @@ jobs:
         run: |
           ssh production <<-EOF
           
-          cat <<'EOF2' | tee redis_report.sh > /dev/null
+          cat <<'EOF2' | tee email_backup.sh > /dev/null
           #! /bin/bash
           
           SENDGRID_API_KEY=\$1
@@ -129,7 +129,7 @@ jobs:
           REDIS_BACKUP_FILE_NAME="redis_backup_\$(date "+%Y-%m-%dT%H%M%S%z").zip"
           
           LETSENCRYPT_DATA_PATH="/etc/letsencrypt"
-          LETSENCRYPT_FILE_NAME="redis_backup_\$(date "+%Y-%m-%dT%H%M%S%z").zip"
+          LETSENCRYPT_FILE_NAME="letsencrypt_backup_\$(date "+%Y-%m-%dT%H%M%S%z").zip"
           
           function backup_redis() {
             sudo sh -c "cd \$REDIS_DATA_PATH && zip -r \$REDIS_BACKUP_FILE_NAME ."
@@ -146,7 +146,7 @@ jobs:
             sudo rm -rf \$LETSENCRYPT_FILE_NAME
           }
           
-          function send_mail() {
+          function send_redis_mail() {
             redis_data=\$(echo "zrange \$REDIS_KEY -1 -1 withscores" | redis-cli)
             redis_data=\$(echo \$redis_data | sed -e "s/\"/'/g")
             unix_timestamp=\$(echo \$redis_data | sed -r "s/.* ([0-9]+)/\\1/g")
@@ -154,9 +154,7 @@ jobs:
           
             FROM_NAME="han@market-data-notification"
             redis_file=\$(cat \$REDIS_BACKUP_FILE_NAME | base64 -w0)
-            letsencrypt_file=\$(cat \$LETSENCRYPT_FILE_NAME | base64 -w0)
           
-            # TODO: write in python?
             # https://docs.sendgrid.com/api-reference/mail-send/mail-send
             maildata='{"personalizations":
               [
@@ -179,7 +177,33 @@ jobs:
                   "filename": "'\${REDIS_BACKUP_FILE_NAME}'",
                   "type": "application/zip",
                   "disposition": "attachment"
-                },
+                }
+              ]
+            }'
+          
+            curl --request POST \
+              --url https://api.sendgrid.com/v3/mail/send \
+              --header 'Authorization: Bearer '\$SENDGRID_API_KEY \
+              --header 'Content-Type: application/json' \
+              --data "\$maildata"
+          }
+          
+          function send_letsencrypt_mail() {
+            FROM_NAME="han@market-data-notification"
+            letsencrypt_file=\$(cat \$LETSENCRYPT_FILE_NAME | base64 -w0)
+          
+            # https://docs.sendgrid.com/api-reference/mail-send/mail-send
+            maildata='{"personalizations":
+              [
+                {
+                  "to": [{"email": "'\${EMAIL_RECIPIENT}'"}]
+                }
+              ],
+              "from": {
+                "email": "'\${EMAIL_SENDER}'",
+                "name": "'\${FROM_NAME}'"
+              },
+              "attachments": [
                 {
                   "content": "'\${letsencrypt_file}'",
                   "filename": "'\${LETSENCRYPT_FILE_NAME}'",
@@ -197,22 +221,25 @@ jobs:
           }
           
           function notify_telegram() {
+            data=\$1
             now=\$(date +%Y-%m-%dT%H:%M:%S)
-            text=\$(echo "\[Redis report\] Market data notification redis report backed up to email at \$now." | sed 's~[[:blank:]]~%20~g')
+            text=\$(echo "\[Email backup\] Market data notification \$data backed up to email at \$now." | sed 's~[[:blank:]]~%20~g')
             curl "https://api.telegram.org/bot\${STOCKS_TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=\${STOCKS_TELEGRAM_CHANNEL_ID}&text=\$text"
           }
           
           backup_redis
-          send_mail
-          notify_telegram
+          send_redis_mail
+          notify_telegram "redis data /var/lib/redis"
+          send_letsencrypt_mail
+          notify_telegram "letsencrypt /etc/letsencrypt"
           cleanup
           
           EOF2
 
-          chmod +x redis_report.sh
+          chmod +x email_backup.sh
           crontab -l > mycron
           # around 4pm local time
-          echo "5 20,21 * * 0-6 ./redis_report.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
+          echo "5 20,21 * * 0-6 ./email_backup.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
           
           mv mycron mycron.temp
           cat mycron.temp | sort | uniq > mycron

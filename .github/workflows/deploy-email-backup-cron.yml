@@ -1,4 +1,4 @@
-name: Deploy cron common
+name: Deploy email backup common
 on:
   workflow_run:
     workflows: [Test and build]
@@ -39,7 +39,7 @@ jobs:
           STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
           STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
-          now=$(date +%Y-%m-%dT%H:%M:%S)
+          now=$(date +%Y-%m-%dT%H:%M:%S%:z)
           text=$(echo "\[Github action\] Market data notification backend build and deploy failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
           exit 1
@@ -72,7 +72,7 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           REDIS_KEY: ${{ secrets.REDIS_KEY }}
-          SENDGRID_TEMPLATE_ID: ${{ secrets.SENDGRID_TEMPLATE_ID }}
+          SENDGRID_REDIS_TEMPLATE_ID: ${{ secrets.SENDGRID_REDIS_TEMPLATE_ID }}
           STOCKS_TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_ADMIN_BOT_TOKEN }}
           STOCKS_TELEGRAM_ADMIN_ID: ${{ secrets.STOCKS_TELEGRAM_ADMIN_ID }}
         run: |
@@ -85,9 +85,10 @@ jobs:
           EMAIL_RECIPIENT=\$2
           EMAIL_SENDER=\$3
           REDIS_KEY=\$4
-          SENDGRID_TEMPLATE_ID=\$5
-          STOCKS_TELEGRAM_BOT_TOKEN=\$6
-          STOCKS_TELEGRAM_CHANNEL_ID=\$7
+          SENDGRID_REDIS_TEMPLATE_ID=\$5
+          SENDGRID_LETSENCRYPT_TEMPLATE_ID=\$6
+          STOCKS_TELEGRAM_BOT_TOKEN=\$7
+          STOCKS_TELEGRAM_CHANNEL_ID=\$8
           
           if [ -z "\$SENDGRID_API_KEY"  ];
           then
@@ -109,9 +110,14 @@ jobs:
               echo "redis key is required"
               exit 1
           fi
-          if [ -z "\$SENDGRID_TEMPLATE_ID"  ];
+          if [ -z "\$SENDGRID_REDIS_TEMPLATE_ID"  ];
           then
-              echo "template id is required"
+              echo "sendgrid redis template id is required"
+              exit 1
+          fi
+          if [ -z "\$SENDGRID_LETSENCRYPT_TEMPLATE_ID"  ];
+          then
+              echo "sendgrid letsencrypt template id is required"
               exit 1
           fi
           if [ -z "\$STOCKS_TELEGRAM_BOT_TOKEN"  ];
@@ -170,7 +176,7 @@ jobs:
                 "email": "'\${EMAIL_SENDER}'",
                 "name": "'\${FROM_NAME}'"
               },
-              "template_id": "'\${SENDGRID_TEMPLATE_ID}'",
+              "template_id": "'\${SENDGRID_REDIS_TEMPLATE_ID}'",
               "attachments": [
                 {
                   "content": "'\${redis_file}'",
@@ -189,6 +195,9 @@ jobs:
           }
           
           function send_letsencrypt_mail() {
+            letsencrypt_data=""
+            date=\$(date "+%Y-%m-%dT%H:%M:%S%:z")
+          
             FROM_NAME="han@market-data-notification"
             letsencrypt_file=\$(cat \$LETSENCRYPT_FILE_NAME | base64 -w0)
           
@@ -196,13 +205,18 @@ jobs:
             maildata='{"personalizations":
               [
                 {
-                  "to": [{"email": "'\${EMAIL_RECIPIENT}'"}]
+                  "to": [{"email": "'\${EMAIL_RECIPIENT}'"}],
+                  "dynamic_template_data": {
+                    "data": "'${data}'",
+                    "date": "'${date}'"
+                  }
                 }
               ],
               "from": {
                 "email": "'\${EMAIL_SENDER}'",
                 "name": "'\${FROM_NAME}'"
               },
+              "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID_TEMPLATE_ID}'",
               "attachments": [
                 {
                   "content": "'\${letsencrypt_file}'",
@@ -222,7 +236,7 @@ jobs:
           
           function notify_telegram() {
             data=\$1
-            now=\$(date +%Y-%m-%dT%H:%M:%S)
+            now=\$(date +%Y-%m-%dT%H:%M:%S%:z)
             text=\$(echo "\[Email backup\] Market data notification \$data backed up to email at \$now." | sed 's~[[:blank:]]~%20~g')
             curl "https://api.telegram.org/bot\${STOCKS_TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=\${STOCKS_TELEGRAM_CHANNEL_ID}&text=\$text"
           }
@@ -239,7 +253,7 @@ jobs:
           chmod +x email_backup.sh
           crontab -l > mycron
           # around 4pm local time
-          echo "5 20,21 * * 0-6 ./email_backup.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
+          echo "5 20,21 * * 0-6 ./email_backup.sh $SENDGRID_API_KEY $EMAIL_RECIPIENT $EMAIL_SENDER $REDIS_KEY $SENDGRID_REDIS_TEMPLATE_ID $STOCKS_TELEGRAM_ADMIN_BOT_TOKEN $STOCKS_TELEGRAM_ADMIN_ID > common.log 2>&1" >> mycron
           
           mv mycron mycron.temp
           cat mycron.temp | sort | uniq > mycron
@@ -267,6 +281,6 @@ jobs:
           STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
           STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
         run: |
-          now=$(date +%Y-%m-%dT%H:%M:%S)
+          now=$(date +%Y-%m-%dT%H:%M:%S%:z)
           text=$(echo "\[Github action\] Market data notification backend deploy cron common failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"

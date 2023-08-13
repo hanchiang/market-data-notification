@@ -4,9 +4,10 @@ SENDGRID_API_KEY=$1
 EMAIL_RECIPIENT=$2
 EMAIL_SENDER=$3
 REDIS_KEY=$4
-SENDGRID_TEMPLATE_ID=$5
-STOCKS_TELEGRAM_BOT_TOKEN=$6
-STOCKS_TELEGRAM_CHANNEL_ID=$7
+SENDGRID_REDIS_TEMPLATE_ID=$5
+SENDGRID_LETSENCRYPT_TEMPLATE_ID=$6
+STOCKS_TELEGRAM_BOT_TOKEN=$7
+STOCKS_TELEGRAM_CHANNEL_ID=$8
 
 if [ -z "$SENDGRID_API_KEY"  ];
 then
@@ -28,9 +29,14 @@ then
     echo "redis key is required"
     exit 1
 fi
-if [ -z "$SENDGRID_TEMPLATE_ID"  ];
+if [ -z "$SENDGRID_REDIS_TEMPLATE_ID"  ];
 then
-    echo "template id is required"
+    echo "sendgrid redis template id is required"
+    exit 1
+fi
+if [ -z "$SENDGRID_LETSENCRYPT_TEMPLATE_ID"  ];
+then
+    echo "sendgrid letsencrypt template id is required"
     exit 1
 fi
 if [ -z "$STOCKS_TELEGRAM_BOT_TOKEN"  ];
@@ -90,7 +96,7 @@ function send_redis_mail() {
       "email": "'${EMAIL_SENDER}'",
       "name": "'${FROM_NAME}'"
     },
-    "template_id": "'${SENDGRID_TEMPLATE_ID}'",
+    "template_id": "'${SENDGRID_REDIS_TEMPLATE_ID}'",
     "attachments": [
       {
         "content": "'${redis_file}'",
@@ -109,7 +115,11 @@ function send_redis_mail() {
 }
 
 function send_letsencrypt_mail() {
+  letsencrypt_data=""
+  date=$(date "+%Y-%m-%dT%H:%M:%S%:z")
+
   FROM_NAME="han@market-data-notification"
+
 
   letsencrypt_file=$(cat $LETSENCRYPT_FILE_NAME | base64 -w0)
 
@@ -118,12 +128,17 @@ function send_letsencrypt_mail() {
     [
       {
         "to": [{"email": "'${EMAIL_RECIPIENT}'"}],
+        "dynamic_template_data": {
+          "data": "'${data}'",
+          "date": "'${date}'"
+        }
       }
     ],
     "from": {
       "email": "'${EMAIL_SENDER}'",
       "name": "'${FROM_NAME}'"
     },
+    "template_id": "'${SENDGRID_LETSENCRYPT_TEMPLATE_ID_TEMPLATE_ID}'",
     "attachments": [
       {
         "content": "'${letsencrypt_file}'",
@@ -143,7 +158,7 @@ function send_letsencrypt_mail() {
 
 function notify_telegram() {
   data=$1
-  now=$(date +%Y-%m-%dT%H:%M:%S)
+  now=$(date +%Y-%m-%dT%H:%M:%S%:z)
 
   text=$(echo "\[Email backup\] Market data notification $data backed up to email at $now." | sed 's~[[:blank:]]~%20~g')
   curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_CHANNEL_ID}&text=$text"

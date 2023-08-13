@@ -8,8 +8,8 @@ load_dotenv()
 def get_env():
     return os.getenv('ENV', 'dev')
 
-def get_selenium_server_mode():
-    return os.getenv('SELENIUM_SERVER_MODE', 'false') == 'true'
+def get_selenium_remote_mode():
+    return os.getenv('SELENIUM_REMOTE_MODE', 'false') == 'true'
 
 def get_selenium_stealth():
     return os.getenv('SELENIUM_STEALTH', 'true') == 'true'

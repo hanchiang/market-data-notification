@@ -3,7 +3,6 @@ from typing import List
 
 from market_data_library import CNNAPI
 from market_data_library.stocks.cnn_fear_greed.type import CnnFearGreedIndex, FearAndGreedHistoricalData
-from selenium.webdriver.chrome.service import Service
 
 import src.util.date_util as date_util
 from src.config import config
@@ -16,11 +15,10 @@ from src.util.logger import logger
 class StocksSentimentService:
     def __init__(self):
         env = config.get_env()
-        selenium_server_mode = config.get_selenium_server_mode()
+        selenium_remote_mode = config.get_selenium_remote_mode()
         selenium_stealth = config.get_selenium_stealth()
         server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
-        service = Service(executable_path='/usr/local/bin/')
-        cnn_api = CNNAPI(server_host=server_host, is_stealth=selenium_stealth, server_mode=selenium_server_mode)
+        cnn_api = CNNAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_api.cnn_type
 

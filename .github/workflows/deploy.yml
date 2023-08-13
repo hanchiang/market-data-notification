@@ -150,6 +150,9 @@ jobs:
           echo "Stopping existing container"
           docker stop $APP_NAME || true
           docker rm $APP_NAME || true
+          
+          docker stop chrome || true
+          docker rm chrome || true
 
           echo "Starting new container"
           docker run --name $APP_NAME -p 8080:8080 --network host -m 512m --cpus="0.5" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
@@ -166,6 +169,9 @@ jobs:
           -e SELENIUM_SERVER_MODE=$SELENIUM_SERVER_MODE -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
           -e SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE=$SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE \
           -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
+          
+          echo "Starting chrome container"
+          docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host -m 512m --cpus="0.5" -d seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3
           docker ps

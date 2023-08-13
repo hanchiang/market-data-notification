@@ -71,7 +71,7 @@ async def auth_check(request: Request, call_next):
 
     auth_token = request.headers.get('X-Api-Auth')
     if not auth_token or auth_token != config.get_api_auth_token():
-        return JSONResponse(status_code=500, content={'data': 'Unexpected error'})
+        return JSONResponse(status_code=500, content={'data': 'You shall not pass'})
     return await call_next(request)
 
 @app.middleware("http")

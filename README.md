@@ -78,13 +78,13 @@ Webhooks have to be a HTTPS URL, so localhost does not work.
 * Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
 
-![Stocks data workflow](images/stocks-workflow.png)
-
 # Crypto cron workflow
 * Scheduled job send notification to telegram
 
 # Common cron workflow
 * Send redis data via email
+
+![Workflow](images/workflow.png)
 
 # Contributing
 See [CONTRIBUTING](CONTRIBUTING.md)

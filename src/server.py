@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 from fastapi import FastAPI, Request
@@ -34,8 +35,9 @@ app.include_router(sentiment.router)
 
 env = os.getenv('ENV')
 
+logger = logging.getLogger('Server')
 def start_server():
-    print('starting server...')
+    logger.info('starting server...')
     reload = False
     if env == 'dev':
         reload = True
@@ -54,9 +56,19 @@ async def shutdown_event():
     await Redis.stop_redis()
 
 @app.middleware("http")
+async def log_request_and_time_taken(request: Request, call_next):
+    start_time = time.time()
+    logger.info(f"{request.method} {request.url}, headers: {request.headers} client: {request.client}")
+    response = await call_next(request)
+    time_elapsed = time.time() - start_time
+    response.headers["X-Process-Time"] = str(time_elapsed)
+    logger.info(f"Response: {response.headers}")
+    return response
+
+@app.middleware("http")
 async def auth_check(request: Request, call_next):
     if config.get_env() != 'prod' or 'localhost' in request.url.hostname:
-        print('env is not prod or hostname is localhost. Skipping auth')
+        logger.info('env is not prod or hostname is localhost. Skipping auth')
         return await call_next(request)
 
     excluded_endpoints = config.get_auth_exclude_endpoints()
@@ -67,18 +79,9 @@ async def auth_check(request: Request, call_next):
 
     auth_token = request.headers.get('X-Api-Auth')
     if not auth_token or auth_token != config.get_api_auth_token():
+        logger.error('X-Api-Auth token is missing')
         return JSONResponse(status_code=500, content={'data': 'You shall not pass'})
     return await call_next(request)
-
-@app.middleware("http")
-async def log_request_and_time_taken(request: Request, call_next):
-    start_time = time.time()
-    print(f"{request.method} {request.url}, headers: {request.headers} client: {request.client}")
-    response = await call_next(request)
-    time_elapsed = time.time() - start_time
-    response.headers["X-Process-Time"] = str(time_elapsed)
-    print(f"Response: {response.headers}")
-    return response
 
 @app.get("/healthz")
 async def heath_check():

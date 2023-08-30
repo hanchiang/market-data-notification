@@ -1,5 +1,5 @@
 import argparse
-import traceback
+import logging
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -10,10 +10,12 @@ from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import send_message_to_channel, \
     market_data_type_to_admin_chat_id, init_telegram_bots
 from src.util.context_manager import TimeTrackerContext
+from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.type.market_data_type import MarketDataType
 
 
+logger = logging.getLogger('Job wrapper')
 class JobWrapper(ABC):
     async def start(self):
         parser = argparse.ArgumentParser(description='Sends daily stock data notification to telegram')
@@ -52,9 +54,8 @@ class JobWrapper(ABC):
                 return res
 
             except Exception as e:
-                tb = traceback.format_exc()
-                print(f"{self.__class__.__name__} exception: {e}, stack: {tb}")
-                messages.append(f"{escape_markdown(str(e))}, stack: {tb}")
+                logger.error(get_exception_message(e, cls=self.__class__.__name__))
+                messages.append(f"{get_exception_message(e, cls=self.__class__.__name__, should_escape_markdown=True)}")
                 message = format_messages_to_telegram(messages)
                 await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
                                               market_data_type=self.market_data_type)

@@ -1,3 +1,5 @@
+import logging
+
 from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.sentiment import FearGreedResult
@@ -5,6 +7,7 @@ from src.type.market_data_type import MarketDataType
 from src.util.my_telegram import escape_markdown
 import src.util.date_util as date_util
 
+logger = logging.getLogger('Stocks sentiment message sender')
 class StocksSentimentMessageSender(MessageSenderWrapper):
     @property
     def data_source(self):
@@ -29,7 +32,7 @@ class StocksSentimentMessageSender(MessageSenderWrapper):
         if message is not None:
             messages.append(message)
 
-        print(messages)
+        logger.info(messages)
 
         return messages
 

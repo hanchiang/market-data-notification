@@ -1,9 +1,11 @@
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import List
 
 from src.third_party_service.chainanalysis import ThirdPartyChainAnalysisService
 
+logger = logging.getLogger('Chain analysis servoce')
 
 @dataclass
 class UnitValue:
@@ -60,7 +62,7 @@ class ChainAnalysisService:
         generation_summary = summary.get('generation', [])
         fees_summary = next(filter(lambda x: x['name'].lower() == 'btc fees', generation_summary), None)
         if fees_summary is not None:
-            print(f'Fees summary for {symbol}: {fees_summary}')
+            logger.info(f'Fees summary for {symbol}: {fees_summary}')
 
         main_fees = fees.get('data', {}).get('main', {})
         unix_ts_list = list(main_fees.keys())

@@ -1,6 +1,9 @@
+import logging
+
 import telegram
 import src.config.config as config
 from src.type.market_data_type import MarketDataType
+from src.util.exception import get_exception_message
 from src.util.my_telegram import escape_markdown
 
 # TODO: Clean up
@@ -16,9 +19,11 @@ chat_id_to_telegram_client = {}
 market_data_type_to_admin_chat_id = {}
 market_data_type_to_chat_id = {}
 
+logger = logging.getLogger('Telegram notification')
+
 def init_telegram_bots():
     global stocks_bot, stocks_admin_bot, stocks_dev_bot, crypto_bot, crypto_admin_bot, crypto_dev_bot
-    print('Initialising telegram bots')
+    logger.info('Initialising telegram bots')
     stocks_bot = telegram.Bot(token=config.get_telegram_stocks_bot_token())
     stocks_admin_bot = telegram.Bot(token=config.get_telegram_stocks_admin_bot_token())
     stocks_dev_bot = telegram.Bot(token=config.get_telegram_stocks_dev_bot_token())
@@ -45,15 +50,13 @@ def init_telegram_bots():
 
 
 
-
-
 async def send_message_to_channel(message: str, chat_id, market_data_type: MarketDataType):
     if config.get_disable_telegram():
-        print('Telegram is disabled')
+        logger.info('Telegram is disabled')
         return
 
     if market_data_type is None:
-        print('market_data_type is not passed in')
+        logger.warning('market_data_type is not passed in')
         return
 
     if config.get_is_testing_telegram() or config.get_simulate_tradingview_traffic():
@@ -63,7 +66,7 @@ async def send_message_to_channel(message: str, chat_id, market_data_type: Marke
         res = await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=message, parse_mode='MarkdownV2')
         return res
     except Exception as e:
-        print(e)
+        logger.error(get_exception_message(e))
         await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=escape_markdown(str(e)), parse_mode='MarkdownV2')
 
 async def send_message_to_admin(message: str, market_data_type: MarketDataType):
@@ -83,4 +86,4 @@ def get_dev_channel_id_from_market_data_type(market_data_type: MarketDataType):
     return config.get_telegram_stocks_dev_id()
 
 def print_telegram_message(res: telegram.Message):
-    print(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
+    logging.info(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")

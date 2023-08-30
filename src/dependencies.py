@@ -1,3 +1,5 @@
+import logging
+
 from src.service.barchart import BarchartService
 from src.service.crypto_sentiment import CryptoSentimentService
 from src.service.stocks_sentiment import StocksSentimentService
@@ -11,6 +13,7 @@ from src.third_party_service.messari import ThirdPartyMessariService
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
 from src.service.vix_central import VixCentralService
 
+logger = logging.getLogger('Dependencies')
 class Dependencies:
   is_initialised: bool = False
 
@@ -56,9 +59,9 @@ class Dependencies:
       Dependencies.crypto_sentiment_service = CryptoSentimentService()
 
       Dependencies.is_initialised = True
-      print('Dependencies built')
+      logger.info('Dependencies built')
     else:
-      print('Dependencies has already been initialised')
+      logger.info('Dependencies has already been initialised')
 
   @staticmethod
   async def cleanup():

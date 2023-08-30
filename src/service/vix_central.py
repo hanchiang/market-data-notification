@@ -1,5 +1,6 @@
 import datetime
 import asyncio
+import logging
 from typing import List
 from src.config import config
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
@@ -39,6 +40,7 @@ class RecentVixFuturesValues:
         if len(self.vix_futures_values) > 1:
             self.vix_futures_values.pop(0)
 
+logger = logging.getLogger('Vix central service')
 class VixCentralService:
     # month of the vix futures we are interested in. e.g. "Jan"
     MONTH_OF_INTEREST = None
@@ -65,11 +67,11 @@ class VixCentralService:
         current_date = date_util.get_most_recent_non_weekend_or_today(date_util.get_current_datetime())
         # historical data doesn't change, just need to fetch current data
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
-            print('Refreshing current vix central data')
+            logger.info('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
             self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
         else:
-            print('Retrieving current and historical vix central data')
+            logger.info('Retrieving current and historical vix central data')
             current = await self.third_party_service.get_current()
             self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
             historical_dates = []

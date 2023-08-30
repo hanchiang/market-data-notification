@@ -35,8 +35,7 @@ async def tradingview_daily_stocks_data(request: Request):
         return {"data": "OK"}
 
     test_mode = body.get('test_mode', 'false') == 'true'
-    if test_mode:
-        config.set_is_testing_telegram('true')
+    config.set_is_testing_telegram(test_mode)
 
     if not config.get_is_testing_telegram() and body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(

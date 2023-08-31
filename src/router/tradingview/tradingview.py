@@ -96,7 +96,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
 async def reset_is_testing_telegram(original_value: str, delay: int = 3):
     await asyncio.sleep(delay)
-    print(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
+    logger.info(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
     config.set_is_testing_telegram(original_value)
 
 def filter_tradingview_request_body(body: dict) -> dict:

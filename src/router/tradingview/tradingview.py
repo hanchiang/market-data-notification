@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from fastapi import APIRouter, Request
@@ -34,9 +35,11 @@ async def tradingview_daily_stocks_data(request: Request):
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
 
+    original_is_testing_telegram = config.get_is_testing_telegram()
     test_mode = body.get('test_mode', 'false') == 'true'
-    if test_mode:
-        config.set_is_testing_telegram('true' if test_mode else 'false')
+    config.set_is_testing_telegram('true' if test_mode else 'false')
+    # Manipulating environment variable to trigger testing logic is not the best way to go
+    asyncio.create_task(reset_is_testing_telegram('true' if original_is_testing_telegram else 'false'))
 
     if not config.get_is_testing_telegram() and body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(
@@ -87,6 +90,11 @@ async def tradingview_daily_stocks_data(request: Request):
             'num_removed': remove_res
         }
     }
+
+async def reset_is_testing_telegram(original_value: str, delay: int = 3):
+    await asyncio.sleep(delay)
+    print(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
+    config.set_is_testing_telegram(original_value)
 
 def filter_tradingview_request_body(body: dict) -> dict:
     return {k: v for k, v in body.items() if k != 'secret'}

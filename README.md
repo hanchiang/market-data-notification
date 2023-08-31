@@ -51,6 +51,9 @@ This repository sends stocks and crypto market data to channels like telegram
 ![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
 
 # How to do local development
+## Note
+`market_data_library` is currently not a public python package. 
+
 ## 1. No docker
 * Install python: https://www.python.org/downloads/
 * Install poetry: https://python-poetry.org/docs/
@@ -72,7 +75,7 @@ This repository sends stocks and crypto market data to channels like telegram
 ## Test TradingView webhook
 Webhooks have to be a HTTPS URL, so localhost does not work.
 * Use a reverse proxy like [ngrok](https://ngrok.com/)
-* Set is_testing_telegram to TRUE, which will save data to a dev key in redis and send notification to a dev telegram channel
+* Set `is_testing_telegram` to 'true', which will save data to a dev key in redis and send notification to a dev telegram channel
 
 # Stocks cron workflow
 * Receive market data when market closes -> save in redis

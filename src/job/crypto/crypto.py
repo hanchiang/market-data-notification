@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from src.job.crypto.chain_analysis_message_sender import ChainAnalysisMessageSender
 from src.job.crypto.messari_message_sender import MessariMessageSender
@@ -10,6 +11,7 @@ from src.util.date_util import get_current_datetime
 
 # TODO: test
 
+logger = logging.getLogger('Crypto notification job')
 class CryptoNotificationJob(JobWrapper):
     # run at 8.45am, 4.15pm
     def should_run(self) -> bool:
@@ -31,14 +33,13 @@ class CryptoNotificationJob(JobWrapper):
             local = local.replace(hour=local_hour_int, minute=local_minute_int)
             delta = now - local
             should_run = abs(delta.total_seconds()) <= config.get_job_delay_tolerance_second()
+            logger.info(
+                f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
             if should_run:
-                print(
-                    f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
                 return should_run
 
-        print(
-            f'local time: {local}, current time: {now}, local hour to run: {local_hour_int}, local minute to run: {local_minute_int}, current hour {now.hour}, current minute: {now.minute}, delta second: {delta.total_seconds()}, should run: {should_run}')
         return should_run
+
 
     @property
     def message_senders(self):
@@ -53,4 +54,4 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     job = CryptoNotificationJob()
     data = asyncio.run(job.start())
-    print(data)
+    logger.info(data)

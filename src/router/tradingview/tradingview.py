@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, Request
 
@@ -9,11 +10,13 @@ from src.event.event_emitter import async_ee
 from src.type.market_data_type import MarketDataType
 from src.type.trading_view import TradingViewDataType
 from src.util.date_util import get_current_date
+from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 from src.util.sleep import sleep
 
 router = APIRouter(prefix="/tradingview")
 
+logger = logging.getLogger('Trading view')
 @router.post("/daily-stocks")
 async def tradingview_daily_stocks_data(request: Request):
     # for economy_indicator type, there is no ema20s, volumes
@@ -27,10 +30,10 @@ async def tradingview_daily_stocks_data(request: Request):
     try:
         body = await request.json()
         filtered_body = filter_tradingview_request_body(body)
-        print(filtered_body)
+        logger.info(filtered_body)
     except Exception as e:
-        print(e)
-        messages.append(f"JSON body error: {escape_markdown(str(e))}")
+        logger.error(get_exception_message(e))
+        messages.append(f"JSON body error: {get_exception_message(e, should_escape_markdown=True)}")
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
@@ -80,7 +83,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
     save_message = f'Successfully saved trading view data for type: *{escape_markdown(filtered_body.get("type"))}* at *{escape_markdown(str(now))}*, key: *{escape_markdown(key)}*, score: *{timestamp}*, days to store: *{config.get_trading_view_days_to_store()}*'
     messages.append(save_message)
-    print(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp}, days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
+    logger.info(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp}, days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     # sleep for a bit, telegram client will timeout if concurrent requests come in
     # await sleep()
     async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
@@ -93,7 +96,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
 async def reset_is_testing_telegram(original_value: str, delay: int = 3):
     await asyncio.sleep(delay)
-    print(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
+    logger.info(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
     config.set_is_testing_telegram(original_value)
 
 def filter_tradingview_request_body(body: dict) -> dict:

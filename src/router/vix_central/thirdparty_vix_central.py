@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Response, status
 from src.dependencies import Dependencies
+from src.util.exception import get_exception_message
 
 router = APIRouter(prefix="/thirdparty/vixcentral")
 
+logger = logging.getLogger('Third party vix central')
 @router.get("/current")
 async def get_current():
   thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
@@ -22,5 +26,5 @@ async def get_historical(date: str, response: Response):
     res = await thirdparty_vix_central_service.get_historical(date=date)
     return {"data": res}
   except Exception as e:
-    print(e)
+    logger.error(get_exception_message(e))
     return {"error": str(e)}

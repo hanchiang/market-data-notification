@@ -1,10 +1,13 @@
 import json
+import logging
 from typing import List, Optional
 
 from src.config import config
 from src.db.redis import Redis
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
+from src.util.exception import get_exception_message
 
+logger = logging.getLogger('Trading view service')
 class TradingViewService:
     async def get_tradingview_daily_stocks_data(self, type: TradingViewDataType) -> Optional[TradingViewRedisData]:
         try:
@@ -15,7 +18,7 @@ class TradingViewService:
             data_parsed = json.loads(tradingview_data[0][0])
             return TradingViewRedisData(key=key, data=self.hydrate_tradingview_data(data_parsed), score=int(tradingview_data[0][1]))
         except Exception as e:
-            print(e)
+            logger.error(get_exception_message(e, cls=self.__class__.__name__, should_escape_markdown=True))
             return None
 
     # score = timestamp of current date(without time)

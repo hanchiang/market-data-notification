@@ -1,8 +1,11 @@
+import logging
+
 from src.http_client import HttpClient
 
 
 # Monday to friday, 24 hours
 # See: https://www.cboe.com/tradable_products/vix/vix_futures/specifications/
+logger = logging.getLogger('Third party vix central service')
 class ThirdPartyVixCentralService:
   BASE_URL = 'http://vixcentral.com'
   HEADERS = {
@@ -24,7 +27,7 @@ class ThirdPartyVixCentralService:
   async def get_current(self):
     res = await self.http_client.get(url='/ajax_update')
     if res.status != 200:
-      print(res.text)
+      logger.info(res.text)
       res.raise_for_status()
     res_json = await res.json()
     return res_json
@@ -37,7 +40,7 @@ class ThirdPartyVixCentralService:
     res = await self.http_client.get(url='/ajax_historical',
                                      params={"n1": date})
     if res.status != 200:
-      print(res.text)
+      logger.info(res.text)
       res.raise_for_status()
 
     res_json = await res.json()

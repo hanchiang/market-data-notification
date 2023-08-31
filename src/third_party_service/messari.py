@@ -1,4 +1,5 @@
 import json
+import logging
 import urllib.parse
 
 import re
@@ -7,6 +8,7 @@ from src.config import config
 from src.http_client import HttpClient
 
 
+logger = logging.getLogger('Third party message service')
 class ThirdPartyMessariService:
     BASE_URL = 'https://graphql.messari.io'
 
@@ -68,7 +70,7 @@ class ThirdPartyMessariService:
         res = await self.http_client.get(url=url)
 
         if res.status != 200:
-            print(res.text)
+            logging.info(res.text)
             res.raise_for_status()
         res_json = await res.json()
         return res_json

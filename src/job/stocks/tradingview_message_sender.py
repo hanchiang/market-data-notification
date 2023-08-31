@@ -1,4 +1,5 @@
 import datetime
+import logging
 from typing import List
 
 from src.dependencies import Dependencies
@@ -13,6 +14,7 @@ from src.util.number import friendly_number
 from src.util.sleep import sleep
 
 
+logger = logging.getLogger('Trading view message sender')
 class TradingViewMessageSender(MessageSenderWrapper):
     @property
     def data_source(self):
@@ -40,6 +42,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
         most_recent_day = get_most_recent_non_weekend_or_today(now - datetime.timedelta(days=1))
         time_diff = abs(int(most_recent_day.timestamp()) - tradingview_stocks_data.score)
         if not config.get_is_testing_telegram() and time_diff > 86400:
+            logger.info(f'Skip formatting message. is testing telegram: {config.get_is_testing_telegram()}, time difference: {time_diff}')
             return messages
 
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(

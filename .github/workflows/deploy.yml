@@ -143,6 +143,7 @@ jobs:
           AUTH_EXCLUDE_ENDPOINTS: ${{ secrets.AUTH_EXCLUDE_ENDPOINTS }}
         run: |
           ssh production << EOF
+          set -e
           echo "Logging into container registry"
           echo $DOCKER_PULL_PASSWORD | docker login ghcr.io -u $REGISTRY_USER --password-stdin
 

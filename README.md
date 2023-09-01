@@ -8,6 +8,9 @@
 This repository sends stocks and crypto market data to channels like telegram
 
 ## Features
+## API server
+* Incoming webhook from tradingview, saving stocks data in database
+## Scheduled jobs
 * Stocks telegram channel: https://t.me/+6RjlDOi8OyxkOGU1
   * Basic info such as closing price, EMA20, difference between closing price and EMA20
   * [Overextension from EMA20 based on the median delta when stock reverse in the next few days](https://github.com/hanchiang/market-data-notification/blob/master/CONTRIBUTING.md#overextendedpositive--negative-levels-from-ema20)
@@ -18,6 +21,7 @@ This repository sends stocks and crypto market data to channels like telegram
   * BTC Exchange netflow, supply
   * BTC median trade intensity, fees
   * Fear greed index
+
 
 # Tech stack
 * Language: Python
@@ -80,12 +84,14 @@ Webhooks have to be a HTTPS URL, so localhost does not work.
 # Stocks cron workflow
 * Receive market data when market closes -> save in redis
 * Scheduled job before market open -> Send notification to telegram
+* Run: `poetry run python3 src/job/stocks/stocks.py --force_run 1 --test_mode 1`
 
 # Crypto cron workflow
 * Scheduled job send notification to telegram
+* Run: `poetry run python3 src/job/crypto/crypto.py --force_run 1 --test_mode 1`
 
 # Common cron workflow
-* Send redis data via email
+* Backup redis and letsencrypt data via email
 
 ![Workflow](images/workflow.png)
 

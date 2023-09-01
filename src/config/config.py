@@ -59,7 +59,7 @@ def get_telegram_crypto_admin_bot_token():
         raise RuntimeError("telegram crypto admin bot token is missing")
     return os.getenv('CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN')
 
-def get_telegram_crypto_admin_id():
+def get_telegram_crypto_admin_id() -> int:
     if not os.getenv('CRYPTO_TELEGRAM_ADMIN_ID', None):
         raise RuntimeError("telegram crypto admin id is missing")
     return os.getenv('CRYPTO_TELEGRAM_ADMIN_ID')

@@ -1,6 +1,6 @@
-import json
 import logging
 import time
+from asyncio import AbstractEventLoop
 
 from fastapi import FastAPI, Request
 import uvicorn
@@ -9,7 +9,7 @@ import os
 from starlette.responses import JSONResponse
 
 from src.dependencies import Dependencies
-from src.notification_destination.telegram_notification import init_telegram_bots
+from src.notification_destination.telegram_notification import init_telegram_applications, chat_id_to_telegram_client
 from src.router.barchart import thirdparty_barchart
 from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.sentiment import sentiment
@@ -19,6 +19,7 @@ from src.router.tradingview import tradingview
 from src.router.crypto_stats import crypto_stats
 import src.config.config as config
 from src.db.redis import Redis
+from src.telegram_app import start_telegram_app
 
 app = FastAPI()
 app.include_router(tradingview.router)
@@ -38,19 +39,20 @@ app.include_router(crypto_stats.router)
 env = os.getenv('ENV')
 
 logger = logging.getLogger('Server')
-def start_server():
+def start_server(loop: AbstractEventLoop):
     logger.info('starting server...')
     reload = False
     if env == 'dev':
         reload = True
-
-    uvicorn.run("server:app", app_dir="src", reload_dirs=["src"], host="0.0.0.0", port=8080, reload=reload)
+    config = uvicorn.Config(app, loop=loop, reload_dirs=['src'], host='0.0.0.0', port=8080, reload=reload)
+    server = uvicorn.Server(config)
+    loop.run_until_complete(server.serve())
 
 @app.on_event("startup")
 async def startup_event():
     await Dependencies.build()
     await Redis.start_redis()
-    init_telegram_bots()
+    init_telegram_applications()
 
 @app.on_event("shutdown")
 async def shutdown_event():

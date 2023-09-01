@@ -8,7 +8,7 @@ from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import send_message_to_channel, \
-    market_data_type_to_admin_chat_id, init_telegram_bots
+    market_data_type_to_admin_chat_id, init_telegram_applications
 from src.util.context_manager import TimeTrackerContext
 from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
@@ -34,7 +34,7 @@ class JobWrapper(ABC):
             return
 
         with TimeTrackerContext(f'{self.market_data_type.value.lower()}_notification_job'):
-            init_telegram_bots()
+            init_telegram_applications()
             # TODO: May need a lock in the future
             messages = []
             if config.get_is_testing_telegram():

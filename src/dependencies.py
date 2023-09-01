@@ -1,12 +1,12 @@
 import logging
 
 from src.service.barchart import BarchartService
-from src.service.crypto_sentiment import CryptoSentimentService
+from src.service.crypto.crypto_sentiment import CryptoSentimentService
 from src.service.stocks_sentiment import StocksSentimentService
 from src.service.tradingview_service import TradingViewService
 from src.http_client import HttpClient
-from src.service.chainanalysis import ChainAnalysisService
-from src.service.messari import MessariService
+from src.service.crypto.chainanalysis import ChainAnalysisService
+from src.service.crypto.messari import MessariService
 from src.third_party_service.barchart import ThirdPartyBarchartService
 from src.third_party_service.chainanalysis import ThirdPartyChainAnalysisService
 from src.third_party_service.messari import ThirdPartyMessariService

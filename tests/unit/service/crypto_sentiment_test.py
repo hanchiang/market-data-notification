@@ -1,15 +1,14 @@
 import asyncio
 import datetime
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, AsyncMock
 
 import pytest
 from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreedIndex, FearGreedIndex, \
     FearGreedIndexData
 
 from src.dependencies import Dependencies
-from src.service.crypto_sentiment import CryptoSentimentService
-from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
-from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
+from src.service.crypto.crypto_sentiment import CryptoSentimentService
+from src.type.sentiment import FearGreedResult, FearGreedData
 
 
 class TestCryptoSentimentService:

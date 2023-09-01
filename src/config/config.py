@@ -88,6 +88,9 @@ def get_trading_view_ips():
         raise RuntimeError("trading view ips is missing")
     return os.getenv('TRADING_VIEW_IPS').split(',')
 
+def get_whitelist_ips():
+    return os.getenv('WHITELIST_IPS', '').split(',')
+
 def get_auth_exclude_endpoints() -> List[str]:
     return os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
 

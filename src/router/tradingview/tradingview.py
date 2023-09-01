@@ -52,9 +52,10 @@ async def tradingview_daily_stocks_data(request: Request):
         return {"data": "OK"}
 
     trading_view_ips = config.get_trading_view_ips()
-    if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips:
+    whitelist_ips = config.get_whitelist_ips()
+    if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips and request.client.host not in whitelist_ips:
         messages.append(
-            f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view: {escape_markdown(str(trading_view_ips))}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
+            f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view*: {escape_markdown(str(trading_view_ips))} or whitelist: {escape_markdown(str(whitelist_ips))}\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}

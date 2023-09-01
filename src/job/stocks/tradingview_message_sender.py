@@ -80,7 +80,6 @@ class TradingViewMessageSender(MessageSenderWrapper):
         for p in sorted_payload:
             symbol = p.symbol.upper()
 
-            # TODO: Compare recent prices/volumes
             close = p.close_prices[0]
             ema20 = p.ema20s[0]
             volumes = p.volumes

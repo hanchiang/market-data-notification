@@ -20,11 +20,10 @@ async def send_to_telegram_handler(*args, **kwargs):
         channel = kwargs['channel']
         message = kwargs['message']
         market_data_type = kwargs['market_data_type']
-        raise RuntimeError("oops error")
         res = await telegram_notification.send_message_to_channel(message=message, chat_id=channel, market_data_type=market_data_type)
         if res:
             telegram_notification.print_telegram_message(res)
     except Exception as e:
         logger.error(f"{get_exception_message(e)}")
         market_data_type = kwargs['market_data_type'] or MarketDataType.STOCKS
-        await telegram_notification.send_message_to_admin(f"{escape_markdown(str(e))}, stack: {escape_markdown(tb)}", market_data_type=market_data_type)
+        await telegram_notification.send_message_to_admin(f"{get_exception_message(e, should_escape_markdown=True)}", market_data_type=market_data_type)

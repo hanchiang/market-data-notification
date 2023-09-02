@@ -151,6 +151,8 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
         # get the largest number of days that fit within the data length
         max_days_to_compare = max(min(num_days_min, len(data_by_date)), min(num_days_max, len(data_by_date)))
+        if max_days_to_compare < num_days_min:
+            return None
         first_day_greater_count = 0
 
         # count number of consecutive days for which the current day has higher volume

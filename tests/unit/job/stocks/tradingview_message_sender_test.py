@@ -19,7 +19,7 @@ class TestTradingviewMessageSender:
             ([10], (5, 15), None),
             # current day volume is the smallest
             ([1, 3], (2, 6), None),
-            # current day volume needs to be greater than consecutive past days
+            # current day volume greater than a few consecutive days
             ([10, 3, 2, 11, 5, 7], (2, 6), 3),
             # data has more elements than min days
             ([10, 3, 5, 6, 7, 8, 2, 1, 13, 12], (2, 6), 6),
@@ -42,12 +42,14 @@ class TestTradingviewMessageSender:
             ([10], (5, 15), None),
             # current day volume is the smallest
             ([1, 3], (2, 6), 1),
+            # current day volume is the smallest
+            ([1, 3], (3, 6), None),
             # current day volume needs to be greater than consecutive past days
             ([10, 3, 2, 11, 5, 7], (2, 6), 3),
             # data has more elements than min days
             ([10, 3, 5, 6, 7, 8, 2, 1, 13, 12], (2, 6), 6),
             # data has fewer elements than min days
-            ([10, 3, 5, 6, 7, 8, 2, 1, 13, 12], (11, 15), 8),
+            ([10, 3, 5, 6, 7, 8, 2, 1, 13, 12], (11, 15), None),
         ]
     )
     def test_get_current_data_highest_volume_info_test_mode(self, data, num_days_range, expected):

@@ -16,6 +16,7 @@ from src.router.sentiment import sentiment
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.messari import thirdparty_messari, messari
 from src.router.tradingview import tradingview
+from src.router.crypto_stats import crypto_stats
 import src.config.config as config
 from src.db.redis import Redis
 
@@ -32,6 +33,7 @@ app.include_router(messari.router)
 app.include_router(thirdparty_chainanalysis.router)
 app.include_router(chainanalysis.router)
 app.include_router(sentiment.router)
+app.include_router(crypto_stats.router)
 
 env = os.getenv('ENV')
 

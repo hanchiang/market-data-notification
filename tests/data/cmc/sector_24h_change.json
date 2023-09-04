@@ -1,0 +1,79 @@
+[
+  {
+      "sectorId": "6051a82b66fc1b42617d6dce",
+      "title": "Video",
+      "description": "Video",
+      "marketStats": [
+        {
+          "cryptoId": 2781,
+          "tradingVolume": 24195683.93612136,
+          "tradingVolumeChange": -25.571782516539,
+          "marketCap": 1285898680.204874,
+          "marketCapChange": 0.863059456642,
+          "dominance": 0.123148258415,
+          "avgPriceChange": 31.2526095675,
+          "gainersNum": "9",
+          "losersNum": "3"
+        }
+      ],
+      "topCoins": [
+        {
+          "id": 7363,
+          "name": "POP Network Token",
+          "slug": "pop-network-token",
+          "symbol": "POP",
+          "rank": 6688,
+          "isActive": 1,
+          "totalSupply": 1600000000.0,
+          "priceUsd": 9.89846643254025e-06,
+          "percentageChangePriceUsd": 371.51836919,
+          "dominance": 0.0
+        },
+        {
+          "id": 2231,
+          "name": "Flixxo",
+          "slug": "flixxo",
+          "symbol": "FLIXX",
+          "rank": 1697,
+          "isActive": 1,
+          "totalSupply": 196336721.05867887,
+          "priceUsd": 0.002195760200702338,
+          "percentageChangePriceUsd": 5.49374798,
+          "dominance": 0.0
+        },
+        {
+          "id": 4038,
+          "name": "MovieBloc",
+          "slug": "moviebloc",
+          "symbol": "MBL",
+          "rank": 374,
+          "isActive": 1,
+          "totalSupply": 30000000000.0,
+          "priceUsd": 0.0026813764861826667,
+          "percentageChangePriceUsd": 4.20687113,
+          "dominance": 0.0043
+        }
+      ],
+      "tags": [
+        "video"
+      ],
+      "name": "Video",
+      "status": 1,
+      "marketVolume": 24195683.93612136,
+      "volumeChange": -25.571782516539,
+      "marketCap": 1285898680.204874,
+      "marketChange": 0.863059456642,
+      "gainersNum": "9",
+      "losersNum": "3",
+      "dominance": 0.123148258415,
+      "avgPriceChange": 31.2526095675,
+      "avgPriceChange1h": 0.19674242833333,
+      "avgPriceChange7d": 8.60986897833333,
+      "avgPriceChange30d": -19.71101623416667,
+      "tokensNum": 3,
+      "tokens": [],
+      "displayRange": 1,
+      "createTime": 1615964203000,
+      "updateTime": 1636540301000
+    }
+]

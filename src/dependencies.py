@@ -2,6 +2,7 @@ import logging
 
 from src.service.barchart import BarchartService
 from src.service.crypto.crypto_sentiment import CryptoSentimentService
+from src.service.crypto.crypto_stats import CryptoStatsService
 from src.service.stocks_sentiment import StocksSentimentService
 from src.service.tradingview_service import TradingViewService
 from src.http_client import HttpClient
@@ -31,6 +32,7 @@ class Dependencies:
   thirdparty_chainanalysis_service: ThirdPartyChainAnalysisService = None
   chainanalysis_service: ChainAnalysisService = None
   crypto_sentiment_service: CryptoSentimentService = None
+  crypto_stats_service: CryptoStatsService = None
 
   @staticmethod
   async def build():
@@ -57,6 +59,7 @@ class Dependencies:
       Dependencies.chainanalysis_service = ChainAnalysisService(third_party_service=Dependencies.thirdparty_chainanalysis_service)
 
       Dependencies.crypto_sentiment_service = CryptoSentimentService()
+      Dependencies.crypto_stats_service = CryptoStatsService()
 
       Dependencies.is_initialised = True
       logger.info('Dependencies built')
@@ -115,3 +118,7 @@ class Dependencies:
   @staticmethod
   def get_crypto_sentiment_service():
     return Dependencies.crypto_sentiment_service
+
+  @staticmethod
+  def get_crypto_stats_service():
+    return Dependencies.crypto_stats_service

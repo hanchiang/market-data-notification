@@ -50,7 +50,7 @@ class TopSectorsMessageSender(MessageSenderWrapper):
             res = f'{res}*Sector {i+1}*: {escape_markdown(top_sector.title)}, average price change: 1d: {escape_markdown(friendly_number(top_sector.avgPriceChange))}%, ' \
                   f'7d: {escape_markdown((friendly_number(top_sector.avgPriceChange7d)))}%, 30d: {escape_markdown((friendly_number(top_sector.avgPriceChange30d)))}%, ' \
                   f'market cap: {escape_markdown(friendly_number(top_sector.marketCap // 1))}, ' \
-                  f'market cap change: {escape_markdown(friendly_number(top_sector.marketChange))}%, volume: {escape_markdown(friendly_number(top_sector.marketVolume // 1))}, ' \
+                  f'market cap change 1d: {escape_markdown(friendly_number(top_sector.marketChange))}%, volume: {escape_markdown(friendly_number(top_sector.marketVolume // 1))}, ' \
                   f'volume change: {escape_markdown(friendly_number(top_sector.volumeChange))}%, gainers: {top_sector.gainersNum}, losers: {top_sector.losersNum}\n'
 
             # at most 3 top coins
@@ -69,15 +69,16 @@ class TopSectorsMessageSender(MessageSenderWrapper):
                       f'30d: {escape_markdown(friendly_number(top_coin_detail.statistics.priceChangePercentage30d))}%, ' \
                       f'volume: {escape_markdown(friendly_number(int(top_coin_detail.volume)))}, ' \
                       f'volume change 1d: {escape_markdown(friendly_number(top_coin_detail.volumeChangePercentage24h))}%, ' \
-                      f'rank: {top_coin_detail.statistics.rank}, volume mc rank: {top_coin_detail.statistics.volumeMcRank}, '
+                      f'rank: {top_coin_detail.statistics.rank}, volume mc rank: {top_coin_detail.statistics.volumeMcRank}, ' \
+                      f'watch count: {top_coin_detail.watchCount}, watchlist ranking: {top_coin_detail.watchListRanking}, '
                 if top_coin_detail.statistics.marketCap // 1 > 0:
                     top_coins_message = f'{top_coins_message} market cap: {escape_markdown(friendly_number(top_coin_detail.statistics.marketCap // 1))}, '
-                if top_coin_detail.statistics.marketCapChangePercentage24h > 0:
-                    top_coins_message = f'{top_coins_message} market change 1d: {escape_markdown(friendly_number(top_coin_detail.statistics.marketCapChangePercentage24h))}%, '
+                if abs(top_coin_detail.statistics.marketCapChangePercentage24h) > 0:
+                    top_coins_message = f'{top_coins_message} market cap change 1d: {escape_markdown(friendly_number(top_coin_detail.statistics.marketCapChangePercentage24h))}%, '
                 if top_coin_detail.statistics.marketCapDominance > 0:
                     top_coins_message = f'{top_coins_message} market dominance: {escape_markdown(friendly_number(top_coin_detail.statistics.marketCapDominance))}%, '
 
-                top_coins_message = top_coins_message[:-3]
+                top_coins_message = top_coins_message[:-2]
                 top_coins_message = f'{top_coins_message}\n\n'
 
                 # include top holders?

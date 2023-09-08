@@ -224,7 +224,13 @@ def get_should_send_stocks_sentiment_message():
     return os.getenv('SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE', 'true') == 'true'
 
 def get_cmc_coin_price_change_24h_percentage_threshold() -> float:
-    return float(os.getenv('CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD', '10'))
+    try:
+        return float(os.getenv('CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD', '10'))
+    except Exception as e:
+        return 10
 
 def get_cmc_market_cap_change_24h_percentage_threshold() -> float:
-    return float(os.getenv('CMC_COIN_MARKET_CAP_CHANGE_24H_PERCENTAGE_THRESHOLD', '3'))
+    try:
+        return float(os.getenv('CMC_COIN_MARKET_CAP_CHANGE_24H_PERCENTAGE_THRESHOLD', '3'))
+    except Exception as e:
+        return 3

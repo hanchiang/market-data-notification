@@ -658,8 +658,8 @@ selenium-stealth = "^1.0.6"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "0.17.0"
-resolved_reference = "074e4320caced0e9e5a8d6d4eeaf54242f31eb08"
+reference = "0.18.7"
+resolved_reference = "a421e5b2f426d4e1eabe24ef09513fd88b5c1b23"
 
 [[package]]
 name = "multidict"
@@ -875,13 +875,13 @@ files = [
 
 [[package]]
 name = "pytest"
-version = "7.4.0"
+version = "7.4.1"
 description = "pytest: simple powerful testing with Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pytest-7.4.0-py3-none-any.whl", hash = "sha256:78bf16451a2eb8c7a2ea98e32dc119fd2aa758f1d5d66dbf0a59d69a3969df32"},
-    {file = "pytest-7.4.0.tar.gz", hash = "sha256:b4bf8c45bd59934ed84001ad51e11b4ee40d40a1229d2c79f9c592b0a3f6bd8a"},
+    {file = "pytest-7.4.1-py3-none-any.whl", hash = "sha256:460c9a59b14e27c602eb5ece2e47bec99dc5fc5f6513cf924a7d03a578991b1f"},
+    {file = "pytest-7.4.1.tar.gz", hash = "sha256:2f2301e797521b23e4d2585a0a3d7b5e50fdddaaf7e7d6773ea26ddb17c213ab"},
 ]
 
 [package.dependencies]
@@ -1256,4 +1256,4 @@ redis = []
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10.0,<3.11.0"
-content-hash = "92f0ce09a33f66f29db662a7c520389180d6692573e40de73976039188448d92"
+content-hash = "ad8894bd53807401ba02e527c745602d425967c5ee6143c752a6554a82b3b970"

@@ -1,6 +1,6 @@
 from functools import reduce
 
-from src.service.chainanalysis import FeesAverage, ChainAnalysisFees, RecentFees
+from src.service.crypto.chainanalysis import FeesAverage, ChainAnalysisFees, RecentFees
 from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.market_data_type import MarketDataType

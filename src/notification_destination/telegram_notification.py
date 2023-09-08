@@ -67,7 +67,7 @@ async def send_message_to_channel(message: str, chat_id, market_data_type: Marke
         return res
     except Exception as e:
         logger.error(get_exception_message(e))
-        await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=escape_markdown(str(e)), parse_mode='MarkdownV2')
+        await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=escape_markdown(get_exception_message(e, should_escape_markdown=True)), parse_mode='MarkdownV2')
 
 async def send_message_to_admin(message: str, market_data_type: MarketDataType):
     channel_id = get_admin_channel_id_from_market_data_type(market_data_type)

@@ -4,8 +4,10 @@ import logging
 from src.job.crypto.chain_analysis_message_sender import ChainAnalysisMessageSender
 from src.job.crypto.messari_message_sender import MessariMessageSender
 from src.job.crypto.sentiment_message_sender import SentimentMessageSender
+from src.job.crypto.top_sectors_message_sender import TopSectorsMessageSender
 from src.job.job_wrapper import JobWrapper
 from src.config import config
+from src.type.cmc import CMCSectorSortBy, CMCSectorSortDirection
 from src.type.market_data_type import MarketDataType
 from src.util.date_util import get_current_datetime
 
@@ -43,7 +45,15 @@ class CryptoNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        return [MessariMessageSender(), ChainAnalysisMessageSender(), SentimentMessageSender()]
+        return [
+            MessariMessageSender(),
+            ChainAnalysisMessageSender(),
+            TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
+            TopSectorsMessageSender(sort_by=CMCSectorSortBy.MARKET_CAP_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
+            TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.ASCENDING),
+            TopSectorsMessageSender(sort_by=CMCSectorSortBy.MARKET_CAP_CHANGE, sort_direction=CMCSectorSortDirection.ASCENDING),
+            SentimentMessageSender(),
+        ]
 
     @property
     def market_data_type(self):

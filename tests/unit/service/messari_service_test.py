@@ -1,12 +1,12 @@
 import asyncio
 import json
 import os
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.dependencies import Dependencies
-from src.service.messari import MessariService
+from src.service.crypto.messari import MessariService
 
 
 class TestMessariService:

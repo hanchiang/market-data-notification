@@ -1,4 +1,4 @@
-from src.service.messari import AssetMetrics
+from src.service.crypto.messari import AssetMetrics
 from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.util.date_util import get_current_datetime

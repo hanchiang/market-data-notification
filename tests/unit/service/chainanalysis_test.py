@@ -4,7 +4,7 @@ from unittest.mock import patch, AsyncMock, Mock
 import pytest
 
 from src.dependencies import Dependencies
-from src.service.chainanalysis import ChainAnalysisService, FeesSummary, RecentFees, UnitValue, FeesAverage
+from src.service.crypto.chainanalysis import ChainAnalysisService, FeesSummary, RecentFees, UnitValue, FeesAverage
 
 
 class TestChainAnalysisService:

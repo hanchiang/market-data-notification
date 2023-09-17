@@ -8,3 +8,10 @@ class CMCSectorSortBy(enum.Enum):
 class CMCSectorSortDirection(enum.Enum):
     DESCENDING = ('desc', 'descending')
     ASCENDING = ('asc', 'ascending')
+
+class CMCSpotlightType(enum.Enum):
+    TRENDING = 'trending'
+    MOST_VISITED = 'most visited'
+    RECENTLY_ADDED = 'recently added'
+    GAINER_LIST = 'top gainer'
+    LOSER_LIST = 'top loser'

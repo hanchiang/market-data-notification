@@ -1,7 +1,8 @@
 from typing import Dict, List
 
 from market_data_library import CMCAPI
-from market_data_library.crypto.cmc.type import CMCSector24hChange, CMCCoinDetail, CoinDetail, Sector24hChange
+from market_data_library.crypto.cmc.type import CMCSector24hChange, CMCCoinDetail, CoinDetail, Sector24hChange, \
+    CMCSpotlight, Spotlight
 
 
 class CryptoStatsService:
@@ -24,3 +25,7 @@ class CryptoStatsService:
     async def get_coin_detail(self, id: int) -> CoinDetail:
         coin_detail: CMCCoinDetail = await self.cmc_service.get_coin_detail(id=id)
         return coin_detail.data
+
+    async def get_spotlight(self, limit=30, rank_range=500, timeframe='24h') -> Spotlight:
+        data: CMCSpotlight = await self.cmc_service.get_spotlight(limit=limit, rank_range=rank_range, timeframe=timeframe)
+        return data.data

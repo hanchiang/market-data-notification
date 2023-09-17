@@ -1,0 +1,220 @@
+{
+  "trendingList": [
+    {
+      "id": 23037,
+      "dataType": 2,
+      "name": "Hifi Finance",
+      "symbol": "HIFI",
+      "slug": "hifi-finance-new",
+      "rank": 179,
+      "status": "active",
+      "marketCap": 109007067.81,
+      "selfReportedMarketCap": 118325803.1056026516485453117091000000000,
+      "priceChange": {
+        "price": 1.147288175318945400000000,
+        "priceChange24h": -45.18002419,
+        "priceChange7d": 99.32965349,
+        "priceChange30d": 246.35571479,
+        "volume24h": 1261056094.51346803,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    },
+    {
+      "id": 1,
+      "dataType": 2,
+      "name": "Bitcoin",
+      "symbol": "BTC",
+      "slug": "bitcoin",
+      "rank": 1,
+      "status": "active",
+      "marketCap": 517099416950.71,
+      "selfReportedMarketCap": 0E-24,
+      "priceChange": {
+        "price": 26534.129129796350000000000000,
+        "priceChange24h": 0.15454615,
+        "priceChange7d": 2.60257473,
+        "priceChange30d": 0.36780405,
+        "volume24h": 6655667038.21550751,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    }
+  ],
+  "mostVisitedList": [
+    {
+      "id": 10275,
+      "dataType": 2,
+      "name": "Catgirl",
+      "symbol": "CATGIRL",
+      "slug": "catgirl",
+      "rank": 846,
+      "status": "active",
+      "marketCap": 6845436.85,
+      "selfReportedMarketCap": 6844464.521827355476065229759652,
+      "priceChange": {
+        "price": 1.93446132778039E-10,
+        "priceChange24h": 0.76773362,
+        "priceChange7d": 0.50143513,
+        "priceChange30d": -3.93330117,
+        "volume24h": 1078593.66339467,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    },
+    {
+      "id": 13702,
+      "dataType": 2,
+      "name": "STEMX",
+      "symbol": "STEMX",
+      "slug": "stemx",
+      "rank": 2176,
+      "status": "active",
+      "marketCap": 0.00,
+      "selfReportedMarketCap": 0E-24,
+      "priceChange": {
+        "price": 0.002840431456803248500000,
+        "priceChange24h": 0.02823377,
+        "priceChange7d": 3.54771681,
+        "priceChange30d": 9.92405298,
+        "volume24h": 2113916.11404540,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    }
+  ],
+  "recentlyAddedList": [
+    {
+      "id": 28034,
+      "name": "BNBcat",
+      "symbol": "BNBCAT",
+      "slug": "bnbcat",
+      "rank": 3196,
+      "priceChange": {
+        "price": 7.0428636433096E-11,
+        "priceChange1h": 27.06260619,
+        "priceChange24h": 76.07292013,
+        "priceChange7d": 76.07292013,
+        "priceChange30d": 76.07292013,
+        "volume24h": 53341.65992408,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      },
+      "platforms": [
+        {
+          "id": 1839,
+          "name": "BNB",
+          "symbol": "BNB",
+          "slug": "bnb"
+        }
+      ],
+      "addedDate": "2023-09-16T20:05:05.000Z",
+      "marketCap": 0.00,
+      "selfReportedMarketCap": 0E-24,
+      "fullyDilutedMarketCap": 70234.98
+    },
+    {
+      "id": 28033,
+      "name": "On-Chain Dynamics",
+      "symbol": "OCD",
+      "slug": "on-chain-dynamics",
+      "rank": 2431,
+      "priceChange": {
+        "price": 0.009646649342591710000000,
+        "priceChange1h": -0.61422627,
+        "priceChange24h": -21.86575967,
+        "priceChange7d": -21.86575967,
+        "priceChange30d": -21.86575967,
+        "volume24h": 304815.08884940,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      },
+      "platforms": [
+        {
+          "id": 1027,
+          "name": "Ethereum",
+          "symbol": "ETH",
+          "slug": "ethereum"
+        }
+      ],
+      "addedDate": "2023-09-16T10:16:49.000Z",
+      "marketCap": 0.00,
+      "selfReportedMarketCap": 0E-24,
+      "fullyDilutedMarketCap": 9646649.34
+    }
+  ],
+  "gainerList": [
+    {
+      "id": 1674,
+      "name": "Cannation",
+      "symbol": "CNNC",
+      "slug": "cannation",
+      "rank": 306,
+      "status": "active",
+      "marketCap": 62796642.33,
+      "selfReportedMarketCap": 62796642.32589083678121717474000000000,
+      "priceChange": {
+        "price": 25.352992416002838000000000,
+        "priceChange1h": -0.02809438,
+        "priceChange24h": 24.94450059,
+        "priceChange7d": 28.99210782,
+        "priceChange30d": 9793.72341619,
+        "volume24h": 173656.51353500,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    },
+    {
+      "id": 2454,
+      "name": "UnlimitedIP",
+      "symbol": "UIP",
+      "slug": "unlimitedip",
+      "rank": 225,
+      "status": "active",
+      "marketCap": 188935219.51,
+      "selfReportedMarketCap": 0E-24,
+      "priceChange": {
+        "price": 0.112462409170091320000000,
+        "priceChange1h": -0.03649048,
+        "priceChange24h": 22.93966404,
+        "priceChange7d": 121.92092906,
+        "priceChange30d": 2902.08268288,
+        "volume24h": 264049.97869797,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    }
+  ],
+  "loserList": [
+    {
+      "id": 23037,
+      "name": "Hifi Finance",
+      "symbol": "HIFI",
+      "slug": "hifi-finance-new",
+      "rank": 179,
+      "status": "active",
+      "marketCap": 109007067.81,
+      "selfReportedMarketCap": 118325803.1056026516485453117091000000000,
+      "priceChange": {
+        "price": 1.147288175318945400000000,
+        "priceChange1h": -5.11403067,
+        "priceChange24h": -45.18002419,
+        "priceChange7d": 99.32965349,
+        "priceChange30d": 246.35571479,
+        "volume24h": 1261056094.51346803,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    },
+    {
+      "id": 1788,
+      "name": "Metal DAO",
+      "symbol": "MTL",
+      "slug": "metal",
+      "rank": 200,
+      "status": "active",
+      "marketCap": 84019040.03,
+      "selfReportedMarketCap": 0E-24,
+      "priceChange": {
+        "price": 1.261757667840395700000000,
+        "priceChange1h": -0.76018827,
+        "priceChange24h": -21.36242751,
+        "priceChange7d": 1.93203352,
+        "priceChange30d": 12.95973609,
+        "volume24h": 63027791.45918414,
+        "lastUpdate": "2023-09-17T08:30:00.000Z"
+      }
+    }
+  ]
+}

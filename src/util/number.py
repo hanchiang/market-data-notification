@@ -14,6 +14,7 @@ def friendly_number(num: float, decimal_places = 2) -> str:
         res = round(num, decimal_places)
         return format_precision_without_trailing_zero(res, places=abs(exponent))
 
+    # For values >= 1000
     res = num
     count = 0
     while(abs(res / 1000) >= 1):
@@ -50,6 +51,7 @@ def count_leading_decimal_zeros(num: decimal.Decimal):
             break
     return num_decimal_zeros
 
+# Display fixed precision numbers exactly as it is, without converting to scientific format.
 # 0.0100 -> 0.01
 # 1.1000 -> 1.1
 # 1.000 -> 1.000

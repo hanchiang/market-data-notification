@@ -10,12 +10,13 @@ import typing
 import pytest
 from dacite import from_dict
 from market_data_library.crypto.cmc.type import Sector24hChange, CoinDetail, CoinDetailStatistics, RelatedCoin, \
-    RelatedExchange, CoinDetailWallet, CoinDetailHolder, FAQ, CryptoRating
+    RelatedExchange, CoinDetailWallet, CoinDetailHolder, FAQ, CryptoRating, Spotlight
 
 from src.dependencies import Dependencies
+from src.job.crypto.top_coins_message_sender import TopCoinsMessageSender
 from src.job.crypto.top_sectors_message_sender import TopSectorsMessageSender
 from src.service.crypto.crypto_stats import CryptoStatsService
-
+from src.type.cmc import CMCSpotlightType
 
 
 def remove_unknown_fields(my_value, fields: List[dataclasses.Field]):
@@ -40,13 +41,12 @@ def remove_unknown_fields(my_value, fields: List[dataclasses.Field]):
                     remove_unknown_fields(v, dataclasses.fields(typing.get_args(field.type)[0]))
 
 class TestTopSectorsMessageSender:
-    def load_sector_24h_change(self):
+    def load_spotlight(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
-        file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'sector_24h_change.json')
+        file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'cmc_spotlight.json')
         data = json.load(open(file_path))
 
-        sectors_24h_change = list(map(lambda x: from_dict(data_class=Sector24hChange, data=x), data))
-        self.sector_24h_change = sectors_24h_change
+        self.spotlight = from_dict(data_class=Spotlight, data=data)
 
     def load_coin_detail(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -70,7 +70,7 @@ class TestTopSectorsMessageSender:
         self.coin_detail = coin_detail
 
     def setup_method(self):
-        self.load_sector_24h_change()
+        self.load_spotlight()
         self.load_coin_detail()
 
     @classmethod
@@ -82,12 +82,18 @@ class TestTopSectorsMessageSender:
         asyncio.run(Dependencies.cleanup())
 
     @pytest.mark.asyncio
-    async def test_format_message(self):
-        self.message_sender = TopSectorsMessageSender()
+    @pytest.mark.parametrize('spotlight_type', [
+        (CMCSpotlightType.TRENDING),
+        (CMCSpotlightType.MOST_VISITED),
+        (CMCSpotlightType.GAINER_LIST),
+        (CMCSpotlightType.LOSER_LIST)
+    ])
+    async def test_format_message(self, spotlight_type):
+        self.message_sender = TopCoinsMessageSender(spotlight_type=spotlight_type)
 
-        get_sectors_24h_change = AsyncMock()
-        get_sectors_24h_change.return_value = self.sector_24h_change
-        self.message_sender.cmc_service.get_sectors_24h_change = get_sectors_24h_change
+        get_spotlight = AsyncMock()
+        get_spotlight.return_value = self.spotlight
+        self.message_sender.cmc_service.get_spotlight = get_spotlight
 
         get_coin_detail = AsyncMock()
         get_coin_detail.return_value = self.coin_detail

@@ -47,6 +47,15 @@ This repository sends stocks and crypto market data to channels like telegram
 ## Fees
 ![crypto fees](images/crypto/chainanalysis-fees.png)
 
+## Top sectors
+![Top sectors](images/crypto/cmc-top-sectors.png)
+
+## Trending coins
+![Trending coins](images/crypto/cmc-trending.png)
+
+## Top gainers
+![Top gainers](images/crypto/cmc-top-gainer.png)
+
 ## Fear greed index
 ![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
 

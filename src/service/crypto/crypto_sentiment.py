@@ -1,3 +1,4 @@
+import logging
 from statistics import mean
 from typing import List
 
@@ -8,6 +9,7 @@ from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.date_util import parse
 from src.util.list_util import is_list_out_of_range
 
+logger = logging.getLogger('Crypto sentiment service')
 class CryptoSentimentService:
     def __init__(self):
         self.alternativeme_service = AlternativeMeAPI().alternativeme_service
@@ -32,6 +34,7 @@ class CryptoSentimentService:
             {'text': 'Last week', 'list_index': -8},
             {'text': 'Last month', 'list_index': -31},
             {'text': 'Last 3 months', 'list_index': -91},
+            {'text': 'Last year', 'list_index': self._get_last_year_list_index(data=data)}
         ]
 
         res: List[FearGreedData] = []
@@ -59,7 +62,8 @@ class CryptoSentimentService:
         average_params = [
             {'timeframe': '7d', 'list_end_index': -7},
             {'timeframe': '30d', 'list_end_index': -30},
-            {'timeframe': '90d', 'list_end_index': -90}
+            {'timeframe': '90d', 'list_end_index': -90},
+            {'timeframe': '1 year', 'list_end_index': self._get_last_year_list_index(data=data)}
         ]
 
         res: List[FearGreedAverage] = []
@@ -82,6 +86,14 @@ class CryptoSentimentService:
             res.append(parsed)
 
         return res
+
+    def _get_last_year_list_index(self, data: AlternativeMeFearGreedIndex):
+        last_year_list_index = -365
+        if len(data.data.datasets) > 200 and len(data.fear_and_greed_historical.data) < abs(last_year_list_index):
+            logger.info(
+                f'Last year list index is {last_year_list_index} while length of fear greed index is {len(data.fear_and_greed_historical.data)}. Setting last year list index to 0')
+            last_year_list_index = 0
+        return last_year_list_index
 
 
     # returns data in chronological order

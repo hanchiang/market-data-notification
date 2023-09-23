@@ -1,3 +1,4 @@
+import logging
 from statistics import mean
 from typing import List
 
@@ -11,7 +12,7 @@ from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.list_util import is_list_out_of_range
 from src.util.logger import logger
 
-
+logger = logging.getLogger('Stocks sentiment service')
 class StocksSentimentService:
     def __init__(self):
         env = config.get_env()

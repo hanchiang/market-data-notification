@@ -3,21 +3,18 @@ import dataclasses
 import json
 import os
 from typing import List
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock
 
 import typing
 
 import pytest
 from dacite import from_dict
-from market_data_library.crypto.cmc.type import Sector24hChange, CoinDetail, CoinDetailStatistics, RelatedCoin, \
+from market_data_library.crypto.cmc.type import CoinDetail, CoinDetailStatistics, RelatedCoin, \
     RelatedExchange, CoinDetailWallet, CoinDetailHolder, FAQ, CryptoRating, Spotlight
 
 from src.dependencies import Dependencies
 from src.job.crypto.top_coins_message_sender import TopCoinsMessageSender
-from src.job.crypto.top_sectors_message_sender import TopSectorsMessageSender
-from src.service.crypto.crypto_stats import CryptoStatsService
 from src.type.cmc import CMCSpotlightType
-
 
 def remove_unknown_fields(my_value, fields: List[dataclasses.Field]):
     field_by_name = {field.name: field for field in fields}
@@ -101,4 +98,3 @@ class TestTopSectorsMessageSender:
 
         res = await self.message_sender.format_message()
         assert len(res) > 0
-

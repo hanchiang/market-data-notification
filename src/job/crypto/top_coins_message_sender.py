@@ -4,11 +4,13 @@ from market_data_library.crypto.cmc.type import CoinDetail, TrendingList
 
 from src.config import config
 from src.dependencies import Dependencies
+from src.job.crypto.util import bold_text_for_metric_type
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.cmc import CMCSectorSortBy, CMCSpotlightType
 from src.type.market_data_type import MarketDataType
+from src.type.metric_type import MetricTypeIndicator
 from src.util.date_util import get_current_datetime
-from src.util.my_telegram import escape_markdown
+from src.util.my_telegram import escape_markdown, exclamation_mark
 from src.util.number import friendly_number
 
 
@@ -58,12 +60,18 @@ class TopCoinsMessageSender(MessageSenderWrapper):
             symbol_escaped = escape_markdown(f'({coin.symbol})')
             coin_detail = await self.cmc_service.get_coin_detail(id=coin.id)
 
+            price_change_24h = (escape_markdown(friendly_number(coin.priceChange.priceChange24h)), bold_text_for_metric_type(metric_type=MetricTypeIndicator.COIN_PRICE_CHANGE_24H, value=coin.priceChange.priceChange24h / 100))
+            volume_change_24h = (escape_markdown(friendly_number(coin_detail.volumeChangePercentage24h)), bold_text_for_metric_type(metric_type=MetricTypeIndicator.COIN_VOLUME_CHANGE_24H, value=coin_detail.volumeChangePercentage24h / 100))
+            market_cap_change_24h = (escape_markdown(friendly_number(coin_detail.statistics.marketCapChangePercentage24h)), bold_text_for_metric_type(metric_type=MetricTypeIndicator.COIN_MARKET_CAP_CHANGE_24H, value=coin_detail.statistics.marketCapChangePercentage24h / 100))
+
             res = f'{res}*{i+1}*: *{escape_markdown(coin.name)}{symbol_escaped}*, price: {escape_markdown(friendly_number(coin.priceChange.price))}, ' \
-                  f'price change 24h: {escape_markdown(friendly_number(coin.priceChange.priceChange24h))}%, 7d: {escape_markdown(friendly_number(coin.priceChange.priceChange7d))}%, ' \
-                  f'30d: {escape_markdown(friendly_number(coin.priceChange.priceChange30d))}%, volume 24h: {escape_markdown(friendly_number(coin.priceChange.volume24h))}, ' \
-                  f'volume change 24h: {escape_markdown(friendly_number(coin_detail.volumeChangePercentage24h))}%, ' \
+                  f'price change 24h: *{price_change_24h[0]}%*{price_change_24h[1]}, ' \
+                  f'7d: {escape_markdown(friendly_number(coin.priceChange.priceChange7d))}%, ' \
+                  f'30d: {escape_markdown(friendly_number(coin.priceChange.priceChange30d))}%, ' \
+                  f'volume 24h: {escape_markdown(friendly_number(coin.priceChange.volume24h))}, ' \
+                  f'volume change 24h: *{volume_change_24h[0]}%*{volume_change_24h[1]}, ' \
                   f'market cap: ${escape_markdown(friendly_number(coin.marketCap))}, ' \
-                  f'market cap change 24h: {escape_markdown(friendly_number(coin_detail.statistics.marketCapChangePercentage24h))}%, ' \
+                  f'market cap change 24h: *{market_cap_change_24h[0]}%*{market_cap_change_24h[1]}, ' \
                   f'watch count: {coin_detail.watchCount}, watchlist ranking: {coin_detail.watchListRanking}, ' \
                   f'rank: {coin.rank}, volume mc rank: {coin_detail.statistics.volumeMcRank}\n\n'
 

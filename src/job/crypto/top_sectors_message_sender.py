@@ -78,7 +78,8 @@ class TopSectorsMessageSender(MessageSenderWrapper):
                       f'volume: {escape_markdown(friendly_number(int(top_coin_detail.volume)))}, ' \
                       f'volume change 1d: *{volume_change_24h[0]}%*{volume_change_24h[1]}, ' \
                       f'rank: {top_coin_detail.statistics.rank}, volume mc rank: {top_coin_detail.statistics.volumeMcRank}, ' \
-                      f'watch count: {top_coin_detail.watchCount}, watchlist ranking: {top_coin_detail.watchListRanking}, '
+                      f'watch count: {top_coin_detail.watchCount}, watchlist ranking: {top_coin_detail.watchListRanking}, ' \
+                      f'market cap: ${escape_markdown(friendly_number(top_coin_detail.statistics.marketCap))}, '
                 if top_coin_detail.statistics.marketCap // 1 > 0:
                     top_coins_message = f'{top_coins_message} market cap: {escape_markdown(friendly_number(top_coin_detail.statistics.marketCap // 1))}, '
                 if abs(top_coin_detail.statistics.marketCapChangePercentage24h) > 0:

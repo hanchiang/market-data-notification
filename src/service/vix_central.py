@@ -137,7 +137,7 @@ class VixCentralService:
                 # set to a negative value because once the current value is more than the previous value,
                 # is_decrease_for_past_n_days should not be True anymore
                 if not is_decrease_for_past_n_days:
-                    decrease_counter = -len(recent_values.vix_futures_values)
+                    decrease_counter = 0
                 continue
             else:
                 decrease_counter += 1

@@ -59,6 +59,29 @@ This repository sends stocks and crypto market data to channels like telegram
 ## Fear greed index
 ![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
 
+# Data sources
+**Crypto**
+* CoinMarketCap
+* Alternative.me
+* Chainanalysis
+
+**Stocks**
+* TradingView
+* VIX central
+* CNN fear greed
+
+# Stocks cron workflow
+* Receive market data when market closes -> save in redis
+* Scheduled job before market open -> Send notification to telegram
+
+# Crypto cron workflow
+* Scheduled job send notification to telegram
+
+# Common cron workflow
+* Send redis data via email
+
+![Workflow](images/workflow.png)
+
 # How to do local development
 ## Note
 `market_data_library` is currently not a public python package. 
@@ -85,18 +108,6 @@ This repository sends stocks and crypto market data to channels like telegram
 Webhooks have to be a HTTPS URL, so localhost does not work.
 * Use a reverse proxy like [ngrok](https://ngrok.com/)
 * Set `is_testing_telegram` to 'true', which will save data to a dev key in redis and send notification to a dev telegram channel
-
-# Stocks cron workflow
-* Receive market data when market closes -> save in redis
-* Scheduled job before market open -> Send notification to telegram
-
-# Crypto cron workflow
-* Scheduled job send notification to telegram
-
-# Common cron workflow
-* Send redis data via email
-
-![Workflow](images/workflow.png)
 
 # Contributing
 See [CONTRIBUTING](CONTRIBUTING.md)

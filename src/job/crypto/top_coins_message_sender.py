@@ -55,6 +55,7 @@ class TopCoinsMessageSender(MessageSenderWrapper):
         num_coins_to_show = min(5, len(coin_list))
         res = ''
 
+        # TODO: volume/mcap
         for i in range (0, num_coins_to_show):
             coin = coin_list[i]
             symbol_escaped = escape_markdown(f'({coin.symbol})')

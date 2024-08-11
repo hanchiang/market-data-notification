@@ -69,6 +69,7 @@ class TopSectorsMessageSender(MessageSenderWrapper):
                 if not self.should_include_coin(coin_detail=top_coin_detail, sort_type=sort_type):
                     continue
 
+                # TODO: volume/mcap
                 price_change_24h = (escape_markdown(friendly_number(top_coin_detail.statistics.priceChangePercentage24h)), bold_text_for_metric_type(metric_type=MetricTypeIndicator.COIN_PRICE_CHANGE_24H, value=top_coin_detail.statistics.priceChangePercentage24h / 100))
                 volume_change_24h = (escape_markdown(friendly_number(top_coin_detail.volumeChangePercentage24h)), bold_text_for_metric_type(metric_type=MetricTypeIndicator.COIN_VOLUME_CHANGE_24H, value=top_coin_detail.volumeChangePercentage24h / 100))
                 top_coins_message = f'{top_coins_message}*{escape_markdown(top_coin.name)}{symbol_escaped}*, price: {escape_markdown(friendly_number(top_coin_detail.statistics.price))}, ' \

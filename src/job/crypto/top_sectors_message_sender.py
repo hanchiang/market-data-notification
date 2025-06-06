@@ -1,6 +1,6 @@
 from typing import List
 
-from market_data_library.crypto.cmc.type import Sector24hChange, CoinDetail
+from market_data_library.types import cmc_type
 
 from src.config import config
 from src.dependencies import Dependencies
@@ -43,7 +43,7 @@ class TopSectorsMessageSender(MessageSenderWrapper):
 
         return messages
 
-    async def _format_message(self, top_sectors: List[Sector24hChange], sort_type: CMCSectorSortBy, sort_direction: CMCSectorSortDirection) -> str:
+    async def _format_message(self, top_sectors: List[cmc_type.Sector24hChange], sort_type: CMCSectorSortBy, sort_direction: CMCSectorSortDirection) -> str:
         top_num_sectors = min(3, len(top_sectors))
         res = f'*Top {top_num_sectors} sectors by {sort_direction.value[1]} {sort_type.value[1]}:*\n'
 
@@ -100,7 +100,7 @@ class TopSectorsMessageSender(MessageSenderWrapper):
             res = f'{res}\n'
         return res
 
-    def should_include_coin(self, coin_detail: CoinDetail, sort_type: CMCSectorSortBy):
+    def should_include_coin(self, coin_detail: cmc_type.CoinDetail, sort_type: CMCSectorSortBy):
         if sort_type == CMCSectorSortBy.AVG_PRICE_CHANGE:
             return abs(coin_detail.statistics.priceChangePercentage24h) >= config.get_cmc_coin_price_change_24h_percentage_threshold()
         elif sort_type == CMCSectorSortBy.MARKET_CAP_CHANGE:

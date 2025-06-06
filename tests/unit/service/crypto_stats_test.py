@@ -1,11 +1,10 @@
-import asyncio
 import json
 import os
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 from dacite import from_dict
-from market_data_library.crypto.cmc.type import Sector24hChange, CMCSector24hChange
+from market_data_library.types import cmc_type
 
 from src.service.crypto.crypto_stats import CryptoStatsService
 
@@ -19,7 +18,7 @@ class TestCryptoStatsService:
         file_path = os.path.join(dir_path, '..', '..', 'data', 'cmc', 'cmc_sector_24h_change.json')
         data = json.load(open(file_path))
 
-        sectors_24h_change = from_dict(data_class=CMCSector24hChange, data=data)
+        sectors_24h_change = from_dict(data_class=cmc_type.CMCSector24hChange, data=data)
         self.sector_24h_change = sectors_24h_change
 
     @pytest.mark.parametrize('sort_by, sort_direction, limit', [

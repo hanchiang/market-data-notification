@@ -42,10 +42,11 @@ fi
 # set up ssh for market data library
 RUN mkdir -p /root/.ssh
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+COPY secret/id_rsa /root/.ssh/id_rsa
+RUN chmod 600 /root/.ssh/id_rsa
 
 RUN poetry env use python3.10 && . $(poetry env info --path)/bin/activate
-
-RUN --mount=type=secret,id=ssh_private_key,target=/root/.ssh/id_rsa poetry install
+RUN poetry install --no-root
 
 COPY . .
 
@@ -59,5 +60,5 @@ CMD ["poetry", "run", "pytest"]
 
 FROM base AS release
 COPY --from=base . .
-RUN rm -rf $(poetry env info --path) && poetry install --only main
+RUN rm -rf $(poetry env info --path) && poetry install --only main --no-root
 CMD ["poetry", "run", "python3", "main.py"]

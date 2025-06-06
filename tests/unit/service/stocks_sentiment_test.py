@@ -3,8 +3,7 @@ import datetime
 from unittest.mock import Mock, AsyncMock
 
 import pytest
-from market_data_library.stocks.cnn_fear_greed.type import CnnFearGreedIndex, FearAndGreed, FearAndGreedHistorical, \
-    FearAndGreedHistoricalData
+from market_data_library.types import cnn_type
 
 from src.dependencies import Dependencies
 from src.service.stocks_sentiment import StocksSentimentService
@@ -25,8 +24,8 @@ class TestStocksSentimentService:
         'data, expected',
         [
             (
-                    CnnFearGreedIndex(
-                        fear_and_greed=FearAndGreed(
+                    cnn_type.CnnFearGreedIndex(
+                        fear_and_greed=cnn_type.FearAndGreed(
                             previous_1_month=79,
                             previous_1_week=77,
                             previous_1_year=60,
@@ -35,14 +34,14 @@ class TestStocksSentimentService:
                             score=68,
                             timestamp='2023-08-04T23:59:56+00:00',
                         ),
-                        fear_and_greed_historical=FearAndGreedHistorical(
+                        fear_and_greed_historical=cnn_type.FearAndGreedHistorical(
                             data=[
-                                FearAndGreedHistoricalData(
+                                cnn_type.FearAndGreedHistoricalData(
                                     rating='greed',
                                     x=1691107200000,
                                     y=63
                                 ),
-                                FearAndGreedHistoricalData(
+                                cnn_type.FearAndGreedHistoricalData(
                                     rating='greed',
                                     x=1691193596000,
                                     y=65

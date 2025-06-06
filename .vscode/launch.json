@@ -1,0 +1,83 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "presentation": {
+        "hidden": false,
+        "group": "",
+        "order": 1
+    },
+    "compounds": [],
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}", // Set the working directory to the root of the project
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}" // Add the root of the project to PYTHONPATH
+            },
+            "pythonPath": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+            "args": ["--run_all", "1"] // Add your command line arguments here
+        },
+        {
+            "name": "Debug All Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "-v",
+                "--log-cli-level=DEBUG"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTEST_ADDOPTS": "--no-cov"
+            }
+        },
+        {
+            "name": "Debug Current Test File",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "--log-cli-level=DEBUG"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTEST_ADDOPTS": "--no-cov"
+            }
+        },
+        {
+            "name": "Debug Current Test Function",
+            "args": [
+                "${file}",
+                "-v",
+                "--log-cli-level=DEBUG",
+                "-k",
+                "${selectedText}"
+            ],
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "purpose": ["debug-test"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTEST_ADDOPTS": "--no-cov"
+            }
+        }
+    ]
+}

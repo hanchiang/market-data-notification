@@ -182,6 +182,7 @@ class TestVixCentralService:
 
         result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
         assert result.is_contango_decrease_for_past_n_days == False
+
     def test_compute_contango_alert_threshold_correct_decrease_past_n_days_and_single_day_decrease(self):
         recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
 
@@ -226,6 +227,26 @@ class TestVixCentralService:
         assert result.vix_futures_values[1].is_contango_single_day_decrease_alert == False
         assert result.vix_futures_values[2].is_contango_single_day_decrease_alert == False
         assert result.is_contango_decrease_for_past_n_days == True
+
+    def test_compute_contango_negative_value(self):
+        recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
+
+        v1 = VixFuturesValue(contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO)
+        v1.raw_contango = -5
+        v1.formatted_contango = "-50%"
+
+        v2 = VixFuturesValue(contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO)
+        v2.raw_contango = -10
+        v2.formatted_contango = "-100%"
+
+        vix_futures_values = [v1, v2]
+        recent_vix_futures_values.vix_futures_values = vix_futures_values
+
+        # Call the method
+        result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
+
+        # Verify the fix
+        assert result.vix_futures_values[0].raw_contango_change_prev_day == 0.5, "Expected raw_contango_change_prev_day to be 0.5"
 
     @pytest.mark.asyncio
     @patch("asyncio.gather", new_callable=AsyncMock)

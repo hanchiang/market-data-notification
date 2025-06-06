@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 
@@ -8,6 +7,7 @@ import os
 
 from starlette.responses import JSONResponse
 
+from src.data_source.market_data_library import init_market_data_api
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import init_telegram_bots
 from src.router.barchart import thirdparty_barchart
@@ -51,6 +51,7 @@ async def startup_event():
     await Dependencies.build()
     await Redis.start_redis()
     init_telegram_bots()
+    init_market_data_api()
 
 @app.on_event("shutdown")
 async def shutdown_event():

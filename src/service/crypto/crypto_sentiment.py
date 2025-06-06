@@ -2,9 +2,9 @@ import logging
 from statistics import mean
 from typing import List
 
-from market_data_library import AlternativeMeAPI
-from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreedIndex
+from market_data_library.types import alternativeme_type
 
+from src.data_source.market_data_library import get_crypto_api
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.date_util import parse
 from src.util.list_util import is_list_out_of_range
@@ -12,11 +12,12 @@ from src.util.list_util import is_list_out_of_range
 logger = logging.getLogger('Crypto sentiment service')
 class CryptoSentimentService:
     def __init__(self):
-        self.alternativeme_service = AlternativeMeAPI().alternativeme_service
+        crypto_api = get_crypto_api()
+        self.alternativeme_service =  crypto_api.alternativeme.alternativeme_service
 
     # { average: [ {timeframe, value, sentiment_text, emoji } ], data: [{ relative_date_text, date, value, sentiment_text, emoji }] }
     async def get_crypto_fear_greed_index(self, days=365) -> FearGreedResult:
-        fear_greed_res: AlternativeMeFearGreedIndex = await self.get_crypto_fear_greed_index_from_source(days=days)
+        fear_greed_res: alternativeme_type.AlternativeMeFearGreedIndex = await self.get_crypto_fear_greed_index_from_source(days=days)
 
         if fear_greed_res.data.datasets is None or fear_greed_res.data.datasets[0].data is None:
             return None
@@ -27,7 +28,7 @@ class CryptoSentimentService:
 
         return res
 
-    def transform_data(self, data: AlternativeMeFearGreedIndex) -> List[FearGreedData]:
+    def transform_data(self, data: alternativeme_type.AlternativeMeFearGreedIndex) -> List[FearGreedData]:
         parse_params = [
             {'text': 'Now', 'list_index': -1},
             {'text': 'Yesterday', 'list_index': -2},
@@ -58,7 +59,7 @@ class CryptoSentimentService:
             res.append(parsed)
         return res
 
-    def transform_average(self, data: AlternativeMeFearGreedIndex) -> List[FearGreedAverage]:
+    def transform_average(self, data: alternativeme_type.AlternativeMeFearGreedIndex) -> List[FearGreedAverage]:
         average_params = [
             {'timeframe': '7d', 'list_end_index': -7},
             {'timeframe': '30d', 'list_end_index': -30},
@@ -87,7 +88,7 @@ class CryptoSentimentService:
 
         return res
 
-    def _get_last_year_list_index(self, data: AlternativeMeFearGreedIndex):
+    def _get_last_year_list_index(self, data: alternativeme_type.AlternativeMeFearGreedIndex):
         last_year_list_index = -365
         if len(data.data.datasets) > 200 and len(data.fear_and_greed_historical.data) < abs(last_year_list_index):
             logger.info(
@@ -97,7 +98,7 @@ class CryptoSentimentService:
 
 
     # returns data in chronological order
-    async def get_crypto_fear_greed_index_from_source(self, days=365) -> AlternativeMeFearGreedIndex:
+    async def get_crypto_fear_greed_index_from_source(self, days=365) -> alternativeme_type.AlternativeMeFearGreedIndex:
         if days is None or type(days) is not int:
             days = 365
         data = await self.alternativeme_service.get_fear_greed_index(days=days)

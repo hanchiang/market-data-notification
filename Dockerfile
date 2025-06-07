@@ -25,7 +25,8 @@ ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 COPY pyproject.toml poetry.lock ./
 
 # Install dependencies
-RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils build-essential && curl -sSL https://install.python-poetry.org | python3
+RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils build-essential && curl -sSL https://install.python-poetry.org | python3 && \
+apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install google chrome
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \

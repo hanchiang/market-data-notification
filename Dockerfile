@@ -1,7 +1,7 @@
 # Dockerfile
 
 # pull the official docker image
-FROM python:3.10-slim-bullseye as base
+FROM python:3.12-slim-bullseye as base
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -25,7 +25,7 @@ ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 COPY pyproject.toml poetry.lock ./
 
 # Install dependencies
-RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils && curl -sSL https://install.python-poetry.org | python3
+RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils build-essential && curl -sSL https://install.python-poetry.org | python3
 
 # Install google chrome
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
@@ -45,7 +45,6 @@ RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
 COPY secret/id_rsa /root/.ssh/id_rsa
 RUN chmod 600 /root/.ssh/id_rsa
 
-RUN poetry env use python3.10 && . $(poetry env info --path)/bin/activate
 RUN poetry install --no-root
 
 COPY . .

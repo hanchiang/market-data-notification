@@ -1,20 +1,20 @@
 [tool.poetry]
-name = "python-template"
+name = "market-data-notification"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.10.0,<3.11.0"
+python = "^3.12.0"
 fastapi = "^0.88.0"
 uvicorn = "^0.20.0"
-aiohttp = "^3.8.3"
+aiohttp = "^3.8.4"
 pytz = "^2022.7"
 python-dotenv = "^0.21.0"
 pyee = "^9.0.4"
 redis = "^4.4.0"
 python-telegram-bot = {version = "20.3", allow-prereleases = true}
-market-data-library = {git = "ssh://git@github.com/hanchiang/market_data_api.git", rev = "0.19.0"}
+market-data-library = {git = "ssh://git@github.com/hanchiang/market_data_api.git", rev = "1.0.0"}
 
 [tool.poetry.extras]
 redis = ["hiredis"]
@@ -23,6 +23,11 @@ redis = ["hiredis"]
 coverage = "^7.2.6"
 pytest = "^7.2.0"
 pytest-asyncio = "^0.20.3"
+mypy = "0.991"                       # Static type checker
+mypy-extensions = "0.4.3"            # Additional mypy features
+aiofile = "3.8.7"                    # Async file operations
+black = "^23.9.1"                    # Code formatter
+ruff = "^0.0.289"                    # Fast Python linter
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -34,3 +39,19 @@ addopts = "-ra -v -s"
 testpaths = [
     "tests"
 ]
+
+[tool.black]
+# Black formatter configuration
+line-length = 88                     # Maximum line length
+target-version = ["py39"]            # Python version to target
+
+[tool.mypy]
+# MyPy type checker configuration
+python_version = 3.9                 # Python version for type checking
+strict = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "C", "N", "B"]
+ignore = ["E501", "N815"]  # Ignore line length errors (handled by Black)

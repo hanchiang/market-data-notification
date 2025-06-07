@@ -3,8 +3,7 @@ import datetime
 from unittest.mock import Mock, AsyncMock
 
 import pytest
-from market_data_library.crypto.alternativeme.type import AlternativeMeFearGreedIndex, FearGreedIndex, \
-    FearGreedIndexData
+from market_data_library.types import alternativeme_type
 
 from src.dependencies import Dependencies
 from src.service.crypto.crypto_sentiment import CryptoSentimentService
@@ -25,9 +24,9 @@ class TestCryptoSentimentService:
         'data, expected',
         [
             (
-                    AlternativeMeFearGreedIndex(
-                    data=FearGreedIndex(
-                        datasets=[FearGreedIndexData(data=[1, 2, 3])],
+                    alternativeme_type.AlternativeMeFearGreedIndex(
+                    data=alternativeme_type.FearGreedIndex(
+                        datasets=[alternativeme_type.FearGreedIndexData(data=[1, 2, 3])],
                         labels=['30 Jul, 2022', '31 Jul, 2022', '1 Aug, 2022']
                     ),
                 ),

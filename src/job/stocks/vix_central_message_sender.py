@@ -33,6 +33,7 @@ class VixCentralMessageSender(MessageSenderWrapper):
             return None
         message = reduce(self._format_vix_futures_values, vix_central_value.vix_futures_values,
                          f"*VIX central data for {vix_central_value.vix_futures_values[0].futures_date} futures:*")
+    
         if config.get_display_vix_futures_contango_decrease_past_n_days() and vix_central_value.is_contango_decrease_for_past_n_days:
             message = f"{message}\n*Contango has been decreasing for the past {vix_central_value.actual_contango_decrease_past_n_days} days {exclamation_mark()}*"
         return message

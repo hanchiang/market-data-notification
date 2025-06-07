@@ -1,7 +1,7 @@
 # Dockerfile
 
 # pull the official docker image
-FROM python:3.10-slim-bullseye as base
+FROM python:3.12-slim-bullseye as base
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -25,7 +25,7 @@ ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 COPY pyproject.toml poetry.lock ./
 
 # Install dependencies
-RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils && curl -sSL https://install.python-poetry.org | python3
+RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils build-essential && curl -sSL https://install.python-poetry.org | python3
 
 # Install google chrome
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
@@ -40,12 +40,12 @@ elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
 fi
 
 # set up ssh for market data library
-RUN mkdir -p /root/.ssh
-RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
-
-RUN poetry env use python3.10 && . $(poetry env info --path)/bin/activate
-
-RUN --mount=type=secret,id=ssh_private_key,target=/root/.ssh/id_rsa poetry install
+RUN --mount=type=secret,id=ssh_private_key mkdir -p /root/.ssh \
+&& ssh-keyscan github.com >> /root/.ssh/known_hosts \
+&& cat /run/secrets/ssh_private_key >> /root/.ssh/id_rsa \
+&& chmod 600 /root/.ssh/id_rsa \
+&& poetry install --no-root \
+&& rm -f /root/.ssh/id_rsa
 
 COPY . .
 
@@ -59,5 +59,10 @@ CMD ["poetry", "run", "pytest"]
 
 FROM base AS release
 COPY --from=base . .
-RUN rm -rf $(poetry env info --path) && poetry install --only main
+RUN --mount=type=secret,id=ssh_private_key rm -rf $(poetry env info --path) \
+&& poetry install --only main --no-root \
+&& cat /run/secrets/ssh_private_key >> /root/.ssh/id_rsa \
+&& chmod 600 /root/.ssh/id_rsa \
+&& poetry install --no-root \
+&& rm -f /root/.ssh/id_rsa
 CMD ["poetry", "run", "python3", "main.py"]

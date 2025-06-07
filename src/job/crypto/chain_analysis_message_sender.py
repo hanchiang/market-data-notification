@@ -1,7 +1,6 @@
 from functools import reduce
 
 from src.service.crypto.chainanalysis import FeesAverage, ChainAnalysisFees, RecentFees
-from src.dependencies import Dependencies
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.type.market_data_type import MarketDataType
 from src.util import date_util
@@ -21,15 +20,16 @@ class ChainAnalysisMessageSender(MessageSenderWrapper):
     async def format_message(self):
         symbol = 'BTC'
         messages = []
-        chainanalysis_service = Dependencies.get_chainanalysis_service()
-        thirdparty_chainanalysis_service = Dependencies.get_thirdparty_chainanalysis_service()
-        chainanalysis_trade_intensity = await thirdparty_chainanalysis_service.get_trade_intensity(symbol=symbol)
-        chainanalysis_fees = await chainanalysis_service.get_fees(symbol=symbol)
+        # TODO: fix
+        # chainanalysis_service = Dependencies.get_chainanalysis_service()
+        # thirdparty_chainanalysis_service = Dependencies.get_thirdparty_chainanalysis_service()
+        # chainanalysis_trade_intensity = await thirdparty_chainanalysis_service.get_trade_intensity(symbol=symbol)
+        # chainanalysis_fees = await chainanalysis_service.get_fees(symbol=symbol)
 
-        thirdparty_chainanalysis_message = self._format_chainanalysis(trade_intensity=chainanalysis_trade_intensity,
-                                                                fees=chainanalysis_fees)
-        if thirdparty_chainanalysis_message is not None:
-            messages.append(thirdparty_chainanalysis_message)
+        # thirdparty_chainanalysis_message = self._format_chainanalysis(trade_intensity=chainanalysis_trade_intensity,
+        #                                                         fees=chainanalysis_fees)
+        # if thirdparty_chainanalysis_message is not None:
+        #     messages.append(thirdparty_chainanalysis_message)
 
         return messages
 

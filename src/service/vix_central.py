@@ -50,6 +50,7 @@ class VixCentralService:
         self.number_of_days_to_store = number_of_days_to_store
         self.contango_decrease_past_n_days_threshold = contango_decrease_past_n_days_threshold
         self.third_party_service = third_party_service
+        # most recent to least recent
         self.recent_values: RecentVixFuturesValues = RecentVixFuturesValues(self.contango_decrease_past_n_days_threshold)
 
     async def cleanup(self):
@@ -122,7 +123,7 @@ class VixCentralService:
             prev_contango = recent_values.vix_futures_values[i + 1].raw_contango
 
             if prev_contango != 0:
-                contango_change = (curr_contango - prev_contango) / prev_contango
+                contango_change = ((curr_contango - prev_contango) / abs(prev_contango)) if prev_contango != 0 else 0
                 recent_values.vix_futures_values[i].raw_contango_change_prev_day = contango_change
                 recent_values.vix_futures_values[i].formatted_contango_change_prev_day = f"{contango_change:.2%}"
                 delta_ratio = (curr_contango - prev_contango) / prev_contango

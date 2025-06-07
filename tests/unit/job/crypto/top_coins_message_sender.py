@@ -9,8 +9,7 @@ import typing
 
 import pytest
 from dacite import from_dict
-from market_data_library.crypto.cmc.type import CoinDetail, CoinDetailStatistics, RelatedCoin, \
-    RelatedExchange, CoinDetailWallet, CoinDetailHolder, FAQ, CryptoRating, Spotlight
+from market_data_library.types import cmc_type
 
 from src.dependencies import Dependencies
 from src.job.crypto.top_coins_message_sender import TopCoinsMessageSender
@@ -43,26 +42,26 @@ class TestTopSectorsMessageSender:
         file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'cmc_spotlight.json')
         data = json.load(open(file_path))
 
-        self.spotlight = from_dict(data_class=Spotlight, data=data)
+        self.spotlight = from_dict(data_class=cmc_type.Spotlight, data=data)
 
     def load_coin_detail(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'coin_detail.json')
         data = json.load(open(file_path))
 
-        fields = dataclasses.fields(CoinDetail)
+        fields = dataclasses.fields(cmc_type.CoinDetail)
         remove_unknown_fields(data, fields)
 
-        coin_detail = CoinDetail(**data)
+        coin_detail = cmc_type.CoinDetail(**data)
 
-        coin_detail.statistics = CoinDetailStatistics(**data.get('statistics', {}))
+        coin_detail.statistics = cmc_type.CoinDetailStatistics(**data.get('statistics', {}))
         coin_detail.relatedCoins = list(map(
-            lambda x: RelatedCoin(**x), data.get('relatedCoins', [])))
-        coin_detail.relatedExchanges = list(map(lambda x: RelatedExchange(**x), data.get('relatedExchanges', [])))
-        coin_detail.wallets = list(map(lambda x: CoinDetailWallet(**x), data.get('wallets', [])))
-        coin_detail.holders = CoinDetailHolder(**data.get('holders', {}))
-        coin_detail.faqDescription = list(map(lambda x: FAQ(**x), data.get('faqDescription', [])))
-        coin_detail.cryptoRating = list(map(lambda x: CryptoRating(**x), data.get('cryptoRating', [])))
+            lambda x: cmc_type.RelatedCoin(**x), data.get('relatedCoins', [])))
+        coin_detail.relatedExchanges = list(map(lambda x: cmc_type.RelatedExchange(**x), data.get('relatedExchanges', [])))
+        coin_detail.wallets = list(map(lambda x: cmc_type.CoinDetailWallet(**x), data.get('wallets', [])))
+        coin_detail.holders = cmc_type.CoinDetailHolder(**data.get('holders', {}))
+        coin_detail.faqDescription = list(map(lambda x: cmc_type.FAQ(**x), data.get('faqDescription', [])))
+        coin_detail.cryptoRating = list(map(lambda x: cmc_type.CryptoRating(**x), data.get('cryptoRating', [])))
 
         self.coin_detail = coin_detail
 

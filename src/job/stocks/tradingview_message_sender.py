@@ -93,10 +93,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
                 message = f"{message}, volume: {escape_markdown(friendly_number(volumes[0], decimal_places=2))}"
                 # volume rank for recent days
                 if config.get_should_compare_stocks_volume_rank():
-                    # TODO: type
                     stock_prices = await self.barchart_service.get_stock_price(symbol=symbol, num_days=30)
                     await sleep(max_sec=0.2)
-                    volumes = list(map(lambda x: x['volume'], stock_prices))
+                    volumes = list(map(lambda x: x.volume, stock_prices))
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
                         # TODO: configure a separate volume ratio threshold for each symbol

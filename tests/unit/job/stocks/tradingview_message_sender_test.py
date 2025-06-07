@@ -1,11 +1,10 @@
 import datetime
-from unittest.mock import patch, AsyncMock, Mock
+from unittest.mock import patch, AsyncMock
+from market_data_library.types import barchart_type
 
 import pytest
 
 from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
-from src.service.barchart import BarchartService
-from src.service.tradingview_service import TradingViewService
 from src.type.trading_view import TradingViewRedisData, TradingViewData, TradingViewStocksData, TradingViewDataType
 
 
@@ -113,8 +112,8 @@ class TestTradingviewMessageSender:
         tradingview_message_sender = TradingViewMessageSender()
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(side_effect=[stocks_data, economy_indicator_data])
         tradingview_message_sender.barchart_service.get_stock_price = AsyncMock(return_value=[
-                {'symbol': 'SPY', 'date': '2023-06-09', 'open': 429.96, 'high': 431.99, 'low': 428.87, 'close': 429.9, 'volume': 85647200.0},
-                {'symbol': 'SPY', 'date': '2023-06-08', 'open': 426.62, 'high': 429.6, 'low': 425.82, 'close': 429.13, 'volume': 61952800.0}
+            barchart_type.StockPrice(symbol='SPY', date='2023-06-09', open_price=429.96, high_price=431.99, low_price=428.87, close_price=429.9, volume=85647200.0),
+            barchart_type.StockPrice(symbol='SPY', date='2023-06-08', open_price=426.62, high_price=429.6, low_price=425.82, close_price=429.13, volume=61952800.0)
             ])
         res = await tradingview_message_sender.format_message()
 

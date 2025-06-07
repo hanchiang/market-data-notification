@@ -2,11 +2,11 @@ import logging
 from statistics import mean
 from typing import List
 
-from market_data_library import CNNAPI
-from market_data_library.stocks.cnn_fear_greed.type import CnnFearGreedIndex, FearAndGreedHistoricalData
+from market_data_library import TradFiAPI
 
 import src.util.date_util as date_util
 from src.config import config
+from market_data_library.types import cnn_type
 
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.list_util import is_list_out_of_range
@@ -18,14 +18,16 @@ class StocksSentimentService:
         env = config.get_env()
         selenium_remote_mode = config.get_selenium_remote_mode()
         selenium_stealth = config.get_selenium_stealth()
+        
         server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
-        cnn_api = CNNAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
+        tradfi_api = TradFiAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
+        cnn_api = tradfi_api.cnn
         self.cnn_service = cnn_api.cnn_service
-        self.cnc_type = cnn_api.cnn_type
+        self.cnc_type = cnn_type
 
     # TODO: cache
     async def get_stocks_fear_greed_index(self) -> FearGreedResult:
-        fear_greed_res: CnnFearGreedIndex = await self.get_stocks_fear_greed_index_from_source()
+        fear_greed_res: cnn_type.CnnFearGreedIndex = await self.get_stocks_fear_greed_index_from_source()
 
         if fear_greed_res is None or fear_greed_res.fear_and_greed is None or fear_greed_res.fear_and_greed_historical is None:
             return None
@@ -58,7 +60,7 @@ class StocksSentimentService:
         return res
 
 
-    def transform_data(self, data: CnnFearGreedIndex) -> List[FearGreedData]:
+    def transform_data(self, data: cnn_type.CnnFearGreedIndex) -> List[FearGreedData]:
         parse_params = [
             {'text': 'Previous close', 'list_index': -1},
             {'text': 'Last week', 'list_index': -8},
@@ -89,7 +91,7 @@ class StocksSentimentService:
             res.append(parsed)
         return res
 
-    def transform_average(self, data: CnnFearGreedIndex) -> List[FearGreedAverage]:
+    def transform_average(self, data: cnn_type.CnnFearGreedIndex) -> List[FearGreedAverage]:
         average_params = [
             {'timeframe': '1 week', 'list_end_index': -7},
             {'timeframe': '1 month', 'list_end_index': -30},
@@ -120,7 +122,7 @@ class StocksSentimentService:
 
         return res
 
-    def _get_last_year_list_index(self, data: CnnFearGreedIndex):
+    def _get_last_year_list_index(self, data: cnn_type.CnnFearGreedIndex):
         last_year_list_index = -365
         if len(data.fear_and_greed_historical.data) > 200 and len(data.fear_and_greed_historical.data) < abs(last_year_list_index):
             logger.info(
@@ -128,7 +130,7 @@ class StocksSentimentService:
             last_year_list_index = 0
         return last_year_list_index
 
-    async def get_stocks_fear_greed_index_from_source(self) -> CnnFearGreedIndex:
-        fear_greed_res: CnnFearGreedIndex = await self.cnn_service.get_fear_greed_index()
+    async def get_stocks_fear_greed_index_from_source(self) -> cnn_type.CnnFearGreedIndex:
+        fear_greed_res: cnn_type.CnnFearGreedIndex = await self.cnn_service.get_fear_greed_index()
         return fear_greed_res
 

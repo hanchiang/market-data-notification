@@ -1,6 +1,6 @@
 from typing import List
 
-from market_data_library.crypto.cmc.type import CoinDetail, TrendingList
+from market_data_library.types import cmc_type
 
 from src.config import config
 from src.dependencies import Dependencies
@@ -10,7 +10,7 @@ from src.type.cmc import CMCSectorSortBy, CMCSpotlightType
 from src.type.market_data_type import MarketDataType
 from src.type.metric_type import MetricTypeIndicator
 from src.util.date_util import get_current_datetime
-from src.util.my_telegram import escape_markdown, exclamation_mark
+from src.util.my_telegram import escape_markdown
 from src.util.number import friendly_number
 
 
@@ -51,7 +51,7 @@ class TopCoinsMessageSender(MessageSenderWrapper):
 
         return messages
 
-    async def _format_message(self, coin_list: List[TrendingList]) -> str:
+    async def _format_message(self, coin_list: List[cmc_type.TrendingList]) -> str:
         num_coins_to_show = min(5, len(coin_list))
         res = ''
 
@@ -78,7 +78,7 @@ class TopCoinsMessageSender(MessageSenderWrapper):
 
         return res
 
-    def should_include_coin(self, coin_detail: CoinDetail, sort_type: CMCSectorSortBy):
+    def should_include_coin(self, coin_detail: cmc_type.CoinDetail, sort_type: CMCSectorSortBy):
         if sort_type == CMCSectorSortBy.AVG_PRICE_CHANGE:
             return abs(coin_detail.statistics.priceChangePercentage24h) >= config.get_cmc_coin_price_change_24h_percentage_threshold()
         elif sort_type == CMCSectorSortBy.MARKET_CAP_CHANGE:

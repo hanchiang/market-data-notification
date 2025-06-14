@@ -63,7 +63,6 @@ This repository sends stocks and crypto market data to channels like telegram
 **Crypto**
 * CoinMarketCap
 * Alternative.me
-* Chainanalysis
 
 **Stocks**
 * TradingView
@@ -81,6 +80,8 @@ This repository sends stocks and crypto market data to channels like telegram
 * Send redis data via email
 
 ![Workflow](images/workflow.png)
+* purple flow: send notification before market open
+* green flow: save trading data, backup redis data when market close
 
 # How to do local development
 ## Note

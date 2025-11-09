@@ -3,6 +3,7 @@ name = "market-data-notification"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12.0"
@@ -28,6 +29,7 @@ mypy-extensions = "0.4.3"            # Additional mypy features
 aiofile = "3.8.7"                    # Async file operations
 black = "^23.9.1"                    # Code formatter
 ruff = "^0.0.289"                    # Fast Python linter
+pre-commit = "^4.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

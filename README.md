@@ -610,8 +610,6 @@ redis-server
 poetry install --no-cache
 ```
 
-### Market Data Library Issues
-Note: `market_data_library` is currently not a public Python package. Contact repository maintainers for access.
 
 ## 📝 License
 

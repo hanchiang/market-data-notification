@@ -30,34 +30,8 @@ This repository sends stocks and crypto market data to channels like telegram
   * `service`: For retrieving data from various sources
   * `job`: Scheduled jobs that sends stocks and crypto notification
 
-# Example message for stocks
-## EMA20 overextension, highest volume
-![stocks ema overextension highest volume](images/stocks/tradingview-stocks-ema-overextension-highest-volume.png)
-
-## VIX futures single day and consecutive days decrease
-![stocks ema overextension highest volume](images/stocks/tradingview-vix-central-single-day-and-consecutive-days-decrease.png)
-
-## Fear greed index
-![stocks fear greed index](images/stocks/cnn-fear-greed.png)
-
-# Example message for crypto
-## Exchange supply
-![crypto exchange supply](images/crypto/messari-exchange-flow.png)
-
-## Fees
-![crypto fees](images/crypto/chainanalysis-fees.png)
-
-## Top sectors
-![Top sectors](images/crypto/cmc-top-sectors.png)
-
-## Trending coins
-![Trending coins](images/crypto/cmc-trending.png)
-
-## Top gainers
-![Top gainers](images/crypto/cmc-top-gainer.png)
-
-## Fear greed index
-![crypto fear greed index](images/crypto/alternativeme-fear-greed.png)
+# Example messages
+See [example messages](examples/MESSAGES.md) for stocks and crypto notifications.
 
 # Data sources
 **Crypto**
@@ -79,9 +53,72 @@ This repository sends stocks and crypto market data to channels like telegram
 # Common cron workflow
 * Send redis data via email
 
-![Workflow](images/workflow.png)
+
+```mermaid
+flowchart TB
+    subgraph External["External Systems"]
+        TV["<b>Trading view</b><br/><b>Pinescript:</b> Gathers stocks data,<br/>triggers alert once per bar close<br/><b>Chart:</b> Add indicator to chart,<br/>add alert and configure webhook"]
+        DS["<b>External data source library</b><br/>stocks: barchart, cnn fear greed<br/>crypto: messari, chainanalysis,<br/>cmc, alternativeme fear greed"]
+    end
+
+    subgraph Infra1["Infra - Before market open"]
+        StartBefore["<b>Start script</b><br/>Before market open"]
+        CronBefore["<b>Cron trigger</b><br/>before market open"]
+        StopOpen["<b>Stop script</b><br/>After market open"]
+    end
+    
+    subgraph Infra2["Infra - After market close"]
+        StartClose["<b>Start script</b><br/>Before market close"]
+        CronAfter["<b>Cron trigger</b><br/>after market close"]
+        StopClose["<b>Stop script</b><br/>After market close"]
+    end
+
+    subgraph Server["Server"]
+        Redis[("<b>Redis</b><br/>Selenium chromium")]
+        
+        subgraph Jobs["Market data notification"]
+            StocksJob["<b>stocks.py</b><br/>Get trading view data from redis<br/>Get vix central data<br/>Get fear greed index"]
+            CryptoJob["<b>crypto.py</b><br/>Get exchange flow from messari<br/>Get BTC fees from chainanalysis<br/>Get fear greed index"]
+            ShellScript["<b>Shell script</b><br/>Backup redis data<br/>via email attachment"]
+        end
+    end
+
+    Telegram["<b>Telegram channel</b>"]
+    Email["<b>Email provider</b>"]
+
+    %% Purple flow
+    StartBefore -.->|"1"| CronBefore
+    CronBefore -.->|"2"| StocksJob
+    CronBefore -.->|"2"| CryptoJob
+    Redis -.-> StocksJob
+    DS --> StocksJob
+    DS --> CryptoJob
+    StocksJob -.-> Telegram
+    CryptoJob -.-> Telegram
+    StopOpen -.->|"3"| StocksJob
+    StopOpen -.->|"3"| CryptoJob
+    
+    %% Green flow
+    TV -->|"2"| StocksJob
+    StocksJob -->|"2"| Redis
+    StartClose -->|"1"| CronAfter
+    CronAfter -->|"3"| ShellScript
+    ShellScript --> Email
+    StopClose -->|"4"| ShellScript
+
+    %% Color styling
+    linkStyle 0,1,2,3,4,5,6,7,8,9 stroke:#9370DB,stroke-width:3px
+    linkStyle 10,11,12,13,14,15 stroke:#90EE90,stroke-width:3px
+    
+    style TV fill:#FFE4B5
+    style DS fill:#FFE4B5
+    style Telegram fill:#ADD8E6
+    style Email fill:#ADD8E6
+    style Infra1 fill:#F0E6FF
+    style Infra2 fill:#E6FFE6
+```
 * purple flow: send notification before market open
-* green flow: save trading data, backup redis data when market close
+* green flow: send notification, save tradingview data, backup redis data when market close
 
 # How to do local development
 ## Note

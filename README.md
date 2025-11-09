@@ -613,6 +613,10 @@ poetry install --no-cache
 ### Market Data Library Issues
 Note: `market_data_library` is currently not a public Python package. Contact repository maintainers for access.
 
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
 # Contact
 
 - **Issues**: [GitHub Issues](https://github.com/hanchiang/market-data-notification/issues)

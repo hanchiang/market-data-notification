@@ -5,7 +5,7 @@ from typing import List
 from src.notification_destination.telegram_notification import send_message_to_channel, \
     market_data_type_to_admin_chat_id, market_data_type_to_chat_id
 from src.util.exception import get_exception_message
-from src.util.my_telegram import escape_markdown, format_messages_to_telegram
+from src.util.my_telegram import format_messages_to_telegram
 
 
 logger = logging.getLogger('Message sender wrapper')

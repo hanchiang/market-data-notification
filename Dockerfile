@@ -24,9 +24,19 @@ ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 
 COPY pyproject.toml poetry.lock ./
 
-# Install dependencies
-RUN apt update -y && apt install -y curl git wget unzip gnupg xz-utils build-essential && curl -sSL https://install.python-poetry.org | python3 && \
-apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install dependencies. Retry apt to reduce transient mirror/network failures in CI.
+RUN set -eux; \
+    for attempt in 1 2 3; do \
+        if apt-get update -o Acquire::Retries=5 && \
+           apt-get install -y --no-install-recommends --fix-missing curl git wget unzip gnupg xz-utils build-essential; then \
+            break; \
+        fi; \
+        if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+        sleep 5; \
+        rm -rf /var/lib/apt/lists/*; \
+    done; \
+    curl -sSL https://install.python-poetry.org | python3 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install google chrome
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \

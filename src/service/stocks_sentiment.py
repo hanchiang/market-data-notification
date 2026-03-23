@@ -110,7 +110,7 @@ class StocksSentimentService:
             if is_list_out_of_range(data=data.fear_and_greed_historical.data, index=param['list_end_index']):
                 continue
             historical_range_data = data.fear_and_greed_historical.data[param['list_end_index']:-1]
-            historical_score = [historical_data.y for historical_data in historical_range_data]
+            historical_score = [d.y for d in historical_range_data]
             average = mean(historical_score)
             sentiment = self.cnn_service.map_fear_greed_to_text(value=average)
 

@@ -12,7 +12,6 @@ from src.type.trading_view import TradingViewDataType
 from src.util.date_util import get_current_date
 from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram, escape_markdown
-from src.util.sleep import sleep
 
 router = APIRouter(prefix="/tradingview")
 

@@ -9,7 +9,7 @@ def get_crypto_api():
 def get_tradfi_api():
     init_market_data_api()
     return tradfi_api
-    
+
 def init_market_data_api():
     global crypto_api
     global tradfi_api

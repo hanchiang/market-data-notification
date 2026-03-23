@@ -7,7 +7,9 @@ from src.third_party_service.vix_central import ThirdPartyVixCentralService
 from src.util import date_util
 
 class VixFuturesValue:
-    def __init__(self, contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio()):
+    def __init__(self, contango_single_day_decrease_alert_ratio=None):
+        if contango_single_day_decrease_alert_ratio is None:
+            contango_single_day_decrease_alert_ratio = config.get_contango_single_day_decrease_threshold_ratio()
         # "yyyy-mm-dd". 2022-12-30
         self.current_date: str = None
         # "yyyy mmm". e.g. 2022 Jan
@@ -28,7 +30,9 @@ class VixFuturesValue:
         self.contango_single_day_decrease_alert_ratio: float = contango_single_day_decrease_alert_ratio
 
 class RecentVixFuturesValues:
-    def __init__(self, decrease_past_n_days = config.get_contango_decrease_past_n_days_threshold()):
+    def __init__(self, decrease_past_n_days=None):
+        if decrease_past_n_days is None:
+            decrease_past_n_days = config.get_contango_decrease_past_n_days_threshold()
         # store values of the upcoming VIX futures(next month)
         # list of dict in reverse chronological order of current_date.
         self.vix_futures_values: List[VixFuturesValue] = []
@@ -45,8 +49,16 @@ class VixCentralService:
     # month of the vix futures we are interested in. e.g. "Jan"
     MONTH_OF_INTEREST = None
 
-    def __init__(self, third_party_service = ThirdPartyVixCentralService, number_of_days_to_store = config.get_vix_central_number_of_days(),
-                 contango_decrease_past_n_days_threshold = config.get_contango_decrease_past_n_days_threshold()):
+    def __init__(
+        self,
+        third_party_service=ThirdPartyVixCentralService,
+        number_of_days_to_store=None,
+        contango_decrease_past_n_days_threshold=None,
+    ):
+        if number_of_days_to_store is None:
+            number_of_days_to_store = config.get_vix_central_number_of_days()
+        if contango_decrease_past_n_days_threshold is None:
+            contango_decrease_past_n_days_threshold = config.get_contango_decrease_past_n_days_threshold()
         self.number_of_days_to_store = number_of_days_to_store
         self.contango_decrease_past_n_days_threshold = contango_decrease_past_n_days_threshold
         self.third_party_service = third_party_service
@@ -77,7 +89,7 @@ class VixCentralService:
             self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
             historical_dates = []
 
-            for i in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
+            for _ in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
                 # subtract days from previously used historical date, or from current date
                 reference_date = historical_dates[len(historical_dates) - 1] if len(
                     historical_dates) > 0 else current_date

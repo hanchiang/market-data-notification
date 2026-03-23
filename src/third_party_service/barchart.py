@@ -3,7 +3,7 @@ from typing import List
 from src.data_source.market_data_library import get_tradfi_api
 from market_data_library.types import barchart_type
 class ThirdPartyBarchartService:
-    def __init__(self): 
+    def __init__(self):
         self.barchart_stocks = get_tradfi_api().barchart.barchart_stocks
 
     async def cleanup(self):

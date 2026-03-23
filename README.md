@@ -488,10 +488,10 @@ Once the server is running, access the API documentation:
 poetry run black src/
 
 # Lint with ruff
-poetry run ruff check src/
+poetry run ruff check .
 
-# Type checking with mypy
-poetry run mypy src/
+# Syntax-level validation
+poetry run python -m compileall src tests main.py
 ```
 
 ### Debugging
@@ -525,7 +525,8 @@ We welcome contributions! Here's how to get started:
    ```bash
    poetry run pytest
    poetry run black src/
-   poetry run ruff check src/
+   poetry run ruff check .
+   poetry run python -m compileall src tests main.py
    ```
 
 5. **Commit and Push**

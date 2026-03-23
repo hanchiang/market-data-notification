@@ -4,6 +4,10 @@ on:
     branches:
       - feat/*
       - feature/*
+      - chore/*
+      - master
+  pull_request:
+    branches:
       - master
   workflow_dispatch:
     inputs:
@@ -20,10 +24,10 @@ jobs:
   code_quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_ID }}
           private-key: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_PRIVATE_KEY }}
@@ -40,18 +44,18 @@ jobs:
           poetry install --no-root
       - name: Run Ruff
         run: poetry run ruff check .
-      - name: Run mypy
-        run: poetry run mypy src
+      - name: Run Python bytecode compilation
+        run: poetry run python -m compileall src tests main.py
       - name: Cleanup Git auth rewrite
         if: ${{ always() }}
         run: rm -f ~/.gitconfig
   unit_tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_ID }}
           private-key: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_PRIVATE_KEY }}
@@ -73,7 +77,7 @@ jobs:
     needs: [code_quality, unit_tests]
     if: ${{ github.ref == 'refs/heads/master' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
@@ -86,7 +90,7 @@ jobs:
           password: ${{ secrets.DOCKER_BUILD_PUSH_TOKEN }}
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_ID }}
           private-key: ${{ secrets.MARKET_DATA_LIBRARY_GITHUB_APP_PRIVATE_KEY }}

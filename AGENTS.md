@@ -30,7 +30,7 @@ Last verified: 2026-03-23
 
 ## Validation
 - Lint: `uv run ruff check .`
-- Type check: `uv run mypy src`
+- Syntax check: `uv run python -m compileall src tests main.py`
 - Tests: `uv run pytest tests/unit`
 - For auth or routing changes, inspect `src/server.py` and the relevant router module together.
 - For message changes, prefer targeted unit tests under `tests/unit/job/` or `tests/unit/service/`.

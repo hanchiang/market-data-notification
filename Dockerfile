@@ -40,13 +40,12 @@ elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     cp chromium-browser-85.0.4183.83/chromium-browser /usr/local/bin; \
 fi
 
-# set up ssh for market data library
-RUN --mount=type=secret,id=ssh_private_key mkdir -p /root/.ssh \
-&& ssh-keyscan github.com >> /root/.ssh/known_hosts \
-&& cat /run/secrets/ssh_private_key >> /root/.ssh/id_rsa \
-&& chmod 600 /root/.ssh/id_rsa \
+# set up GitHub authentication for the private market data library
+RUN --mount=type=secret,id=github_token git config --global \
+    url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \
+    ssh://git@github.com/ \
 && poetry install --no-root \
-&& rm -f /root/.ssh/id_rsa
+&& rm -f /root/.gitconfig
 
 COPY . .
 
@@ -60,10 +59,10 @@ CMD ["poetry", "run", "pytest"]
 
 FROM base AS release
 COPY --from=base . .
-RUN --mount=type=secret,id=ssh_private_key rm -rf $(poetry env info --path) \
+RUN --mount=type=secret,id=github_token rm -rf $(poetry env info --path) \
+&& git config --global \
+    url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \
+    ssh://git@github.com/ \
 && poetry install --only main --no-root \
-&& cat /run/secrets/ssh_private_key >> /root/.ssh/id_rsa \
-&& chmod 600 /root/.ssh/id_rsa \
-&& poetry install --no-root \
-&& rm -f /root/.ssh/id_rsa
+&& rm -f /root/.gitconfig
 CMD ["poetry", "run", "python3", "main.py"]

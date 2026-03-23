@@ -14,18 +14,24 @@ from src.util.list_util import is_list_out_of_range
 logger = logging.getLogger('Stocks sentiment service')
 class StocksSentimentService:
     def __init__(self):
-        env = config.get_env()
         selenium_remote_mode = config.get_selenium_remote_mode()
+        selenium_server_host = config.get_selenium_server_host()
         selenium_stealth = config.get_selenium_stealth()
 
-        server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
         logger.info(
             'Initialising CNN fear/greed scraper with remote_mode=%s, server_host=%s, stealth=%s',
             selenium_remote_mode,
-            server_host,
+            selenium_server_host if selenium_remote_mode else 'local-browser',
             selenium_stealth,
         )
-        tradfi_api = TradFiAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
+        tradfi_api_kwargs = {
+            'is_stealth': selenium_stealth,
+            'remote_mode': selenium_remote_mode,
+        }
+        if selenium_server_host is not None:
+            tradfi_api_kwargs['server_host'] = selenium_server_host
+
+        tradfi_api = TradFiAPI(**tradfi_api_kwargs)
         cnn_api = tradfi_api.cnn
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_type

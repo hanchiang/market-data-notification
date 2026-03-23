@@ -11,6 +11,14 @@ def get_env():
 def get_selenium_remote_mode():
     return os.getenv('SELENIUM_REMOTE_MODE', 'false') == 'true'
 
+def get_selenium_server_host():
+    host = os.getenv('SELENIUM_SERVER_HOST', None)
+    if get_selenium_remote_mode() and not host:
+        raise RuntimeError(
+            'SELENIUM_SERVER_HOST is missing while SELENIUM_REMOTE_MODE=true'
+        )
+    return host
+
 def get_selenium_stealth():
     return os.getenv('SELENIUM_STEALTH', 'true') == 'true'
 

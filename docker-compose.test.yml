@@ -7,7 +7,7 @@ services:
       context: .
       target: test
       secrets:
-        - source: ssh_private_key
+        - source: github_token
           mode: 0600
     working_dir: /app
     env_file: .env.test
@@ -28,5 +28,5 @@ volumes:
   redis_data:
 
 secrets:
-  ssh_private_key:
-    file: secret/id_rsa
+  github_token:
+    file: secret/github_token

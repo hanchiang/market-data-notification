@@ -334,22 +334,41 @@ IS_TESTING_TELEGRAM=false
    # Or visit: https://python-poetry.org/docs/
    ```
 
-3. **Install Dependencies**
+3. **Ensure GitHub SSH access for the private `market-data-library` dependency**
+   ```bash
+   ssh -T git@github.com
+   ```
+   `poetry install` clones `git@github.com:hanchiang/market_data_api.git`, so the machine running the install must have an SSH key with access to that private repository.
+
+4. **Install Dependencies**
    ```bash
    poetry install
    ```
+   This keeps the Git-based dependency as the baseline install, which is useful for validating that the private repository is accessible.
 
-4. **Start Redis**
+5. **Optional: switch to the sibling `market-data-library/` repo for local development**
+   ```bash
+   ./scripts/use_local_market_data_library.sh
+   ```
+   This overlays the local workspace copy into the Poetry environment so local backend runs pick up uncommitted library changes immediately.
+
+6. **Optional: switch back to the Git dependency for validation**
+   ```bash
+   ./scripts/use_git_market_data_library.sh
+   ```
+   This reinstalls the library from Git so you can re-validate the private repository install path without recreating the whole environment.
+
+7. **Start Redis**
    ```bash
    redis-server
    ```
 
-5. **Run the Server**
+8. **Run the Server**
    ```bash
    poetry run python main.py
    ```
 
-6. **Run Jobs Manually**
+9. **Run Jobs Manually**
    ```bash
    # Stocks job (force run in test mode)
    ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1
@@ -365,10 +384,30 @@ IS_TESTING_TELEGRAM=false
    # Visit: https://docs.docker.com/engine/install/
    ```
 
-2. **Start Services**
+2. **Provide a GitHub token for Docker builds**
+   ```bash
+   mkdir -p secret
+   printf '%s' "$GITHUB_TOKEN_WITH_REPO_ACCESS" > secret/github_token
+   ```
+   Docker-based installs rewrite the Git dependency to HTTPS at build time and read the token from `secret/github_token`. In CI this token is expected to come from a GitHub App installation token created with `MARKET_DATA_LIBRARY_GITHUB_APP_ID` and `MARKET_DATA_LIBRARY_GITHUB_APP_PRIVATE_KEY`.
+
+3. **Start Services**
    ```bash
    docker-compose up -d
    ```
+
+### Image Build Notes
+
+- `workflow_dispatch` on `.github/workflows/test.yml` now includes a native `linux/arm64` release-image validation job on `ubuntu-24.04-arm`.
+- The repo still contains a local helper script, `local-build-push-dockerfile.sh`, for manual image build and push workflows.
+- The local helper expects `secret/github_token` to already exist and uses the same `github_token` Docker build secret contract as the Dockerfiles.
+- Example local push flow:
+  ```bash
+  mkdir -p secret
+  printf '%s' "$GITHUB_TOKEN_WITH_REPO_ACCESS" > secret/github_token
+  ./local-build-push-dockerfile.sh "$GITHUB_SHA"
+  ```
+- Treat the GitHub Actions workflow and Dockerfiles as the canonical build path. Use the local helper as an operator convenience when you intentionally want to build and push from your machine.
 
 3. **Run Jobs in Container**
    ```bash

@@ -19,6 +19,12 @@ class StocksSentimentService:
         selenium_stealth = config.get_selenium_stealth()
 
         server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
+        logger.info(
+            'Initialising CNN fear/greed scraper with remote_mode=%s, server_host=%s, stealth=%s',
+            selenium_remote_mode,
+            server_host,
+            selenium_stealth,
+        )
         tradfi_api = TradFiAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
         cnn_api = tradfi_api.cnn
         self.cnn_service = cnn_api.cnn_service

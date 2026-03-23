@@ -398,16 +398,17 @@ IS_TESTING_TELEGRAM=false
 
 ### Image Build Notes
 
-- `workflow_dispatch` on `.github/workflows/test.yml` now includes a native `linux/arm64` release-image validation job on `ubuntu-24.04-arm`.
-- The repo still contains a local helper script, `local-build-push-dockerfile.sh`, for manual image build and push workflows.
+- Pushes to `master` on `.github/workflows/test.yml` now publish the canonical multi-arch release image for `linux/amd64` and `linux/arm64`, tagged with the commit SHA.
+- The repo still contains a local helper script, `local-build-push-dockerfile.sh`, for manual image build and push recovery workflows.
 - The local helper expects `secret/github_token` to already exist and uses the same `github_token` Docker build secret contract as the Dockerfiles.
+- Manual deploys can target either an exact published commit SHA or the special value `latest-successful-master`, which resolves to the newest successful `master` CI publish.
 - Example local push flow:
   ```bash
   mkdir -p secret
   printf '%s' "$GITHUB_TOKEN_WITH_REPO_ACCESS" > secret/github_token
   ./local-build-push-dockerfile.sh "$GITHUB_SHA"
   ```
-- Treat the GitHub Actions workflow and Dockerfiles as the canonical build path. Use the local helper as an operator convenience when you intentionally want to build and push from your machine.
+- Treat the GitHub Actions workflow and Dockerfiles as the canonical build path. Use the local helper only as a fallback when you intentionally need to backfill or recover a published image from your machine.
 
 3. **Run Jobs in Container**
    ```bash

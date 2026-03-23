@@ -1,13 +1,21 @@
 name: Build and deploy
+permissions:
+  actions: read
+  contents: read
+  packages: read
 on:
-#  workflow_run:
-#    workflows: [Test and build]
-#    types:
-#      - completed
-#    branches:
-#      - master
+  workflow_run:
+    workflows: [Test and build]
+    types:
+      - completed
+    branches:
+      - master
   workflow_dispatch:
     inputs:
+      image_sha:
+        description: 'Published image SHA to deploy, or latest-successful-master'
+        required: true
+        type: string
       logLevel:
         description: 'Log level'
         required: false
@@ -22,75 +30,55 @@ env:
   SSH_HOST: ${{ secrets.SSH_HOST }}
   APP_NAME: market_data_notification
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_USER: ${{ github.repository_owner }}
 jobs:
-  build_and_upload:
+  resolve_image:
     runs-on: ubuntu-latest
-    # TODO: Build and push multi-arch docker image locally, github ci supports arm64 or a better solution is found
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      image_sha: ${{ steps.resolve.outputs.image_sha }}
     steps:
-#      - name: Set up Docker Buildx
-#        uses: docker/setup-buildx-action@v2
-#      - name: Login to GitHub Container Registry
-#        uses: docker/login-action@v2
-#        with:
-#          registry: ghcr.io
-#          # Can't use self-defined environment variables for some reason
-#          username: ${{ github.actor }}
-#          password: ${{ secrets.DOCKER_BUILD_PUSH_TOKEN }}
-#      - name: Setup SSH key
-#        env:
-#          REPO_SSH_PRIVATE_KEY: ${{ secrets.REPO_SSH_PRIVATE_KEY }}
-#        run: |
-#          mkdir secret
-#          echo "$REPO_SSH_PRIVATE_KEY" > secret/id_rsa
-#      - name: Build and push image
-#        uses: docker/build-push-action@v3
-#        with:
-#          secret-files: |
-#            "ssh_private_key=secret/id_rsa"
-#          push: true
-#          target: release
-#          tags: ghcr.io/${{ github.repository_owner }}/market_data_notification:${{ github.sha }}
-#          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/market_data_notification:buildcache
-#          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/market_data_notification:buildcache,mode=max
-#      - name: Teardown SSH key
-#        run: |
-#          rm -rf secret/id_rsa
-      - name: Delete old github package versions
-        uses: actions/delete-package-versions@v4
-        with:
-          package-name: 'market_data_notification'
-          package-type: 'container'
-          min-versions-to-keep: 50
-          token: ${{ secrets.DELETE_OLD_PACKAGE_TOKEN }}
-
-  health_check:
-    runs-on: ubuntu-latest
-    needs: [build_and_upload]
-    steps:
-      - name: Check whether market data notification is up
-        id: health_check
-        run: |
-          curl $SSH_HOST/healthz
-  notify_unsuccessful_health_check:
-    runs-on: ubuntu-latest
-    needs: [health_check]
-    if: ${{ failure() }}
-    steps:
-      - name: Send telegram notification unsuccessful run
+      - name: Resolve published image SHA
+        id: resolve
         env:
-          STOCKS_TELEGRAM_DEV_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_DEV_BOT_TOKEN }}
-          STOCKS_TELEGRAM_DEV_ID: ${{ secrets.STOCKS_TELEGRAM_DEV_ID }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          now=$(date +%Y-%m-%dT%H:%M:%S%:z)
-          text=$(echo "\[Github action\] Market data notification backend build and deploy failed at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
-          curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
-          exit 1
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]
+          then
+            image_sha="${{ inputs.image_sha }}"
+            if [ "$image_sha" = "latest-successful-master" ]
+            then
+              image_sha=$(curl -fsSL \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs?branch=master&status=completed&per_page=100" \
+                | python3 -c 'import json,sys; data=json.load(sys.stdin); runs=[run for run in data["workflow_runs"] if run["name"]=="Test and build" and run["conclusion"]=="success"]; print(runs[0]["head_sha"] if runs else "")')
+            fi
+          else
+            image_sha="${{ github.event.workflow_run.head_sha }}"
+          fi
+          if [ -z "$image_sha" ]
+          then
+            echo "image sha is required"
+            exit 1
+          fi
+          echo "image_sha=$image_sha" >> "$GITHUB_OUTPUT"
   deploy:
     runs-on: ubuntu-latest
-    needs: [health_check]
+    needs: [resolve_image]
     steps:
       - uses: actions/checkout@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_PULL_TOKEN }}
+      - name: Verify published image exists
+        env:
+          IMAGE_SHA: ${{ needs.resolve_image.outputs.image_sha }}
+        run: |
+          docker manifest inspect "$IMAGE_REGISTRY/$APP_NAME:$IMAGE_SHA" > /dev/null
       - name: Configure SSH
         id: ssh
         env:
@@ -108,9 +96,13 @@ jobs:
             IdentityFile ~/.ssh/market_data_notification_rsa
             StrictHostKeyChecking no
           EOF
+      - name: Check SSH connectivity
+        run: |
+          ssh production 'echo "SSH connectivity confirmed"'
       - name: SSH into server, pull image, run container
         id: deploy
         env:
+          IMAGE_SHA: ${{ needs.resolve_image.outputs.image_sha }}
           DOCKER_PULL_PASSWORD: ${{ secrets.DOCKER_PULL_TOKEN }}
           STOCKS_TELEGRAM_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_BOT_TOKEN }}
           STOCKS_TELEGRAM_CHANNEL_ID: ${{ secrets.STOCKS_TELEGRAM_CHANNEL_ID }}
@@ -151,7 +143,7 @@ jobs:
           echo $DOCKER_PULL_PASSWORD | docker login ghcr.io -u $REGISTRY_USER --password-stdin
 
           echo "Pulling image"
-          docker pull "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
+          docker pull "$IMAGE_REGISTRY/$APP_NAME:$IMAGE_SHA"
 
           echo "Stopping existing container"
           docker stop $APP_NAME || true
@@ -178,10 +170,10 @@ jobs:
           -e API_AUTH_TOKEN=$API_AUTH_TOKEN -e AUTH_EXCLUDE_ENDPOINTS=$AUTH_EXCLUDE_ENDPOINTS \
           -e CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD=$CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD \
           -e CMC_COIN_MARKET_CAP_CHANGE_24H_PERCENTAGE_THRESHOLD=$CMC_COIN_MARKET_CAP_CHANGE_24H_PERCENTAGE_THRESHOLD \
-          -d "$IMAGE_REGISTRY/$APP_NAME:$GITHUB_SHA"
+          -d "$IMAGE_REGISTRY/$APP_NAME:$IMAGE_SHA"
           
           echo "Starting chrome container"
-          # peak memory usage is around 600m
+          # peak memory usage is around 1.18gb, why is it so high?!
           docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1g" --cpus="1" -d seleniarm/standalone-chromium:114.0-20230615
 
           sleep 3
@@ -189,11 +181,27 @@ jobs:
 
           docker image prune -fa
           EOF
-          rm -rf ~/.ssh
+      - name: Wait for post-deploy health check
+        run: |
+          for attempt in $(seq 1 12)
+          do
+            if curl -fsS "$SSH_HOST/healthz" > /dev/null
+            then
+              echo "market_data_notification is healthy"
+              exit 0
+            fi
+            echo "Waiting for post-deploy health check, attempt $attempt"
+            sleep 10
+          done
+          echo "market_data_notification did not become healthy"
+          exit 1
+      - name: Cleanup SSH configuration
+        if: ${{ always() }}
+        run: rm -rf ~/.ssh
   notify_unsuccessful:
     runs-on: ubuntu-latest
-    needs: [deploy]
-    if: ${{ failure() }}
+    needs: [resolve_image, deploy]
+    if: ${{ always() && (needs.resolve_image.result == 'failure' || needs.deploy.result == 'failure') }}
     steps:
       - name: Send telegram notification unsuccessful run
         env:
@@ -206,6 +214,7 @@ jobs:
   notify_successful:
     runs-on: ubuntu-latest
     needs: [deploy]
+    if: ${{ needs.deploy.result == 'success' }}
     steps:
       - name: Send telegram notification successful run
         env:
@@ -215,4 +224,3 @@ jobs:
           now=$(date +%Y-%m-%dT%H:%M:%S%:z)
           text=$(echo "\[Github action\] Market data notification backend build and deploy succeeded at $now. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | sed 's~[[:blank:]]~%20~g')
           curl "https://api.telegram.org/bot${STOCKS_TELEGRAM_DEV_BOT_TOKEN}/sendMessage?chat_id=${STOCKS_TELEGRAM_DEV_ID}&text=$text"
-

@@ -218,6 +218,9 @@ atlassian-ide-plugin.xml
 # Cursive Clojure plugin
 .idea/replstate.xml
 
+ACTIVE_TASK.md
+ACTIVE_TASKS/
+
 # SonarLint plugin
 .idea/sonarlint/
 

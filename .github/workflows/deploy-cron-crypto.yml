@@ -1,11 +1,5 @@
 name: Deploy cron crypto
 on:
-  workflow_run:
-    workflows: [Test and build]
-    types:
-      - completed
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       logLevel:

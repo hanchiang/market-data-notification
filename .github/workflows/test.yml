@@ -2,6 +2,7 @@ name: Test and build
 on:
   push:
     branches:
+      - feat/*
       - feature/*
       - master
   workflow_dispatch:

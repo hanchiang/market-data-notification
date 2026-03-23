@@ -21,6 +21,7 @@ services:
       - ./src:/app/src
     environment:
       ENV: dev
+      SELENIUM_REMOTE_MODE: "true"
   redis:
     container_name: redis
     build:

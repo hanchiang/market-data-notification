@@ -10,7 +10,6 @@ from market_data_library.types import cnn_type
 
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.list_util import is_list_out_of_range
-from src.util.logger import logger
 
 logger = logging.getLogger('Stocks sentiment service')
 class StocksSentimentService:
@@ -18,8 +17,14 @@ class StocksSentimentService:
         env = config.get_env()
         selenium_remote_mode = config.get_selenium_remote_mode()
         selenium_stealth = config.get_selenium_stealth()
-        
+
         server_host = 'http://localhost:4444' if env == 'prod' else 'http://chrome:4444'
+        logger.info(
+            'Initialising CNN fear/greed scraper with remote_mode=%s, server_host=%s, stealth=%s',
+            selenium_remote_mode,
+            server_host,
+            selenium_stealth,
+        )
         tradfi_api = TradFiAPI(server_host=server_host, is_stealth=selenium_stealth, remote_mode=selenium_remote_mode)
         cnn_api = tradfi_api.cnn
         self.cnn_service = cnn_api.cnn_service
@@ -105,7 +110,7 @@ class StocksSentimentService:
             if is_list_out_of_range(data=data.fear_and_greed_historical.data, index=param['list_end_index']):
                 continue
             historical_range_data = data.fear_and_greed_historical.data[param['list_end_index']:-1]
-            historical_score = list(map(lambda d: d.y, historical_range_data))
+            historical_score = [historical_data.y for historical_data in historical_range_data]
             average = mean(historical_score)
             sentiment = self.cnn_service.map_fear_greed_to_text(value=average)
 
@@ -133,4 +138,3 @@ class StocksSentimentService:
     async def get_stocks_fear_greed_index_from_source(self) -> cnn_type.CnnFearGreedIndex:
         fear_greed_res: cnn_type.CnnFearGreedIndex = await self.cnn_service.get_fear_greed_index()
         return fear_greed_res
-

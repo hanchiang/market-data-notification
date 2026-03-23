@@ -395,6 +395,7 @@ IS_TESTING_TELEGRAM=false
    ```bash
    docker-compose up -d
    ```
+   The Docker Compose backend enables `SELENIUM_REMOTE_MODE=true` so CNN fear/greed scraping uses the sibling `chrome` Selenium container instead of trying to launch a local browser inside the backend container.
 
 ### Image Build Notes
 

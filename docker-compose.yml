@@ -22,6 +22,7 @@ services:
     environment:
       ENV: dev
       SELENIUM_REMOTE_MODE: "true"
+      SELENIUM_SERVER_HOST: "http://chrome:4444"
   redis:
     container_name: redis
     build:

@@ -3,6 +3,7 @@
 .vscode
 .mypy_cache
 venv
+.venv
 Dockerfile
 my_readme.txt
 README.md

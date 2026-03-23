@@ -395,7 +395,7 @@ IS_TESTING_TELEGRAM=false
    ```bash
    docker-compose up -d
    ```
-   The Docker Compose backend enables `SELENIUM_REMOTE_MODE=true` so CNN fear/greed scraping uses the sibling `chrome` Selenium container instead of trying to launch a local browser inside the backend container.
+   The Docker Compose backend enables `SELENIUM_REMOTE_MODE=true` and `SELENIUM_SERVER_HOST=http://chrome:4444` so CNN fear/greed scraping uses the sibling `chrome` Selenium container instead of trying to launch a local browser inside the backend container.
 
 ### Image Build Notes
 
@@ -598,6 +598,10 @@ The project uses GitHub Actions for automated deployment. Ensure these secrets a
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_*_CHAT_ID` (for each channel)
 - Redis connection details
+
+The deploy workflow also expects Selenium-related GitHub Actions variables:
+- `SELENIUM_REMOTE_MODE=true`
+- `SELENIUM_SERVER_HOST=http://localhost:4444`
 
 # Roadmap
 

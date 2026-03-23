@@ -237,3 +237,4 @@ secrets/
 secret/
 my_readme.txt
 local-build-push-dockerfile.sh
+pinescript/

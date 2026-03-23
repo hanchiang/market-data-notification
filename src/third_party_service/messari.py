@@ -54,7 +54,7 @@ class ThirdPartyMessariService:
             }
         }
 
-        space_regex = re.compile(f'\s+')
+        space_regex = re.compile(r'\s+')
         variables_cleaned = re.sub(space_regex, '', json.dumps(variables))
         extensions_cleaned = re.sub(space_regex, '', json.dumps(extensions))
 

@@ -55,13 +55,12 @@ class TestTopSectorsMessageSender:
         coin_detail = cmc_type.CoinDetail(**data)
 
         coin_detail.statistics = cmc_type.CoinDetailStatistics(**data.get('statistics', {}))
-        coin_detail.relatedCoins = list(map(
-            lambda x: cmc_type.RelatedCoin(**x), data.get('relatedCoins', [])))
-        coin_detail.relatedExchanges = list(map(lambda x: cmc_type.RelatedExchange(**x), data.get('relatedExchanges', [])))
-        coin_detail.wallets = list(map(lambda x: cmc_type.CoinDetailWallet(**x), data.get('wallets', [])))
+        coin_detail.relatedCoins = [cmc_type.RelatedCoin(**x) for x in data.get('relatedCoins', [])]
+        coin_detail.relatedExchanges = [cmc_type.RelatedExchange(**x) for x in data.get('relatedExchanges', [])]
+        coin_detail.wallets = [cmc_type.CoinDetailWallet(**x) for x in data.get('wallets', [])]
         coin_detail.holders = cmc_type.CoinDetailHolder(**data.get('holders', {}))
-        coin_detail.faqDescription = list(map(lambda x: cmc_type.FAQ(**x), data.get('faqDescription', [])))
-        coin_detail.cryptoRating = list(map(lambda x: cmc_type.CryptoRating(**x), data.get('cryptoRating', [])))
+        coin_detail.faqDescription = [cmc_type.FAQ(**x) for x in data.get('faqDescription', [])]
+        coin_detail.cryptoRating = [cmc_type.CryptoRating(**x) for x in data.get('cryptoRating', [])]
 
         self.coin_detail = coin_detail
 

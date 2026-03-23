@@ -119,7 +119,7 @@ def get_display_vix_futures_contango_decrease_past_n_days() -> bool:
 def get_number_of_past_days_range_for_stock_volume_rank() -> Tuple[int, int]:
     data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', '5,30')
     string_list = data.replace(' ', '').split(',')
-    return tuple(map(lambda x: int(x), string_list))
+    return tuple((int(x) for x in string_list))
 def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
     if not get_is_testing_telegram():
         return value
@@ -226,11 +226,11 @@ def get_should_send_stocks_sentiment_message():
 def get_cmc_coin_price_change_24h_percentage_threshold() -> float:
     try:
         return float(os.getenv('CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD', '10'))
-    except Exception as e:
+    except Exception:
         return 10
 
 def get_cmc_market_cap_change_24h_percentage_threshold() -> float:
     try:
         return float(os.getenv('CMC_COIN_MARKET_CAP_CHANGE_24H_PERCENTAGE_THRESHOLD', '3'))
-    except Exception as e:
+    except Exception:
         return 3

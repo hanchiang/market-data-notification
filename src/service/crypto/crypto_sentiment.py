@@ -99,8 +99,7 @@ class CryptoSentimentService:
 
     # returns data in chronological order
     async def get_crypto_fear_greed_index_from_source(self, days=365) -> alternativeme_type.AlternativeMeFearGreedIndex:
-        if days is None or type(days) is not int:
+        if days is None or not isinstance(days, int):
             days = 365
         data = await self.alternativeme_service.get_fear_greed_index(days=days)
         return data
-

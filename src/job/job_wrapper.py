@@ -11,7 +11,7 @@ from src.notification_destination.telegram_notification import send_message_to_c
     market_data_type_to_admin_chat_id, init_telegram_bots
 from src.util.context_manager import TimeTrackerContext
 from src.util.exception import get_exception_message
-from src.util.my_telegram import format_messages_to_telegram, escape_markdown
+from src.util.my_telegram import format_messages_to_telegram
 from src.type.market_data_type import MarketDataType
 
 

@@ -89,13 +89,13 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
             message = f"{message}\nsymbol: *{symbol}*, close: {escape_markdown(str(close))}, {escape_markdown('ema20(1D)')}: {escape_markdown(str(f'{ema20:.2f}'))}, % diff from ema20: {escape_markdown(close_ema20_delta_percent)}"
 
-            if volumes is not None and type(volumes) is list and len(volumes) > 0:
+            if volumes is not None and isinstance(volumes, list) and len(volumes) > 0:
                 message = f"{message}, volume: {escape_markdown(friendly_number(volumes[0], decimal_places=2))}"
                 # volume rank for recent days
                 if config.get_should_compare_stocks_volume_rank():
                     stock_prices = await self.barchart_service.get_stock_price(symbol=symbol, num_days=30)
                     await sleep(max_sec=0.2)
-                    volumes = list(map(lambda x: x.volume, stock_prices))
+                    volumes = [x.volume for x in stock_prices]
                     max_days_to_compare = self.get_current_data_highest_volume_info(volumes)
                     if max_days_to_compare is not None and len(volumes) > 1:
                         # TODO: configure a separate volume ratio threshold for each symbol
@@ -142,10 +142,15 @@ class TradingViewMessageSender(MessageSenderWrapper):
     # data is ordered in descending order of date. First element is the current day
     # return the number of consecutive past days for which the current volume is greater
     # for test mode, return value even if first day greater count is less than minimum threshold
-    def get_current_data_highest_volume_info(self, data_by_date: List[float],
-                                             num_days_range=config.get_number_of_past_days_range_for_stock_volume_rank()) -> int:
+    def get_current_data_highest_volume_info(
+        self,
+        data_by_date: List[float],
+        num_days_range=None,
+    ) -> int:
         if data_by_date is None or len(data_by_date) < 2:
             return None
+        if num_days_range is None:
+            num_days_range = config.get_number_of_past_days_range_for_stock_volume_rank()
         (num_days_min, num_days_max) = num_days_range
 
         # get the largest number of days that fit within the data length
@@ -182,5 +187,4 @@ class TradingViewMessageSender(MessageSenderWrapper):
         #     return 'zzzzzzzzzzzzzzzzzz'
 
         return symbol
-
 

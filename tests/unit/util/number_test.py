@@ -35,13 +35,13 @@ class TestNumberUtil:
         (decimal.Decimal('0.0000123456'), 4),
     ])
     def test_count_decimal_place_and_decimal_zeros(self, num, expected):
-        count_leading_decimal_zeros(num) == expected
+        assert count_leading_decimal_zeros(num) == expected
 
     @pytest.mark.parametrize('num, decimal_places, expected', [
         (0.00100, 5, '0.001'),
         (1.1000, 4, '1.1'),
-        (1.0000, 4, '1.0000'),
+        (1.0000, 4, '1'),
         (1.01000, 5, '1.01'),
     ])
     def test_format_precision_without_trailing_zero(self, num, decimal_places, expected):
-        format_precision_without_trailing_zero(num, decimal_places) == expected
+        assert format_precision_without_trailing_zero(num, decimal_places) == expected

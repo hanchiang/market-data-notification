@@ -181,7 +181,7 @@ class TestVixCentralService:
         recent_vix_futures_values.vix_futures_values = []
 
         result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
-        assert result.is_contango_decrease_for_past_n_days == False
+        assert result.is_contango_decrease_for_past_n_days is False
 
     def test_compute_contango_alert_threshold_correct_decrease_past_n_days_and_single_day_decrease(self):
         recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
@@ -222,11 +222,11 @@ class TestVixCentralService:
         recent_vix_futures_values.vix_futures_values = vix_futures_values
 
         result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
-        
-        assert result.vix_futures_values[0].is_contango_single_day_decrease_alert == True
-        assert result.vix_futures_values[1].is_contango_single_day_decrease_alert == False
-        assert result.vix_futures_values[2].is_contango_single_day_decrease_alert == False
-        assert result.is_contango_decrease_for_past_n_days == True
+
+        assert result.vix_futures_values[0].is_contango_single_day_decrease_alert is True
+        assert result.vix_futures_values[1].is_contango_single_day_decrease_alert is False
+        assert result.vix_futures_values[2].is_contango_single_day_decrease_alert is False
+        assert result.is_contango_decrease_for_past_n_days is True
 
     def test_compute_contango_negative_value(self):
         recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)

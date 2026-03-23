@@ -80,10 +80,10 @@ class ChainAnalysisService:
                 timeframe=fees_summary['time'], current=fees_summary['current'],
                 change=fees_summary['change'], percent_change=fees_summary['percentChange'], unit=fees_summary['unit']
             ),
-            recent_fees=list(map(lambda ts: RecentFees(ts=int(ts)//1000, values=[
+            recent_fees=[RecentFees(ts=int(ts)//1000, values=[
                 UnitValue(value=main_fees[ts][0]['values'][0], unit='usd'),
                 UnitValue(value=main_fees[ts][0]['values'][1], unit='asset'),
-            ]), unix_ts_list)),
+            ]) for ts in unix_ts_list],
             average_fees=[
                 FeesAverage(timeframe='7d', values=[
                     UnitValue(value=fees_usd[0], unit='usd'),

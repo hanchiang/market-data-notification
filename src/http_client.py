@@ -9,7 +9,9 @@ class HttpClient:
     self.client: ClientSession = None
 
   @staticmethod
-  async def create(base_url: str, headers = {}):
+  async def create(base_url: str, headers = None):
+    if headers is None:
+      headers = {}
     if not base_url:
       raise RuntimeError("base_url is required")
 

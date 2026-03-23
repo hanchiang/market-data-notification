@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from src.config import config
 from src.db.redis import Redis

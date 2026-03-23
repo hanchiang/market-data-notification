@@ -1,4 +1,3 @@
-import math
 import sys
 
 from src.third_party_service.messari import ThirdPartyMessariService
@@ -16,13 +15,13 @@ class AssetMetrics:
 
     def sort_exchange_supply_and_net_flows_descending(self, absolute=False):
         if self.exchange_supply is not None:
-            self.exchange_supply = {k: v for k, v in sorted(self.exchange_supply.items(),
+            self.exchange_supply = dict(sorted(self.exchange_supply.items(),
                                                                key=lambda exchange_obj: MessariService.exchange_usd_quantity_sorter(exchange_obj=exchange_obj, absolute=absolute),
-                                                               reverse=True)}
+                                                               reverse=True))
         if self.exchange_net_flows is not None:
-            self.exchange_net_flows = {k: v for k, v in sorted(self.exchange_net_flows.items(),
+            self.exchange_net_flows = dict(sorted(self.exchange_net_flows.items(),
                                                                   key=lambda exchange_obj: MessariService.exchange_usd_quantity_sorter(exchange_obj=exchange_obj, absolute=absolute),
-                                                                  reverse=True)}
+                                                                  reverse=True))
 
 class MessariService:
     def __init__(self, third_party_service = ThirdPartyMessariService):
@@ -55,10 +54,10 @@ class MessariService:
 
         exchanges = ThirdPartyMessariService.exchanges[:]
         # Exchange supply
-        if exchange_supply.get(f'supplyOnExchangesUsd') is not None and exchange_supply.get(f'supplyOnExchangesNative') is not None:
+        if exchange_supply.get('supplyOnExchangesUsd') is not None and exchange_supply.get('supplyOnExchangesNative') is not None:
             ret_val.exchange_supply = dict(ret_val.exchange_supply, **{'Total': {
-                'usd': exchange_supply.get(f'supplyOnExchangesUsd'),
-                'quantity': exchange_supply.get(f'supplyOnExchangesNative'),
+                'usd': exchange_supply.get('supplyOnExchangesUsd'),
+                'quantity': exchange_supply.get('supplyOnExchangesNative'),
             }})
 
         ret_val.exchange_supply = dict(ret_val.exchange_supply, **{exchange: {

@@ -2,7 +2,6 @@ import datetime
 from unittest.mock import patch
 
 import pytest
-import pytz
 
 from src.util import date_util
 from src.util.date_util import ny_tz

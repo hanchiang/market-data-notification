@@ -18,7 +18,6 @@ class ChainAnalysisMessageSender(MessageSenderWrapper):
         return MarketDataType.CRYPTO
 
     async def format_message(self):
-        symbol = 'BTC'
         messages = []
         # TODO: fix
         # chainanalysis_service = Dependencies.get_chainanalysis_service()

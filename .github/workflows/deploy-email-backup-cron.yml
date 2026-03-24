@@ -62,7 +62,7 @@ jobs:
           STOCKS_TELEGRAM_ADMIN_ID: ${{ secrets.STOCKS_TELEGRAM_ADMIN_ID }}
         run: |
           ssh production "mkdir -p '$REMOTE_BASE_DIR/cron' '$REMOTE_BASE_DIR/config' '$REMOTE_BASE_DIR/logs'"
-          scp ./src/job/email_backup.sh production:"$REMOTE_BASE_DIR/cron/email_backup.sh"
+          scp ./scripts/cron/email_backup.sh production:"$REMOTE_BASE_DIR/cron/email_backup.sh"
           ssh production "chmod 755 '$REMOTE_BASE_DIR/cron/email_backup.sh'"
           # Store secrets in a protected env file instead of exposing them in the crontab command line.
           ssh production "cat > '$REMOTE_BASE_DIR/config/email_backup.env' <<'EOF'

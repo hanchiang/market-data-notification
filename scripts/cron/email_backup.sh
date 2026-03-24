@@ -56,10 +56,9 @@ send_redis_mail() {
     local maildata
 
     redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
-    redis_data=$(echo "$redis_data" | sed -e "s/\"/'/g")
-    unix_timestamp=$(echo "$redis_data" | sed -r "s/.* ([0-9]+)/\1/g")
-    redis_data_date=$(date -d @"$unix_timestamp" +%Y-%m-%d)
-    from_name="han@market-data-notification"
+    unix_timestamp=$(echo "$redis_data" | tail -1)
+    redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
+    from_name="Market data notification"
     redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
 
     maildata='{"personalizations":

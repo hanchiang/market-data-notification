@@ -4,12 +4,6 @@ permissions:
   contents: read
   packages: read
 on:
-  workflow_run:
-    workflows: [Test and build]
-    types:
-      - completed
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       image_sha:
@@ -34,7 +28,6 @@ env:
 jobs:
   resolve_image:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       image_sha: ${{ steps.resolve.outputs.image_sha }}
     steps:
@@ -43,19 +36,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]
+          image_sha="${{ inputs.image_sha }}"
+          if [ "$image_sha" = "latest-successful-master" ]
           then
-            image_sha="${{ inputs.image_sha }}"
-            if [ "$image_sha" = "latest-successful-master" ]
-            then
-              image_sha=$(curl -fsSL \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer $GH_TOKEN" \
-                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs?branch=master&status=completed&per_page=100" \
-                | python3 -c 'import json,sys; data=json.load(sys.stdin); runs=[run for run in data["workflow_runs"] if run["name"]=="Test and build" and run["conclusion"]=="success"]; print(runs[0]["head_sha"] if runs else "")')
-            fi
-          else
-            image_sha="${{ github.event.workflow_run.head_sha }}"
+            image_sha=$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs?branch=master&status=completed&per_page=100" \
+              | python3 -c 'import json,sys; data=json.load(sys.stdin); runs=[run for run in data["workflow_runs"] if run["name"]=="Test and build" and run["conclusion"]=="success"]; print(runs[0]["head_sha"] if runs else "")')
           fi
           if [ -z "$image_sha" ]
           then

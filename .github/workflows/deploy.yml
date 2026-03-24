@@ -208,7 +208,7 @@ jobs:
           echo "Checking candidate container health"
           # Probe from inside the container so rollout does not depend on external DNS or ingress timing.
           docker cp /tmp/market_data_notification_healthcheck.py "\$candidate_name":/tmp/market_data_notification_healthcheck.py
-          for attempt in $(seq 1 12)
+          for attempt in \$(seq 1 12)
           do
             if docker exec "\$candidate_name" python /tmp/market_data_notification_healthcheck.py
             then

@@ -60,7 +60,7 @@ jobs:
       - name: Install crypto cron entries
         run: |
           ssh production "tmp=\$(mktemp); \
-            crontab -l 2>/dev/null | grep -v 'run_notification_job.sh $APP_NAME src/job/crypto/crypto.py' > \"\$tmp\" || true; \
+            crontab -l 2>/dev/null | grep -v 'src/job/crypto/crypto.py' > \"\$tmp\" || true; \
             printf '%s\n' '0 13,14 * * 0-6 /bin/bash $REMOTE_BASE_DIR/cron/run_notification_job.sh $APP_NAME src/job/crypto/crypto.py 0 0 >> $REMOTE_BASE_DIR/logs/crypto.log 2>&1' >> \"\$tmp\"; \
             printf '%s\n' '15 20,21 * * 0-6 /bin/bash $REMOTE_BASE_DIR/cron/run_notification_job.sh $APP_NAME src/job/crypto/crypto.py 0 0 >> $REMOTE_BASE_DIR/logs/crypto.log 2>&1' >> \"\$tmp\"; \
             crontab \"\$tmp\"; \

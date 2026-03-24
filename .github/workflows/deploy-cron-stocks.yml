@@ -61,7 +61,7 @@ jobs:
         run: |
           ssh production "CRON_ENTRY='0 13,14 * * 1-6 /bin/bash $REMOTE_BASE_DIR/cron/run_notification_job.sh $APP_NAME src/job/stocks/stocks.py 0 0 >> $REMOTE_BASE_DIR/logs/stocks.log 2>&1'; \
             tmp=\$(mktemp); \
-            crontab -l 2>/dev/null | grep -v 'run_notification_job.sh $APP_NAME src/job/stocks/stocks.py' > \"\$tmp\" || true; \
+            crontab -l 2>/dev/null | grep -v 'src/job/stocks/stocks.py' > \"\$tmp\" || true; \
             printf '%s\n' \"\$CRON_ENTRY\" >> \"\$tmp\"; \
             crontab \"\$tmp\"; \
             rm -f \"\$tmp\"; \

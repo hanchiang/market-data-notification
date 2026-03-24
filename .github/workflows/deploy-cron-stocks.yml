@@ -1,4 +1,9 @@
 name: Deploy cron stocks
+concurrency:
+  group: market-data-notification-cron-install
+  cancel-in-progress: false
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
@@ -14,81 +19,53 @@ on:
 env:
   SSH_USER: ${{ secrets.SSH_USER }}
   SSH_HOST: ${{ secrets.SSH_HOST }}
+  SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
   APP_NAME: market_data_notification
+  REMOTE_BASE_DIR: /home/${{ secrets.SSH_USER }}/market_data_notification_jobs
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Configure SSH
-        id: ssh
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.ssh/
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/market_data_notification_rsa
+          if [ -z "$SSH_KNOWN_HOSTS" ]
+          then
+            echo "SSH_KNOWN_HOSTS secret must be configured"
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/market_data_notification_rsa
           chmod 600 ~/.ssh/market_data_notification_rsa
-          SSH_HOST_IP=$(nslookup $SSH_HOST | tail -n 2 | head -n 1 | cut -d ' ' -f 2)
-          echo "host name: $SSH_HOST, host ip address: $SSH_HOST_IP"
-          cat << EOF >> ~/.ssh/config
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          cat << EOF > ~/.ssh/config
           Host production
             HostName $SSH_HOST
             User $SSH_USER
             IdentityFile ~/.ssh/market_data_notification_rsa
-            StrictHostKeyChecking no
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
           EOF
       - name: Check SSH connectivity
+        run: ssh production 'echo "SSH connectivity confirmed"'
+      - name: Upload cron runner
         run: |
-          ssh production 'echo "SSH connectivity confirmed"'
-      - name: SSH into server, set my_crontab
-        id: deploy
+          # Install a tracked helper script on the host so cron uses fixed absolute paths.
+          ssh production "mkdir -p '$REMOTE_BASE_DIR/cron' '$REMOTE_BASE_DIR/logs'"
+          scp ./scripts/cron/run_notification_job.sh production:"$REMOTE_BASE_DIR/cron/run_notification_job.sh"
+          ssh production "chmod 755 '$REMOTE_BASE_DIR/cron/run_notification_job.sh'"
+      - name: Install stocks cron entry
         run: |
-          ssh production <<-'EOF'
-          cat << 'EOF2' | tee stocks.sh > /dev/null
-          #! /bin/bash
-
-          app_name=$1
-          file_path=$2
-          force_run=$3
-          test_mode=$4
-          if [ -z "$app_name" ];
-          then
-            echo "app name is required"
-            exit 1
-          fi
-        
-          if [ -z "$file_path" ];
-          then
-            echo "file path is required"
-            exit 1
-          fi
-          
-          docker exec -i $app_name bash << EOF3
-          . $(poetry env info --path)/bin/activate
-          poetry run python3 $file_path --force_run $force_run --test_mode $test_mode
-          EOF3
-          
-          EOF2
-
-          chmod +x stocks.sh
-          crontab -l > mycron
-          echo "0 13,14 * * 1-6 ./stocks.sh market_data_notification src/job/stocks/stocks.py 0 0 > stocks.log 2>&1" >> mycron
-          
-          mv mycron mycron.temp
-          cat mycron.temp | sort | uniq > mycron
-          cp mycron mycron.bak
-          crontab mycron
-          echo $?
-          EOF
-          
-          if [ $? -ne 0 ]
-          then
-            rm -rf ~/.ssh
-            echo "error"
-            exit 1
-          else
-            echo "all good"
-          fi
+          ssh production "CRON_ENTRY='0 13,14 * * 1-6 /bin/bash $REMOTE_BASE_DIR/cron/run_notification_job.sh $APP_NAME src/job/stocks/stocks.py 0 0 >> $REMOTE_BASE_DIR/logs/stocks.log 2>&1'; \
+            tmp=\$(mktemp); \
+            crontab -l 2>/dev/null | grep -v 'run_notification_job.sh $APP_NAME src/job/stocks/stocks.py' > \"\$tmp\" || true; \
+            printf '%s\n' \"\$CRON_ENTRY\" >> \"\$tmp\"; \
+            crontab \"\$tmp\"; \
+            rm -f \"\$tmp\"; \
+            crontab -l"
       - name: Cleanup SSH configuration
         if: ${{ always() }}
         run: rm -rf ~/.ssh

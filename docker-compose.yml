@@ -11,7 +11,7 @@ services:
           mode: 0600
     working_dir: /app
     env_file: .env
-    command: poetry run python3 main.py
+    command: python3 main.py
     depends_on:
       - redis
       - chrome

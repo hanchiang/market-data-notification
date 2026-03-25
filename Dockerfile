@@ -19,7 +19,9 @@ EXPOSE 8080
 
 # set env variables
 ENV PYTHONUNBUFFERED 1
-ENV PATH "${PATH}:/root/.local/bin"
+ENV VIRTUAL_ENV /app/.venv
+ENV POETRY_VIRTUALENVS_IN_PROJECT true
+ENV PATH "${VIRTUAL_ENV}/bin:${PATH}:/root/.local/bin"
 ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
 
 COPY pyproject.toml poetry.lock ./
@@ -62,17 +64,17 @@ COPY . .
 RUN rm -rf "$(pwd)/secret"
 
 FROM base as dev
-CMD ["poetry", "run", "python3", "main.py"]
+CMD ["python3", "main.py"]
 
 FROM base as test
-CMD ["poetry", "run", "pytest"]
+CMD ["pytest"]
 
 FROM base AS release
 COPY --from=base . .
-RUN --mount=type=secret,id=github_token rm -rf $(poetry env info --path) \
+RUN --mount=type=secret,id=github_token rm -rf "$VIRTUAL_ENV" \
 && git config --global \
     url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \
     ssh://git@github.com/ \
 && poetry install --only main --no-root \
 && rm -f /root/.gitconfig
-CMD ["poetry", "run", "python3", "main.py"]
+CMD ["python3", "main.py"]

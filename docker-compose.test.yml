@@ -9,7 +9,7 @@ services:
           mode: 0600
     working_dir: /app
     env_file: .env.test
-    command: poetry run pytest tests/unit
+    command: pytest tests/unit
     depends_on:
       - redis
   redis:

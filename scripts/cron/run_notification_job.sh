@@ -17,5 +17,5 @@ FORCE_RUN=${3:-0}
 TEST_MODE=${4:-0}
 
 # Run inside the existing app container so cron uses the deployed application and dependency set.
-docker exec -i "$CONTAINER_NAME" sh -lc \
-    "cd /app && poetry run python \"$JOB_PATH\" --force_run \"$FORCE_RUN\" --test_mode \"$TEST_MODE\""
+docker exec -i -w /app "$CONTAINER_NAME" python \
+    "$JOB_PATH" --force_run "$FORCE_RUN" --test_mode "$TEST_MODE"

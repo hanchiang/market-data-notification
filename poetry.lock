@@ -793,8 +793,8 @@ tenacity = "^9.1.2"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "1.0.0"
-resolved_reference = "dd76f6e6a93dcd8d86f655bb3b05c4c53c3c9231"
+reference = "1.1.0"
+resolved_reference = "997fd21ff3c9a187d108b3be16acf3641a5cc0e6"
 
 [[package]]
 name = "multidict"
@@ -1872,4 +1872,4 @@ redis = []
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12.0"
-content-hash = "b883083d0dd52188e13f309ac566d5d05733a005f0c55b9c593fc221af2f1f37"
+content-hash = "7462c3a4583e39e889d6c279e59a6415937f75551da05758b62d6d4198081988"

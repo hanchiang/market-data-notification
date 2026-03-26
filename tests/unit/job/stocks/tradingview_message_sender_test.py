@@ -121,3 +121,84 @@ class TestTradingviewMessageSender:
             assert len(res) == 0
         else:
             assert len(res) > 0
+
+    @pytest.mark.asyncio
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    async def test_format_tradingview_message_returns_empty_when_stocks_data_missing(self, get_barchart_service, get_tradingview_service):
+        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(return_value=None)
+
+        res = await tradingview_message_sender.format_message()
+
+        assert res == []
+
+    @pytest.mark.asyncio
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    @patch('src.job.stocks.tradingview_message_sender.config.get_is_testing_telegram')
+    async def test_format_tradingview_message_without_economy_indicator_data(
+        self,
+        get_is_testing_telegram,
+        get_barchart_service,
+        get_tradingview_service,
+        get_current_date_preserve_time,
+    ):
+        redis_score = 1689685800
+        stocks_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.STOCKS,
+                unix_ms=1,
+                data=[
+                    TradingViewStocksData(
+                        symbol='SPY',
+                        timeframe='1D',
+                        close_prices=[10, 11, 12],
+                        ema20s=[10, 11, 12],
+                        volumes=[100, 200, 300],
+                    )
+                ],
+            ),
+        )
+
+        get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(
+            redis_score,
+            tz=datetime.timezone.utc,
+        )
+        get_is_testing_telegram.return_value = False
+
+        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
+            side_effect=[stocks_data, TradingViewRedisData(key='key', score=None, data=None)]
+        )
+        tradingview_message_sender.barchart_service.get_stock_price = AsyncMock(
+            return_value=[
+                barchart_type.StockPrice(
+                    symbol='SPY',
+                    date='2023-06-09',
+                    open_price=429.96,
+                    high_price=431.99,
+                    low_price=428.87,
+                    close_price=429.9,
+                    volume=85647200.0,
+                ),
+                barchart_type.StockPrice(
+                    symbol='SPY',
+                    date='2023-06-08',
+                    open_price=426.62,
+                    high_price=429.6,
+                    low_price=425.82,
+                    close_price=429.13,
+                    volume=61952800.0,
+                ),
+            ]
+        )
+
+        res = await tradingview_message_sender.format_message()
+
+        assert len(res) == 1
+        assert 'Trading view market data' in res[0]
+        assert 'VIX' not in res[0]

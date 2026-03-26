@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Request
 
@@ -27,7 +28,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
     messages = []
     try:
-        body = await request.json()
+        body = await parse_tradingview_request_body(request)
         filtered_body = filter_tradingview_request_body(body)
         logger.info(filtered_body)
     except Exception as e:
@@ -98,6 +99,58 @@ async def reset_is_testing_telegram(original_value: str, delay: int = 3):
     await asyncio.sleep(delay)
     logger.info(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
     config.set_is_testing_telegram(original_value)
+
+async def parse_tradingview_request_body(request: Request) -> dict:
+    raw_body = await request.body()
+    if raw_body is None:
+        raise ValueError('TradingView request body is empty')
+
+    raw_text = raw_body.decode('utf-8').strip()
+    if not raw_text:
+        raise ValueError('TradingView request body is empty')
+
+    body = parse_tradingview_body_text(raw_text)
+    if not isinstance(body, dict):
+        raise ValueError('TradingView request body must be a JSON object')
+
+    return body
+
+def parse_tradingview_body_text(raw_text: str):
+    candidates = [raw_text]
+    form_values = parse_qs(raw_text, keep_blank_values=True)
+    for field in ('payload', 'message', 'data'):
+        candidates.extend(form_values.get(field, []))
+
+    if '\\"' in raw_text:
+        candidates.append(raw_text.replace('\\"', '"'))
+        try:
+            candidates.append(raw_text.encode('utf-8').decode('unicode_escape'))
+        except UnicodeDecodeError:
+            pass
+
+    last_error = None
+    seen = set()
+    while candidates:
+        candidate = candidates.pop(0)
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+
+        if isinstance(parsed, str):
+            candidates.append(parsed)
+            continue
+
+        return parsed
+
+    if last_error is not None:
+        raise last_error
+
+    raise ValueError('TradingView request body is not valid JSON')
 
 def filter_tradingview_request_body(body: dict) -> dict:
     return {k: v for k, v in body.items() if k != 'secret'}

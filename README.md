@@ -456,6 +456,12 @@ poetry run coverage html
    - Save data to a dev key in Redis
    - Send notifications to dev Telegram channels
 
+   Sample TradingView payloads captured from Redis are available under `sample-data/`:
+   - `sample-data/stocks.json`
+   - `sample-data/economy-indicator.json`
+
+   Use them as local reference payloads when replaying or debugging the Redis -> TradingView message -> Telegram path.
+
 3. **Configure TradingView Alert**
    - Use the ngrok HTTPS URL as webhook URL
    - Format: `https://your-ngrok-url.ngrok.io/tradingview/daily-stocks`

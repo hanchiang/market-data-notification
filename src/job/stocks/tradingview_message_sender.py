@@ -38,6 +38,10 @@ class TradingViewMessageSender(MessageSenderWrapper):
     async def format_message(self):
         messages = []
         tradingview_stocks_data = await self.tradingview_service.get_tradingview_daily_stocks_data(type=TradingViewDataType.STOCKS)
+        if tradingview_stocks_data is None or tradingview_stocks_data.data is None or tradingview_stocks_data.score is None:
+            logger.info('No TradingView stocks data found in Redis. Skip formatting message')
+            return messages
+
         now = get_current_date_preserve_time()
         most_recent_day = get_most_recent_non_weekend_or_today(now - datetime.timedelta(days=1))
         time_diff = abs(int(most_recent_day.timestamp()) - tradingview_stocks_data.score)
@@ -48,31 +52,47 @@ class TradingViewMessageSender(MessageSenderWrapper):
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(
             type=TradingViewDataType.ECONOMY_INDICATOR)
 
-        if tradingview_stocks_data is not None and tradingview_stocks_data.data is not None:
-            tradingview_message = await self._format_tradingview_message(stocks_payload=tradingview_stocks_data.data,
-                                                             economy_indicator_payload=tradingview_economy_indicator_data.data)
-            if tradingview_message is not None:
-                tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data.score).strftime("%Y-%m-%d")
-                tradingview_message = f"*Trading view market data at {escape_markdown(tradingview_date)}:*{tradingview_message}"
-                messages.append(tradingview_message)
+        economy_indicator_payload = None if tradingview_economy_indicator_data is None else tradingview_economy_indicator_data.data
+
+        tradingview_message = await self._format_tradingview_message(
+            stocks_payload=tradingview_stocks_data.data,
+            economy_indicator_payload=economy_indicator_payload,
+        )
+        if tradingview_message is not None:
+            tradingview_date = get_datetime_from_timestamp(tradingview_stocks_data.score).strftime("%Y-%m-%d")
+            tradingview_message = f"*Trading view market data at {escape_markdown(tradingview_date)}:*{tradingview_message}"
+            messages.append(tradingview_message)
 
         return messages
 
     # TODO: type
     async def _format_tradingview_message(self, stocks_payload: TradingViewData, economy_indicator_payload: TradingViewData):
-        if len(stocks_payload.data) == 0 and len(economy_indicator_payload.data) == 0:
+        if stocks_payload is None:
             return None
 
-        stocks_list = stocks_payload.data
-        economy_indicator_list = economy_indicator_payload.data
+        stocks_list = stocks_payload.data or []
+        economy_indicator_list = []
+        if economy_indicator_payload is not None and economy_indicator_payload.data is not None:
+            economy_indicator_list = economy_indicator_payload.data
+
+        if len(stocks_list) == 0 and len(economy_indicator_list) == 0:
+            return None
 
         sorted_stocks = sorted(stocks_list, key=lambda x: self._payload_sorter(x, stocks_payload.type))
-        sorted_economy_indicators = sorted(economy_indicator_list, key=lambda x: self._payload_sorter(x, economy_indicator_payload.type))
+        sorted_economy_indicators = []
+        if economy_indicator_payload is not None:
+            sorted_economy_indicators = sorted(
+                economy_indicator_list,
+                key=lambda x: self._payload_sorter(x, economy_indicator_payload.type),
+            )
 
-        message = await self._format_message_for_stocks(sorted_stocks)
-        message = f"{message}{escape_markdown(message_separator())}"
-        message = f"{message}{self._format_message_for_economy_indicators(sorted_economy_indicators)}"
-        return message
+        messages = []
+        if len(sorted_stocks) > 0:
+            messages.append(await self._format_message_for_stocks(sorted_stocks))
+        if len(sorted_economy_indicators) > 0:
+            messages.append(self._format_message_for_economy_indicators(sorted_economy_indicators))
+
+        return escape_markdown(message_separator()).join(messages)
 
     # TODO: refactor this with _format_message_for_economy_indicators
     async def _format_message_for_stocks(self, sorted_payload: List[TradingViewStocksData]):
@@ -187,4 +207,3 @@ class TradingViewMessageSender(MessageSenderWrapper):
         #     return 'zzzzzzzzzzzzzzzzzz'
 
         return symbol
-

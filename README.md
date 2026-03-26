@@ -135,6 +135,7 @@ API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
 
 IS_TESTING_TELEGRAM=false
+USE_TRADINGVIEW_DEV_REDIS_KEYS=false
 ```
 
 ## Local Development
@@ -169,8 +170,15 @@ poetry run python main.py
 Run jobs manually:
 
 ```bash
-ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1
-ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
+ENV=dev poetry run python -m src.job.stocks.stocks --force_run=1 --test_mode=1
+ENV=dev poetry run python -m src.job.crypto.crypto --force_run=1 --test_mode=1
+```
+
+If you invoke the job files directly instead of using `python -m`, add the repo root to `PYTHONPATH` first:
+
+```bash
+PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1
+PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
 ```
 
 ### Option 2: Docker
@@ -193,8 +201,8 @@ The compose backend enables remote Selenium and points CNN fear/greed scraping a
 Run jobs in the backend container:
 
 ```bash
-docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1"
-docker exec -it market_data_notification sh -c "ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1"
+docker exec -it market_data_notification sh -c "ENV=dev poetry run python -m src.job.stocks.stocks --force_run=1 --test_mode=1"
+docker exec -it market_data_notification sh -c "ENV=dev poetry run python -m src.job.crypto.crypto --force_run=1 --test_mode=1"
 ```
 
 ## Testing And Validation
@@ -229,15 +237,15 @@ docker compose up -d redis
 bash scripts/import_tradingview_sample_data_to_redis.sh
 ```
 
-That imports into:
+By default that imports into:
 
-- `tradingview-stocks-dev`
-- `tradingview-economy_indicator-dev`
+- `tradingview-stocks`
+- `tradingview-economy_indicator`
 
-Use production key names instead:
+Use legacy `-dev` key names only when you explicitly want suffix-based isolation in the same Redis instance:
 
 ```bash
-bash scripts/import_tradingview_sample_data_to_redis.sh --mode prod
+bash scripts/import_tradingview_sample_data_to_redis.sh --mode dev
 ```
 
 Show script help:
@@ -284,6 +292,7 @@ docker logs redis
 - Verify bot tokens and chat IDs
 - Check the admin Telegram channel for runtime error notifications
 - Confirm whether `IS_TESTING_TELEGRAM` is routing sends to dev channels
+- Confirm whether `USE_TRADINGVIEW_DEV_REDIS_KEYS` is intentionally enabled before expecting `-dev` TradingView Redis keys
 
 ### Jobs
 

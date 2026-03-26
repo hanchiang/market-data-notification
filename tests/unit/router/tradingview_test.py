@@ -36,6 +36,13 @@ class TestTradingViewRouter:
             await tradingview.parse_tradingview_request_body(request)
 
     @pytest.mark.asyncio
+    async def test_parse_tradingview_request_body_rejects_form_wrapped_payload(self):
+        request = DummyRequest('message={"type":"stocks","unix_ms":1,"data":[]}')
+
+        with pytest.raises(json.JSONDecodeError):
+            await tradingview.parse_tradingview_request_body(request)
+
+    @pytest.mark.asyncio
     async def test_tradingview_daily_stocks_data_saves_escaped_json_payload(self, monkeypatch):
         fixed_now = datetime.datetime(2026, 3, 26, 9, 0, tzinfo=datetime.timezone.utc)
         tradingview_service = SimpleNamespace(

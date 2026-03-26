@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Request
 
@@ -117,10 +116,6 @@ async def parse_tradingview_request_body(request: Request) -> dict:
 
 def parse_tradingview_body_text(raw_text: str):
     candidates = [raw_text]
-    form_values = parse_qs(raw_text, keep_blank_values=True)
-    for field in ('payload', 'message', 'data'):
-        candidates.extend(form_values.get(field, []))
-
     if '\\"' in raw_text:
         candidates.append(raw_text.replace('\\"', '"'))
         try:

@@ -135,7 +135,6 @@ API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
 
 IS_TESTING_TELEGRAM=false
-USE_TRADINGVIEW_DEV_REDIS_KEYS=false
 ```
 
 ## Local Development
@@ -242,12 +241,6 @@ By default that imports into:
 - `tradingview-stocks`
 - `tradingview-economy_indicator`
 
-Use legacy `-dev` key names only when you explicitly want suffix-based isolation in the same Redis instance:
-
-```bash
-bash scripts/import_tradingview_sample_data_to_redis.sh --mode dev
-```
-
 Show script help:
 
 ```bash
@@ -292,7 +285,6 @@ docker logs redis
 - Verify bot tokens and chat IDs
 - Check the admin Telegram channel for runtime error notifications
 - Confirm whether `IS_TESTING_TELEGRAM` is routing sends to dev channels
-- Confirm whether `USE_TRADINGVIEW_DEV_REDIS_KEYS` is intentionally enabled before expecting `-dev` TradingView Redis keys
 
 ### Jobs
 

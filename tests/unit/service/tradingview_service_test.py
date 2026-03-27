@@ -82,31 +82,24 @@ class TestTradingViewService:
         assert res == expected
 
     @pytest.mark.parametrize(
-        'is_testing_telegram, type, expected',
+        'type, expected',
         [
-            (True, TradingViewDataType.STOCKS, 'tradingview-stocks-dev'),
-            (True, TradingViewDataType.ECONOMY_INDICATOR, 'tradingview-economy_indicator-dev'),
-            (False, TradingViewDataType.STOCKS, 'tradingview-stocks'),
-            (False, TradingViewDataType.ECONOMY_INDICATOR, 'tradingview-economy_indicator'),
+            (TradingViewDataType.STOCKS, 'tradingview-stocks'),
+            (TradingViewDataType.ECONOMY_INDICATOR, 'tradingview-economy_indicator'),
         ]
     )
-    @patch('src.service.tradingview_service.config')
-    def test_get_redis_key_for_stocks(self, mock_config, is_testing_telegram, type, expected):
-        mock_config.get_is_testing_telegram.return_value = is_testing_telegram
+    def test_get_redis_key_for_stocks(self, type, expected):
         res = self.tradingview_service.get_redis_key_for_stocks(type=type)
 
         assert res == expected
 
     @pytest.mark.parametrize(
-        'is_testing_telegram, expected',
+        'expected',
         [
-            (True, 'tradingview-crypto-dev'),
-            (False, 'tradingview-crypto'),
+            'tradingview-crypto',
         ]
     )
-    @patch('src.service.tradingview_service.config')
-    def test_get_redis_key_for_crypto(self, mock_config, is_testing_telegram, expected):
-        mock_config.get_is_testing_telegram.return_value = is_testing_telegram
+    def test_get_redis_key_for_crypto(self, expected):
         res = self.tradingview_service.get_redis_key_for_crypto()
 
         assert res == expected

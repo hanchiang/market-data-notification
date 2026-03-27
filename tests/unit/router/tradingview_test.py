@@ -79,3 +79,38 @@ class TestTradingViewRouter:
         saved_payload = json.loads(tradingview_service.save_tradingview_data.await_args.kwargs['data'])
         assert saved_payload == {'type': 'stocks', 'test_mode': 'false', 'unix_ms': 1, 'data': []}
         emitted.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_tradingview_daily_stocks_data_uses_canonical_key_in_test_mode(self, monkeypatch):
+        fixed_now = datetime.datetime(2026, 3, 26, 9, 0, tzinfo=datetime.timezone.utc)
+        tradingview_service = SimpleNamespace(
+            get_redis_key_for_stocks=Mock(return_value='tradingview-stocks'),
+            save_tradingview_data=AsyncMock(return_value=[1, 0]),
+        )
+
+        def discard_task(coro):
+            coro.close()
+            return None
+
+        monkeypatch.setattr(tradingview, 'get_current_date', lambda: fixed_now)
+        monkeypatch.setattr(tradingview.Dependencies, 'get_tradingview_service', lambda: tradingview_service)
+        monkeypatch.setattr(tradingview.async_ee, 'emit', Mock())
+        monkeypatch.setattr(tradingview.asyncio, 'create_task', discard_task)
+        monkeypatch.setattr(tradingview.config, 'get_is_testing_telegram', lambda: False)
+        monkeypatch.setattr(tradingview.config, 'set_is_testing_telegram', lambda _: None)
+        monkeypatch.setattr(tradingview.config, 'get_tradingview_webhook_secret', lambda: 'secret')
+        monkeypatch.setattr(tradingview.config, 'get_simulate_tradingview_traffic', lambda: True)
+        monkeypatch.setattr(tradingview.config, 'get_trading_view_ips', lambda: [])
+        monkeypatch.setattr(tradingview.config, 'get_whitelist_ips', lambda: [])
+        monkeypatch.setattr(tradingview.config, 'get_trading_view_days_to_store', lambda: 30)
+        monkeypatch.setattr(tradingview.config, 'get_telegram_stocks_admin_id', lambda: 'admin-chat')
+
+        request = DummyRequest(
+            r'{\"type\": \"stocks\", \"secret\": \"secret\", \"test_mode\": \"true\", \"unix_ms\": 1, \"data\": []}'
+        )
+
+        response = await tradingview.tradingview_daily_stocks_data(request)
+
+        assert response == {'data': {'num_added': 1, 'num_removed': 0}}
+        tradingview_service.get_redis_key_for_stocks.assert_called_once_with(type=TradingViewDataType.STOCKS)
+        assert tradingview_service.save_tradingview_data.await_args.kwargs['key'] == 'tradingview-stocks'

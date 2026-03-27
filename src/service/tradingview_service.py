@@ -50,17 +50,8 @@ class TradingViewService:
         ])
 
     def get_redis_key_for_stocks(self, type: TradingViewDataType):
-        is_testing_telegram = config.get_is_testing_telegram()
-        key = f'tradingview-{type.value}'
-        if is_testing_telegram:
-            key = f'{key}-dev'
-
-        return key
+        return f'tradingview-{type.value}'
 
     def get_redis_key_for_crypto(self):
-        is_testing_telegram = config.get_is_testing_telegram()
-        key = 'tradingview-crypto'
-        if is_testing_telegram:
-            key = f'{key}-dev'
         # key = f'{key}:{date.year}-{str(date.month).zfill(2)}-{str(date.day).zfill(2)}'
-        return key
+        return 'tradingview-crypto'

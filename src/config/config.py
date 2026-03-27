@@ -1,5 +1,6 @@
 import os
 from typing import Tuple, List
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -17,10 +18,22 @@ def get_selenium_server_host():
         raise RuntimeError(
             'SELENIUM_SERVER_HOST is missing while SELENIUM_REMOTE_MODE=true'
         )
+    if host:
+        parsed_host = urlparse(host if '://' in host else f'http://{host}')
+        if parsed_host.hostname == 'chrome' and not is_running_in_container():
+            raise RuntimeError(
+                'SELENIUM_SERVER_HOST points to the Docker-only host "chrome" '
+                'while this process is running outside a container. Use '
+                'http://localhost:4444 when connecting from the host machine, '
+                'or set SELENIUM_REMOTE_MODE=false for local browser mode.'
+            )
     return host
 
 def get_selenium_stealth():
     return os.getenv('SELENIUM_STEALTH', 'true') == 'true'
+
+def is_running_in_container():
+    return os.path.exists('/.dockerenv')
 
 def get_telegram_stocks_bot_token():
     if not os.getenv('STOCKS_TELEGRAM_BOT_TOKEN', None):
@@ -87,6 +100,9 @@ def get_is_testing_telegram():
 
 def set_is_testing_telegram(testing: str):
     os.environ['IS_TESTING_TELEGRAM'] = testing
+
+def get_use_tradingview_dev_redis_keys():
+    return os.getenv('USE_TRADINGVIEW_DEV_REDIS_KEYS', 'false') == 'true'
 
 def get_simulate_tradingview_traffic():
     return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', 'false') == 'true'

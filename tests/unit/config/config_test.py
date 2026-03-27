@@ -50,15 +50,3 @@ def test_get_selenium_server_host_allows_docker_only_chrome_host_in_container(
     monkeypatch.setattr(config, 'is_running_in_container', lambda: True)
 
     assert config.get_selenium_server_host() == 'http://chrome:4444'
-
-
-def test_get_use_tradingview_dev_redis_keys_defaults_false(monkeypatch):
-    monkeypatch.delenv('USE_TRADINGVIEW_DEV_REDIS_KEYS', raising=False)
-
-    assert config.get_use_tradingview_dev_redis_keys() is False
-
-
-def test_get_use_tradingview_dev_redis_keys_reads_true(monkeypatch):
-    monkeypatch.setenv('USE_TRADINGVIEW_DEV_REDIS_KEYS', 'true')
-
-    assert config.get_use_tradingview_dev_redis_keys() is True

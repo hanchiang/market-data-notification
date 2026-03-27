@@ -101,6 +101,9 @@ def get_is_testing_telegram():
 def set_is_testing_telegram(testing: str):
     os.environ['IS_TESTING_TELEGRAM'] = testing
 
+def get_use_tradingview_dev_redis_keys():
+    return os.getenv('USE_TRADINGVIEW_DEV_REDIS_KEYS', 'false') == 'true'
+
 def get_simulate_tradingview_traffic():
     return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', 'false') == 'true'
 

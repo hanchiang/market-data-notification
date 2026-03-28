@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from market_data_library import CryptoAPI, TradFiAPI
 
@@ -29,4 +29,12 @@ def init_market_data_api() -> None:
             cryptoquant_preferred_exchanges=config.get_cryptoquant_preferred_exchanges(),
         )
     if tradfi_api is None:
-        tradfi_api = TradFiAPI()
+        tradfi_api_kwargs: dict[str, Any] = {
+            'is_stealth': config.get_selenium_stealth(),
+            'remote_mode': config.get_selenium_remote_mode(),
+        }
+        selenium_server_host = config.get_selenium_server_host()
+        if selenium_server_host is not None:
+            tradfi_api_kwargs['server_host'] = selenium_server_host
+
+        tradfi_api = TradFiAPI(**tradfi_api_kwargs)

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 
 from market_data_library.types import cmc_type
 from src.data_source.market_data_library import get_crypto_api
@@ -11,7 +11,7 @@ class CryptoStatsService:
         self.cmc_type = cmc_type
 
     # sort_by: avg_price_change, market_cap_change
-    async def get_sectors_24h_change(self, sort_by='avg_price_change', sort_direction='desc', limit: int = 10) -> Dict[str, List[cmc_type.Sector24hChange]]:
+    async def get_sectors_24h_change(self, sort_by='avg_price_change', sort_direction='desc', limit: int = 10) -> List[cmc_type.Sector24hChange]:
         if sort_by is None or sort_by == '':
             sort_by = 'avg_price_change'
         if sort_direction is None or sort_direction == '':

@@ -11,6 +11,7 @@ from src.data_source.market_data_library import init_market_data_api
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import init_telegram_bots
 from src.router.barchart import thirdparty_barchart
+from src.router.cryptoquant import cryptoquant
 from src.router.sentiment import sentiment
 from src.router.vix_central import thirdparty_vix_central, vix_central
 from src.router.tradingview import tradingview
@@ -26,6 +27,7 @@ app.include_router(thirdparty_vix_central.router)
 app.include_router(vix_central.router)
 app.include_router(thirdparty_barchart.router)
 # crypto
+app.include_router(cryptoquant.router)
 app.include_router(sentiment.router)
 app.include_router(crypto_stats.router)
 

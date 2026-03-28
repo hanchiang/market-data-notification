@@ -1,7 +1,7 @@
 import logging
 
-from src.data_source.market_data_library import get_crypto_api
 from src.service.barchart import BarchartService
+from src.service.crypto.cryptoquant import CryptoQuantService
 from src.service.crypto.crypto_sentiment import CryptoSentimentService
 from src.service.crypto.crypto_stats import CryptoStatsService
 from src.service.stocks_sentiment import StocksSentimentService
@@ -24,7 +24,7 @@ class Dependencies:
   stocks_sentiment_service: StocksSentimentService = None
 
   # crypto
-  cryptoquant_service = None
+  cryptoquant_api_service: CryptoQuantService = None
   crypto_sentiment_service: CryptoSentimentService = None
   crypto_stats_service: CryptoStatsService = None
 
@@ -44,8 +44,7 @@ class Dependencies:
       Dependencies.stocks_sentiment_service = StocksSentimentService()
 
     # crypto
-      Dependencies.cryptoquant_service = get_crypto_api().cryptoquant.cryptoquant_service
-
+      Dependencies.cryptoquant_api_service = CryptoQuantService()
       Dependencies.crypto_sentiment_service = CryptoSentimentService()
       Dependencies.crypto_stats_service = CryptoStatsService()
 
@@ -58,8 +57,10 @@ class Dependencies:
   async def cleanup():
     await Dependencies.vix_central_service.cleanup()
     await Dependencies.barchart_service.cleanup()
-    if Dependencies.cryptoquant_service is not None:
-      await Dependencies.cryptoquant_service.cleanup()
+    if Dependencies.cryptoquant_api_service is not None:
+      service = Dependencies.cryptoquant_api_service.cryptoquant_service
+      if service is not None:
+        await service.cleanup()
 
   # stocks
   @staticmethod
@@ -88,8 +89,8 @@ class Dependencies:
 
   # crypto
   @staticmethod
-  def get_cryptoquant_service():
-    return Dependencies.cryptoquant_service
+  def get_cryptoquant_api_service():
+    return Dependencies.cryptoquant_api_service
 
   @staticmethod
   def get_crypto_sentiment_service():

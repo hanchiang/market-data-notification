@@ -26,7 +26,6 @@ def init_market_data_api() -> None:
     if crypto_api is None:
         crypto_api = CryptoAPI(
             cryptoquant_api_token=config.get_cryptoquant_api_token(),
-            cryptoquant_preferred_exchanges=config.get_cryptoquant_preferred_exchanges(),
         )
     if tradfi_api is None:
         tradfi_api_kwargs: dict[str, Any] = {

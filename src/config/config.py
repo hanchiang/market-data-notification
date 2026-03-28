@@ -244,10 +244,6 @@ def get_cryptoquant_api_token() -> str:
 def has_cryptoquant_api_token() -> bool:
     return bool(get_cryptoquant_api_token().strip())
 
-def get_cryptoquant_preferred_exchanges() -> List[str]:
-    data = os.getenv('CRYPTOQUANT_PREFERRED_EXCHANGES', 'binance,coinbase_advanced,kraken,bitfinex')
-    return [value.strip() for value in data.split(',') if value.strip()]
-
 def get_should_send_stocks_sentiment_message():
     return os.getenv('SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE', 'true') == 'true'
 

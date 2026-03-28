@@ -20,5 +20,5 @@ class FearGreedAverage:
 
 @dataclass
 class FearGreedResult:
-    data: [FearGreedData] = field(default_factory=List)
-    average: [FearGreedAverage] = field(default_factory=List)
+    data: List[FearGreedData] = field(default_factory=list)
+    average: List[FearGreedAverage] = field(default_factory=list)

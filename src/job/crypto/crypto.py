@@ -1,8 +1,6 @@
 import asyncio
 import logging
 
-from src.job.crypto.chain_analysis_message_sender import ChainAnalysisMessageSender
-from src.job.crypto.messari_message_sender import MessariMessageSender
 from src.job.crypto.sentiment_message_sender import SentimentMessageSender
 from src.job.crypto.top_coins_message_sender import TopCoinsMessageSender
 from src.job.crypto.top_sectors_message_sender import TopSectorsMessageSender
@@ -47,8 +45,6 @@ class CryptoNotificationJob(JobWrapper):
     @property
     def message_senders(self):
         return [
-            MessariMessageSender(),
-            ChainAnalysisMessageSender(),
             TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
             TopSectorsMessageSender(sort_by=CMCSectorSortBy.MARKET_CAP_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
             TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.ASCENDING),

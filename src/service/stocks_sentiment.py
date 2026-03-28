@@ -1,43 +1,24 @@
 import logging
 from statistics import mean
-from typing import List
-
-from market_data_library import TradFiAPI
+from typing import List, Optional
 
 import src.util.date_util as date_util
-from src.config import config
 from market_data_library.types import cnn_type
 
+from src.data_source.market_data_library import get_tradfi_api
 from src.type.sentiment import FearGreedResult, FearGreedData, FearGreedAverage
 from src.util.list_util import is_list_out_of_range
 
 logger = logging.getLogger('Stocks sentiment service')
 class StocksSentimentService:
     def __init__(self):
-        selenium_remote_mode = config.get_selenium_remote_mode()
-        selenium_server_host = config.get_selenium_server_host()
-        selenium_stealth = config.get_selenium_stealth()
-
-        logger.info(
-            'Initialising CNN fear/greed scraper with remote_mode=%s, server_host=%s, stealth=%s',
-            selenium_remote_mode,
-            selenium_server_host if selenium_remote_mode else 'local-browser',
-            selenium_stealth,
-        )
-        tradfi_api_kwargs = {
-            'is_stealth': selenium_stealth,
-            'remote_mode': selenium_remote_mode,
-        }
-        if selenium_server_host is not None:
-            tradfi_api_kwargs['server_host'] = selenium_server_host
-
-        tradfi_api = TradFiAPI(**tradfi_api_kwargs)
+        tradfi_api = get_tradfi_api()
         cnn_api = tradfi_api.cnn
         self.cnn_service = cnn_api.cnn_service
         self.cnc_type = cnn_type
 
     # TODO: cache
-    async def get_stocks_fear_greed_index(self) -> FearGreedResult:
+    async def get_stocks_fear_greed_index(self) -> Optional[FearGreedResult]:
         fear_greed_res: cnn_type.CnnFearGreedIndex = await self.get_stocks_fear_greed_index_from_source()
 
         if fear_greed_res is None or fear_greed_res.fear_and_greed is None or fear_greed_res.fear_and_greed_historical is None:

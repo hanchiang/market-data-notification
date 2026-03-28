@@ -22,8 +22,9 @@ FastAPI backend and scheduled job runner for stock and crypto Telegram notificat
 
 ### Crypto
 
-- Scheduled Telegram summaries for exchange flow, fees, trade intensity, sentiment, top coins, and sectors
+- Scheduled Telegram summaries for sentiment, top coins, and sectors
 - Aggregation across multiple external providers in one notification flow
+- Backend-specific orchestration over provider adapters, with unofficial or privacy-sensitive provider contracts expected to come from `market-data-library`
 
 ## What It Does
 
@@ -61,7 +62,7 @@ flowchart LR
 ### Crypto
 
 1. The crypto job fetches data from external providers
-2. The job formats summaries for fees, flows, sentiment, top coins, and sectors
+2. The job formats summaries for sentiment, top coins, and sectors
 3. The backend sends the result to the crypto Telegram channel
 
 ## Key Paths
@@ -90,8 +91,7 @@ scripts/                                 Local helper scripts
 
 ### Crypto
 
-- Messari
-- Chainanalysis
+- CryptoQuant via `market-data-library` for manual Basic-plan-compatible `price-ohlcv` checks
 - CoinMarketCap
 - Alternative.me Fear & Greed
 
@@ -130,6 +130,8 @@ CRYPTO_TELEGRAM_ADMIN_BOT_TOKEN=...
 CRYPTO_TELEGRAM_ADMIN_ID=...
 CRYPTO_TELEGRAM_DEV_BOT_TOKEN=...
 CRYPTO_TELEGRAM_DEV_ID=...
+# Used by the optional manual CryptoQuant `price-ohlcv` route.
+CRYPTOQUANT_API_TOKEN=...
 
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
@@ -264,8 +266,6 @@ When the server is running:
 Important endpoints:
 
 - `POST /tradingview/daily-stocks`
-- `GET /messari/asset-metrics?symbol=BTC`
-- `GET /chainanalysis/fees?symbol=BTC`
 - `GET /vixcentral/recent-values`
 - `GET /sentiment/crypto-fear-greed`
 - `GET /sentiment/stocks-fear-greed`

@@ -1,6 +1,6 @@
 import logging
 from statistics import mean
-from typing import List
+from typing import List, Optional
 
 from market_data_library.types import alternativeme_type
 
@@ -16,7 +16,7 @@ class CryptoSentimentService:
         self.alternativeme_service =  crypto_api.alternativeme.alternativeme_service
 
     # { average: [ {timeframe, value, sentiment_text, emoji } ], data: [{ relative_date_text, date, value, sentiment_text, emoji }] }
-    async def get_crypto_fear_greed_index(self, days=365) -> FearGreedResult:
+    async def get_crypto_fear_greed_index(self, days=365) -> Optional[FearGreedResult]:
         fear_greed_res: alternativeme_type.AlternativeMeFearGreedIndex = await self.get_crypto_fear_greed_index_from_source(days=days)
 
         if fear_greed_res.data.datasets is None or fear_greed_res.data.datasets[0].data is None:
@@ -88,7 +88,7 @@ class CryptoSentimentService:
 
         return res
 
-    def _get_last_year_list_index(self, data: alternativeme_type.AlternativeMeFearGreedIndex):
+    def _get_last_year_list_index(self, data: alternativeme_type.AlternativeMeFearGreedIndex) -> int:
         last_year_list_index = -365
         if len(data.data.datasets) > 200 and len(data.fear_and_greed_historical.data) < abs(last_year_list_index):
             logger.info(

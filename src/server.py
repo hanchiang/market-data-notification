@@ -11,10 +11,8 @@ from src.data_source.market_data_library import init_market_data_api
 from src.dependencies import Dependencies
 from src.notification_destination.telegram_notification import init_telegram_bots
 from src.router.barchart import thirdparty_barchart
-from src.router.chainanalysis import thirdparty_chainanalysis, chainanalysis
 from src.router.sentiment import sentiment
 from src.router.vix_central import thirdparty_vix_central, vix_central
-from src.router.messari import thirdparty_messari, messari
 from src.router.tradingview import tradingview
 from src.router.crypto_stats import crypto_stats
 import src.config.config as config
@@ -26,12 +24,8 @@ app.include_router(tradingview.router)
 # stocks
 app.include_router(thirdparty_vix_central.router)
 app.include_router(vix_central.router)
-app.include_router(thirdparty_messari.router)
 app.include_router(thirdparty_barchart.router)
 # crypto
-app.include_router(messari.router)
-app.include_router(thirdparty_chainanalysis.router)
-app.include_router(chainanalysis.router)
 app.include_router(sentiment.router)
 app.include_router(crypto_stats.router)
 

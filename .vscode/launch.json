@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "presentation": {
         "hidden": false,
@@ -16,12 +13,11 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}", // Set the working directory to the root of the project
+            "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}" // Add the root of the project to PYTHONPATH
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/../market-data-library"
             },
-            "pythonPath": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
-            "args": ["--run_all", "1"] // Add your command line arguments here
+            "args": ["--run_all", "1"]
         },
         {
             "name": "Debug All Tests",
@@ -36,7 +32,7 @@
             "justMyCode": false,
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/../market-data-library",
                 "PYTEST_ADDOPTS": "--no-cov"
             }
         },
@@ -54,7 +50,7 @@
             "justMyCode": false,
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/../market-data-library",
                 "PYTEST_ADDOPTS": "--no-cov"
             }
         },
@@ -75,7 +71,7 @@
             "justMyCode": false,
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "/Users/hanchiang/Library/Caches/pypoetry/virtualenvs/market-data-notification-cEp3MJSs-py3.12/bin/python",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/../market-data-library",
                 "PYTEST_ADDOPTS": "--no-cov"
             }
         }

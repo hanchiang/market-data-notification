@@ -20,6 +20,7 @@ market_data_type_to_admin_chat_id = {}
 market_data_type_to_chat_id = {}
 
 logger = logging.getLogger('Telegram notification')
+MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 
 def init_telegram_bots():
     global stocks_bot, stocks_admin_bot, stocks_dev_bot, crypto_bot, crypto_admin_bot, crypto_dev_bot
@@ -63,15 +64,49 @@ async def send_message_to_channel(message: str, chat_id, market_data_type: Marke
         chat_id = get_dev_channel_id_from_market_data_type(market_data_type)
 
     try:
-        res = await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=message, parse_mode='MarkdownV2')
+        res = await chat_id_to_telegram_client[chat_id].send_message(
+            chat_id,
+            text=message,
+            parse_mode='MarkdownV2',
+        )
         return res
     except Exception as e:
         logger.error(get_exception_message(e))
-        await chat_id_to_telegram_client[chat_id].send_message(chat_id, text=escape_markdown(get_exception_message(e, should_escape_markdown=True)), parse_mode='MarkdownV2')
+        fallback_message = _build_telegram_error_alert(
+            context='send_message_to_channel',
+            error_text=get_exception_message(e),
+        )
+        try:
+            await chat_id_to_telegram_client[chat_id].send_message(
+                chat_id,
+                text=fallback_message,
+                parse_mode='MarkdownV2',
+            )
+        except Exception as fallback_error:
+            logger.error(get_exception_message(fallback_error))
 
 async def send_message_to_admin(message: str, market_data_type: MarketDataType):
     channel_id = get_admin_channel_id_from_market_data_type(market_data_type)
-    res = await stocks_admin_bot.send_message(chat_id=channel_id, text=message, parse_mode='MarkdownV2')
+    try:
+        if len(message) > MAX_TELEGRAM_MESSAGE_LENGTH:
+            raise ValueError(
+                f'Admin message exceeds Telegram limit: {len(message)} characters'
+            )
+        res = await stocks_admin_bot.send_message(
+            chat_id=channel_id,
+            text=message,
+            parse_mode='MarkdownV2',
+        )
+    except Exception as e:
+        logger.error(get_exception_message(e))
+        res = await stocks_admin_bot.send_message(
+            chat_id=channel_id,
+            text=_build_telegram_error_alert(
+                context='send_message_to_admin',
+                error_text=get_exception_message(e),
+            ),
+            parse_mode='MarkdownV2',
+        )
     print_telegram_message(res)
     return res
 
@@ -87,3 +122,10 @@ def get_dev_channel_id_from_market_data_type(market_data_type: MarketDataType):
 
 def print_telegram_message(res: telegram.Message):
     logging.info(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
+
+
+def _build_telegram_error_alert(context: str, error_text: str) -> str:
+    header = escape_markdown(f'{context} failed. Full traceback omitted; check logs.')
+    available = MAX_TELEGRAM_MESSAGE_LENGTH - len(header) - 2
+    detail = escape_markdown(error_text[:max(0, available)])
+    return f'{header}\n\n{detail}'

@@ -19,10 +19,19 @@ services:
       - "8080:8080"
     volumes:
       - ./src:/app/src
+      # Uncomment to make the backend container import the sibling
+      # `market-data-library/` checkout instead of the git-pinned package that
+      # was installed into the image during `poetry install`.
+      # - ../market-data-library:/app/market-data-library-local:ro
     environment:
       ENV: dev
       SELENIUM_REMOTE_MODE: "true"
       SELENIUM_SERVER_HOST: "http://chrome:4444"
+      # Default Docker behavior uses the released git-pinned
+      # `market-data-library` package installed into the image.
+      # Uncomment this together with the bind mount above to mirror the local
+      # `./scripts/use_local_market_data_library.sh` workflow in Docker:
+      # PYTHONPATH: "/app/market-data-library-local:/app"
   redis:
     container_name: redis
     build:
@@ -33,8 +42,8 @@ services:
     ports:
       - 6379:6379
   chrome:
-    # https://github.com/seleniumhq-community/docker-seleniarm
-    image: seleniarm/standalone-chromium:114.0-20230615
+    # https://github.com/SeleniumHQ/docker-selenium
+    image: selenium/standalone-chromium:145.0.7632.109-20260222
     container_name: chrome
 #    shm_size: 2gb
     ports:

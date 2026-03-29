@@ -234,7 +234,7 @@ jobs:
             fi
           else
             echo "Starting chrome container"
-            docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1g" --cpus="1" -d seleniarm/standalone-chromium:114.0-20230615
+            docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1.2g" --cpus="1.5" -d selenium/standalone-chromium:145.0.7632.109-20260222
           fi
 
           docker ps

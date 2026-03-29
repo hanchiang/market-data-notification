@@ -2,31 +2,14 @@
 
 ## Stocks
 
-### EMA20 overextension, highest volume
-![stocks ema overextension highest volume](../images/stocks/tradingview-stocks-ema-overextension-highest-volume.png)
-
-### VIX futures single day and consecutive days decrease
-![stocks ema overextension highest volume](../images/stocks/tradingview-vix-central-single-day-and-consecutive-days-decrease.png)
-
-### Fear greed index
-![stocks fear greed index](../images/stocks/cnn-fear-greed.png)
+Historical stock screenshots were removed from the backend repo.
+Keep new stock delivery examples in workspace docs if they are worth preserving as durable evidence.
 
 ## Crypto
 
-### Exchange supply
-![crypto exchange supply](../images/crypto/messari-exchange-flow.png)
+The current crypto notification flow sends a single digest-oriented message.
 
-### Fees
-![crypto fees](../images/crypto/chainanalysis-fees.png)
+### Current digest layout
+![crypto digest accepted current layout](../images/crypto/crypto-digest-accepted-current-layout.JPG)
 
-### Top sectors
-![Top sectors](../images/crypto/cmc-top-sectors.png)
-
-### Trending coins
-![Trending coins](../images/crypto/cmc-trending.png)
-
-### Top gainers
-![Top gainers](../images/crypto/cmc-top-gainer.png)
-
-### Fear greed index
-![crypto fear greed index](../images/crypto/alternativeme-fear-greed.png)
+The older repo-local crypto screenshots no longer match the live crypto job shape after the digest refactor and should be reviewed separately before being kept as historical examples.

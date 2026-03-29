@@ -22,7 +22,7 @@ FastAPI backend and scheduled job runner for stock and crypto Telegram notificat
 
 ### Crypto
 
-- Scheduled Telegram summaries for sentiment, top coins, and sectors
+- Scheduled Telegram digest with sentiment, sector breadth, and standout-coin context
 - Aggregation across multiple external providers in one notification flow
 - Backend-specific orchestration over provider adapters, with unofficial or privacy-sensitive provider contracts expected to come from `market-data-library`
 
@@ -62,7 +62,7 @@ flowchart LR
 ### Crypto
 
 1. The crypto job fetches data from external providers
-2. The job formats summaries for sentiment, top coins, and sectors
+2. The job formats a digest-oriented crypto summary
 3. The backend sends the result to the crypto Telegram channel
 
 ## Key Paths
@@ -73,6 +73,8 @@ src/router/tradingview/tradingview.py    TradingView webhook ingress
 src/service/tradingview_service.py       TradingView Redis storage and retrieval
 src/job/stocks/stocks.py                 Stock notification entry point
 src/job/crypto/crypto.py                 Crypto notification entry point
+src/job/crypto/crypto_digest_message_sender.py
+src/job/crypto/crypto_digest_formatter.py
 src/notification_destination/telegram_notification.py
 src/config/config.py                     Environment contract
 tests/unit/                              Main unit test surface

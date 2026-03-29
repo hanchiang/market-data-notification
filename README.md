@@ -203,6 +203,8 @@ docker compose up -d
 
 The compose backend enables remote Selenium and points CNN fear/greed scraping at the `chrome` container.
 The backend image does not bundle Chrome or ChromeDriver; local browser mode is only for host-side Python runs with your own local browser installed.
+By default, Docker still uses the released git-pinned `market-data-library` package installed into the image during `poetry install`.
+If you need the backend container to import the sibling workspace checkout instead, uncomment the documented `../market-data-library` bind mount plus `PYTHONPATH` override in [docker-compose.yml](docker-compose.yml) before recreating the backend container.
 
 Run jobs in the backend container:
 

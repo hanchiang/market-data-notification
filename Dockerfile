@@ -40,18 +40,8 @@ RUN set -eux; \
     curl -sSL https://install.python-poetry.org | python3 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install google chrome
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list && \
-    apt update -y && apt install -y google-chrome-stable; \
-elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-    wget https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/chromium-browser/1:85.0.4183.83-0ubuntu2.22.04.1/chromium-browser_85.0.4183.83-0ubuntu2.22.04.1.tar.xz && \
-    tar -xvf chromium-browser_85.0.4183.83-0ubuntu2.22.04.1.tar.xz && \
-    cp chromium-browser-85.0.4183.83/chromedriver /usr/local/bin && \
-    cp chromium-browser-85.0.4183.83/chromium-browser /usr/local/bin; \
-fi
-
+# The backend image intentionally does not install Chrome. Dockerized runs use
+# a separate remote Selenium container instead of launching a local browser here.
 # set up GitHub authentication for the private market data library
 RUN --mount=type=secret,id=github_token git config --global \
     url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \

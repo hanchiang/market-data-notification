@@ -1,7 +1,7 @@
 # Dockerfile
 
 # pull the official docker image
-FROM python:3.12-slim-bullseye as base
+FROM python:3.12-slim-bullseye AS base
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -18,11 +18,11 @@ WORKDIR /app
 EXPOSE 8080
 
 # set env variables
-ENV PYTHONUNBUFFERED 1
-ENV VIRTUAL_ENV /app/.venv
-ENV POETRY_VIRTUALENVS_IN_PROJECT true
-ENV PATH "${VIRTUAL_ENV}/bin:${PATH}:/root/.local/bin"
-ENV PYTHONPATH "${PYTHONPATH}:$(pwd)"
+ENV PYTHONUNBUFFERED=1
+ENV VIRTUAL_ENV=/app/.venv
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}:/root/.local/bin"
+ENV PYTHONPATH=/app
 
 COPY pyproject.toml poetry.lock ./
 
@@ -42,7 +42,10 @@ RUN set -eux; \
 
 # The backend image intentionally does not install Chrome. Dockerized runs use
 # a separate remote Selenium container instead of launching a local browser here.
-# set up GitHub authentication for the private market data library
+FROM base AS dev-deps
+
+# Keep dev/test dependency installation in a separate stage so release builds do
+# not fetch lint/test-only packages such as ruff during multi-arch publishing.
 RUN --mount=type=secret,id=github_token git config --global \
     url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \
     ssh://git@github.com/ \
@@ -53,18 +56,21 @@ COPY . .
 
 RUN rm -rf "$(pwd)/secret"
 
-FROM base as dev
+FROM dev-deps AS dev
 CMD ["python3", "main.py"]
 
-FROM base as test
+FROM dev-deps AS test
 CMD ["pytest"]
 
 FROM base AS release
-COPY --from=base . .
-RUN --mount=type=secret,id=github_token rm -rf "$VIRTUAL_ENV" \
-&& git config --global \
+RUN --mount=type=secret,id=github_token git config --global \
     url."https://x-access-token:$(cat /run/secrets/github_token)@github.com/".insteadOf \
     ssh://git@github.com/ \
 && poetry install --only main --no-root \
 && rm -f /root/.gitconfig
+
+COPY . .
+
+RUN rm -rf "$(pwd)/secret"
+
 CMD ["python3", "main.py"]

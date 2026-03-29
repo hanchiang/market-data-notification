@@ -7,7 +7,6 @@ from market_data_library.types import cmc_type
 from src.dependencies import Dependencies
 from src.job.crypto.crypto_digest_formatter import (
     build_digest_message,
-    build_sector_detail_message,
     collect_sector_detail_coin_ids,
     get_standout_entries,
     should_emit_sector_detail_message,
@@ -62,18 +61,9 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             standout_entries=standout_entries,
             standout_coin_details=standout_coin_details,
             sector_details=sector_details,
-        )
-        messages = [digest_message]
-
-        sector_detail_message = build_sector_detail_message(
-            strongest_sector=strongest_sector,
-            weakest_sector=weakest_sector,
-            sector_details=sector_details,
             sector_detail_coin_details=sector_detail_coin_details,
         )
-        if sector_detail_message is not None:
-            messages.append(sector_detail_message)
-        return messages
+        return [digest_message]
 
     async def _load_sector_snapshots(
         self,

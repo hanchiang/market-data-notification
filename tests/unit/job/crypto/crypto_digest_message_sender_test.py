@@ -329,20 +329,23 @@ class TestCryptoDigestMessageSender:
 
         messages = await message_sender.format_message()
 
-        assert len(messages) == 2
-        digest_message, detail_message = messages
-        assert 'leaders POP, FLIXX' in digest_message
-        assert 'losers THETA, MBL' in digest_message
-        assert 'leaders DOGE, FLOKI' in digest_message
-        assert 'losers ARIAIP, DMCC' in digest_message
-        assert '*Sector detail*' in detail_message
-        assert 'Strongest 24h: *Video*' in detail_message
-        assert 'Leaders POP \\+371\\.52%, vol 42 M, vol chg \\+161\\.37%' in detail_message
-        assert 'Losers THETA \\-12\\.50%, vol 7\\.6 M, vol chg \\+161\\.37%' in detail_message
-        assert 'Weakest 24h: *Memes*' in detail_message
-        assert 'Leaders DOGE \\+11\\.20%, vol 220' in detail_message
-        assert 'vol chg \\+161\\.37%' in detail_message
-        assert 'Losers ARIAIP \\-32\\.70%, vol 2\\.1 M, vol chg \\+161\\.37%' in detail_message
+        assert len(messages) == 1
+        message = messages[0]
+        assert 'leaders POP, FLIXX' in message
+        assert 'losers THETA, MBL' in message
+        assert 'leaders DOGE, FLOKI' in message
+        assert 'losers ARIAIP, DMCC' in message
+        assert '*Sector detail*' in message
+        assert 'Strongest 24h: *Video*' in message
+        assert 'Leaders:' in message
+        assert '• *POP* \\+371\\.52%, vol 42 M, vol chg \\+161\\.37%' in message
+        assert 'Losers:' in message
+        assert '• *THETA* \\-12\\.50%, vol 7\\.6 M, vol chg \\+161\\.37%' in message
+        assert 'Weakest 24h: *Memes*' in message
+        assert '• *DOGE* \\+11\\.20%, vol 220' in message
+        assert 'vol chg \\+161\\.37%' in message
+        assert '• *ARIAIP* \\-32\\.70%, vol 2\\.1 M, vol chg \\+161\\.37%' in message
+        assert message.index('*Sector detail*') < message.index('*Standout coins*')
 
     @pytest.mark.asyncio
     async def test_sector_detail_stays_in_sync_with_breadth_once_message_is_emitted(self):
@@ -403,15 +406,15 @@ class TestCryptoDigestMessageSender:
 
         messages = await message_sender.format_message()
 
-        assert len(messages) == 2
-        digest_message, detail_message = messages
-        assert 'leaders BLY, CXO' in digest_message
-        assert 'losers PPT, VET' in digest_message
-        assert 'losers RIVER, FIGHT' in digest_message
-        assert 'Leaders BLY \\+428\\.02%, vol 65 M, vol chg \\+161\\.37%' in detail_message
-        assert 'Losers PPT \\-3\\.31%, vol 4\\.2 M, vol chg \\+161\\.37%' in detail_message
-        assert 'Weakest 24h: *Binance Buildkey TGE*' in detail_message
-        assert 'Losers RIVER \\-7\\.25%, vol 3\\.6 M, vol chg \\+161\\.37%' in detail_message
+        assert len(messages) == 1
+        message = messages[0]
+        assert 'leaders BLY, CXO' in message
+        assert 'losers PPT, VET' in message
+        assert 'losers RIVER, FIGHT' in message
+        assert '• *BLY* \\+428\\.02%, vol 65 M, vol chg \\+161\\.37%' in message
+        assert '• *PPT* \\-3\\.31%, vol 4\\.2 M, vol chg \\+161\\.37%' in message
+        assert 'Weakest 24h: *Binance Buildkey TGE*' in message
+        assert '• *RIVER* \\-7\\.25%, vol 3\\.6 M, vol chg \\+161\\.37%' in message
 
     @pytest.mark.asyncio
     async def test_format_message_omits_sector_side_when_no_matching_sign_exists(self):
@@ -469,19 +472,19 @@ class TestCryptoDigestMessageSender:
 
         messages = await message_sender.format_message()
 
-        assert len(messages) == 2
-        digest_message, detail_message = messages
-        assert 'leaders BLY, CXO' in digest_message
-        assert 'losers PPT, TRAC' not in digest_message
-        assert 'leaders ARIAIP, VOISE' in digest_message
-        assert 'losers ARTX' in digest_message
-        assert 'DMCC' not in detail_message
-        assert 'Losers BLY' not in detail_message
-        assert detail_message.index('Losers ARTX \\-13\\.75%') < detail_message.index(
-            'Leaders ARIAIP \\+30\\.17%'
+        assert len(messages) == 1
+        message = messages[0]
+        assert 'leaders BLY, CXO' in message
+        assert 'losers PPT, TRAC' not in message
+        assert 'leaders ARIAIP, VOISE' in message
+        assert 'losers ARTX' in message
+        assert 'DMCC' not in message
+        assert 'Losers BLY' not in message
+        assert message.index('• *ARTX* \\-13\\.75%') < message.index(
+            '• *ARIAIP* \\+30\\.17%'
         )
-        assert 'Losers ARTX \\-13\\.75%' in detail_message
-        assert 'vol chg \\+161\\.37%' in detail_message
+        assert '• *ARTX* \\-13\\.75%' in message
+        assert 'vol chg \\+161\\.37%' in message
 
     @pytest.mark.asyncio
     async def test_format_message_falls_back_when_sector_detail_fetch_fails(self):

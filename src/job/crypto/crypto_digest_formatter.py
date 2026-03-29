@@ -44,6 +44,7 @@ def build_digest_message(
     standout_entries: List[StandoutEntry],
     standout_coin_details: Dict[int, cmc_type.CoinDetail],
     sector_details: Dict[str, cmc_type.SectorDetail],
+    sector_detail_coin_details: Dict[int, cmc_type.CoinDetail],
 ) -> str:
     # Telegram digest layout:
     # Crypto market digest: YYYY-MM-DD
@@ -74,6 +75,15 @@ def build_digest_message(
             sector_details=sector_details,
         )
     )
+    sector_detail_lines = build_sector_detail_lines(
+        strongest_sector=strongest_sector,
+        weakest_sector=weakest_sector,
+        sector_details=sector_details,
+        sector_detail_coin_details=sector_detail_coin_details,
+    )
+    if sector_detail_lines:
+        lines.append('')
+        lines.extend(sector_detail_lines)
     lines.append('')
     lines.extend(
         _format_standout_coin_section(
@@ -84,18 +94,18 @@ def build_digest_message(
     return '\n'.join(line for line in lines if line is not None).strip()
 
 
-def build_sector_detail_message(
+def build_sector_detail_lines(
     strongest_sector: Optional[cmc_type.Sector24hChange],
     weakest_sector: Optional[cmc_type.Sector24hChange],
     sector_details: Dict[str, cmc_type.SectorDetail],
     sector_detail_coin_details: Dict[int, cmc_type.CoinDetail],
-) -> Optional[str]:
+) -> List[str]:
     if not should_emit_sector_detail_message(
         strongest_sector=strongest_sector,
         weakest_sector=weakest_sector,
         sector_details=sector_details,
     ):
-        return None
+        return []
 
     detail_lines = ['*Sector detail*']
 
@@ -123,9 +133,9 @@ def build_sector_detail_message(
             detail_lines.extend(['', *weakest_detail])
 
     if len(detail_lines) == 1:
-        return None
+        return []
 
-    return '\n'.join(detail_lines)
+    return detail_lines
 
 
 def should_emit_sector_detail_message(
@@ -294,11 +304,10 @@ def _format_sector_detail_lines(
     for section_label, coins in detail_sections:
         if len(coins) == 0:
             continue
-        lines.append(
-            _format_sector_coin_summary(
-                label=section_label,
+        lines.append(f'{section_label}:')
+        lines.extend(
+            _format_sector_coin_lines(
                 coins=coins,
-                include_change=True,
                 include_volume_context=True,
                 coin_details=sector_detail_coin_details,
             )
@@ -497,27 +506,62 @@ def _format_sector_coin_summary(
     include_volume_context: bool = False,
     coin_details: Optional[Dict[int, cmc_type.CoinDetail]] = None,
 ) -> str:
-    entries = []
-    for coin in coins:
-        symbol = escape_markdown(coin.symbol)
-        if not include_change:
-            entries.append(symbol)
-            continue
-
-        change = _get_sector_coin_change(coin)
-        if change is None:
-            entries.append(symbol)
-            continue
-        entry = f"{symbol} {_format_signed_percentage(change)}"
-        if include_volume_context:
-            entry = _append_sector_coin_volume_context(
-                entry=entry,
-                coin=coin,
-                coin_detail=coin_details.get(coin.id) if coin_details else None,
-            )
-        entries.append(entry)
+    entries = [
+        _format_sector_coin_entry(
+            coin=coin,
+            include_change=include_change,
+            include_volume_context=include_volume_context,
+            coin_detail=coin_details.get(coin.id) if coin_details else None,
+        )
+        for coin in coins
+    ]
 
     return f"{label} {', '.join(entries)}"
+
+
+def _format_sector_coin_lines(
+    coins: List[cmc_type.SectorCoin],
+    include_volume_context: bool,
+    coin_details: Optional[Dict[int, cmc_type.CoinDetail]] = None,
+) -> List[str]:
+    return [
+        '• '
+        + _format_sector_coin_entry(
+            coin=coin,
+            include_change=True,
+            include_volume_context=include_volume_context,
+            coin_detail=coin_details.get(coin.id) if coin_details else None,
+            bold_symbol=True,
+        )
+        for coin in coins
+    ]
+
+
+def _format_sector_coin_entry(
+    coin: cmc_type.SectorCoin,
+    include_change: bool,
+    include_volume_context: bool,
+    coin_detail: Optional[cmc_type.CoinDetail],
+    bold_symbol: bool = False,
+) -> str:
+    symbol = escape_markdown(coin.symbol)
+    if bold_symbol:
+        symbol = f'*{symbol}*'
+    if not include_change:
+        return symbol
+
+    change = _get_sector_coin_change(coin)
+    if change is None:
+        return symbol
+
+    entry = f"{symbol} {_format_signed_percentage(change)}"
+    if include_volume_context:
+        entry = _append_sector_coin_volume_context(
+            entry=entry,
+            coin=coin,
+            coin_detail=coin_detail,
+        )
+    return entry
 
 
 def _get_sector_coin_change(coin: cmc_type.SectorCoin) -> Optional[float]:

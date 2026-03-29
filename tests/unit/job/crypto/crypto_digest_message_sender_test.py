@@ -1,8 +1,10 @@
 import asyncio
 import copy
+import dataclasses
 import datetime
 import json
 import os
+import typing
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,9 +17,37 @@ from src.type.sentiment import FearGreedAverage, FearGreedData, FearGreedResult
 
 
 class TestCryptoDigestMessageSender:
+    @staticmethod
+    def remove_unknown_fields(my_value, fields: list[dataclasses.Field]):
+        field_by_name = {field.name: field for field in fields}
+
+        if isinstance(my_value, (str, int, bool, float)):
+            return
+
+        for key, value in list(my_value.items()):
+            if key not in field_by_name:
+                del my_value[key]
+                continue
+
+            field = field_by_name[key]
+            if isinstance(value, dict):
+                TestCryptoDigestMessageSender.remove_unknown_fields(
+                    value, dataclasses.fields(field.type)
+                )
+            elif isinstance(value, list):
+                for item in value:
+                    generic_type = typing.get_args(field.type)[0]
+                    if generic_type != typing.Any and not isinstance(
+                        generic_type(), (str, int, bool, float)
+                    ):
+                        TestCryptoDigestMessageSender.remove_unknown_fields(
+                            item, dataclasses.fields(generic_type)
+                        )
+
     def setup_method(self):
         self.load_sector_24h_change()
         self.load_spotlight()
+        self.load_coin_detail()
         self.sentiment = FearGreedResult(
             data=[
                 FearGreedData(
@@ -72,14 +102,48 @@ class TestCryptoDigestMessageSender:
         data = json.load(open(file_path))
         self.spotlight = from_dict(data_class=cmc_type.Spotlight, data=data)
 
+    def load_coin_detail(self):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'coin_detail.json')
+        data = json.load(open(file_path))
+
+        fields = dataclasses.fields(cmc_type.CoinDetail)
+        self.remove_unknown_fields(data, fields)
+
+        coin_detail = cmc_type.CoinDetail(**data)
+        coin_detail.statistics = cmc_type.CoinDetailStatistics(
+            **data.get('statistics', {})
+        )
+        coin_detail.relatedCoins = [
+            cmc_type.RelatedCoin(**x) for x in data.get('relatedCoins', [])
+        ]
+        coin_detail.relatedExchanges = [
+            cmc_type.RelatedExchange(**x) for x in data.get('relatedExchanges', [])
+        ]
+        coin_detail.wallets = [
+            cmc_type.CoinDetailWallet(**x) for x in data.get('wallets', [])
+        ]
+        coin_detail.holders = cmc_type.CoinDetailHolder(
+            **data.get('holders', {})
+        )
+        coin_detail.faqDescription = [
+            cmc_type.FAQ(**x) for x in data.get('faqDescription', [])
+        ]
+        coin_detail.cryptoRating = [
+            cmc_type.CryptoRating(**x) for x in data.get('cryptoRating', [])
+        ]
+        self.coin_detail = coin_detail
+
     def build_sector_detail(
         self,
         sector_id: str,
         title: str,
-        changes: list[tuple[str, float]],
+        changes: list[tuple],
     ) -> cmc_type.SectorDetail:
         coins = []
-        for index, (symbol, change) in enumerate(changes, start=1):
+        for index, change_entry in enumerate(changes, start=1):
+            symbol, change = change_entry[0], change_entry[1]
+            volume_24h = change_entry[2] if len(change_entry) > 2 else 0.0
             coins.append(
                 cmc_type.SectorCoin(
                     id=index,
@@ -87,7 +151,10 @@ class TestCryptoDigestMessageSender:
                     slug=symbol.lower(),
                     symbol=symbol,
                     quote={
-                        'USD': cmc_type.SectorCoinQuote(percent_change_24h=change)
+                        'USD': cmc_type.SectorCoinQuote(
+                            percent_change_24h=change,
+                            volume_24h=volume_24h,
+                        )
                     },
                 )
             )
@@ -107,6 +174,9 @@ class TestCryptoDigestMessageSender:
 
     @pytest.mark.asyncio
     async def test_format_message_builds_single_digest(self):
+        spotlight = copy.deepcopy(self.spotlight)
+        spotlight.gainerList[0].priceChange.priceChange24h = 55.0
+
         strongest_sector = copy.deepcopy(self.sector_24h_change[0])
         strongest_sector.sectorId = 'video'
         strongest_sector.topCoins[0].symbol = 'POP'
@@ -131,12 +201,22 @@ class TestCryptoDigestMessageSender:
             'video': self.build_sector_detail(
                 sector_id='video',
                 title='Video',
-                changes=[('POP', 6.2), ('FLIXX', 5.4), ('MBL', -2.1), ('THETA', -4.7)],
+                changes=[
+                    ('POP', 6.2, 12_500_000),
+                    ('FLIXX', 5.4, 8_300_000),
+                    ('MBL', -2.1, 3_100_000),
+                    ('THETA', -4.7, 4_400_000),
+                ],
             ),
             'defi': self.build_sector_detail(
                 sector_id='defi',
                 title='DeFi',
-                changes=[('RAY', 4.2), ('JUP', 2.9), ('UNI', -6.1), ('AAVE', -4.4)],
+                changes=[
+                    ('RAY', 4.2, 18_000_000),
+                    ('JUP', 2.9, 14_500_000),
+                    ('UNI', -6.1, 11_200_000),
+                    ('AAVE', -4.4, 9_800_000),
+                ],
             ),
         }
 
@@ -147,7 +227,8 @@ class TestCryptoDigestMessageSender:
         message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
             side_effect=[[strongest_sector], [weakest_sector]]
         )
-        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
         message_sender.cmc_service.get_sector_detail = AsyncMock(
             side_effect=[
                 sector_details['video'],
@@ -176,7 +257,14 @@ class TestCryptoDigestMessageSender:
         assert 'gainers 2, losers 11' in message
         assert 'top coins' not in message
         assert '• trending, top loser: *Hifi Finance*' in message
+        assert 'price 1\\.15' in message
+        assert 'volume 1\\.26 B' in message
+        assert 'volume change \\+161\\.37%' in message
         assert '• top gainer: *Cannation*' in message
+        assert '24h \\+55\\.00% ❗' in message
+        standout_section = message.split('*Standout coins*', maxsplit=1)[1]
+        assert '7d ' not in standout_section
+        assert 'mcap ' not in standout_section
 
     @pytest.mark.asyncio
     async def test_format_message_adds_threshold_gated_sector_detail(self):
@@ -204,12 +292,22 @@ class TestCryptoDigestMessageSender:
             'video': self.build_sector_detail(
                 sector_id='video',
                 title='Video',
-                changes=[('POP', 371.51836919), ('FLIXX', 5.4), ('THETA', -12.5), ('MBL', -3.3)],
+                changes=[
+                    ('POP', 371.51836919, 42_000_000),
+                    ('FLIXX', 5.4, 8_300_000),
+                    ('THETA', -12.5, 7_600_000),
+                    ('MBL', -3.3, 3_100_000),
+                ],
             ),
             'memes': self.build_sector_detail(
                 sector_id='memes',
                 title='Memes',
-                changes=[('DOGE', 11.2), ('FLOKI', 7.89), ('ARIAIP', -32.7), ('DMCC', -24.96)],
+                changes=[
+                    ('DOGE', 11.2, 220_000_000),
+                    ('FLOKI', 7.89, 86_000_000),
+                    ('ARIAIP', -32.7, 2_100_000),
+                    ('DMCC', -24.96, 1_500_000),
+                ],
             ),
         }
 
@@ -221,6 +319,7 @@ class TestCryptoDigestMessageSender:
             side_effect=[[strongest_sector], [weakest_sector]]
         )
         message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
         message_sender.cmc_service.get_sector_detail = AsyncMock(
             side_effect=[
                 sector_details['video'],
@@ -238,11 +337,81 @@ class TestCryptoDigestMessageSender:
         assert 'losers ARIAIP, DMCC' in digest_message
         assert '*Sector detail*' in detail_message
         assert 'Strongest 24h: *Video*' in detail_message
-        assert 'Leaders POP \\+371\\.52%' in detail_message
-        assert 'Losers THETA \\-12\\.50%' in detail_message
+        assert 'Leaders POP \\+371\\.52%, vol 42 M, vol chg \\+161\\.37%' in detail_message
+        assert 'Losers THETA \\-12\\.50%, vol 7\\.6 M, vol chg \\+161\\.37%' in detail_message
         assert 'Weakest 24h: *Memes*' in detail_message
-        assert 'Leaders DOGE \\+11\\.20%' in detail_message
-        assert 'Losers ARIAIP \\-32\\.70%, DMCC \\-24\\.96%' in detail_message
+        assert 'Leaders DOGE \\+11\\.20%, vol 220' in detail_message
+        assert 'vol chg \\+161\\.37%' in detail_message
+        assert 'Losers ARIAIP \\-32\\.70%, vol 2\\.1 M, vol chg \\+161\\.37%' in detail_message
+
+    @pytest.mark.asyncio
+    async def test_sector_detail_stays_in_sync_with_breadth_once_message_is_emitted(self):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'logistics'
+        strongest_sector.title = 'Logistics'
+        strongest_sector.avgPriceChange = 295.26
+        strongest_sector.marketChange = -0.72
+        strongest_sector.volumeChange = 103.28
+        strongest_sector.gainersNum = '1'
+        strongest_sector.losersNum = '3'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'binance-buildkey-tge'
+        weakest_sector.title = 'Binance Buildkey TGE'
+        weakest_sector.avgPriceChange = -8.04
+        weakest_sector.marketChange = -8.27
+        weakest_sector.volumeChange = -33.37
+        weakest_sector.gainersNum = '0'
+        weakest_sector.losersNum = '3'
+
+        sector_details = {
+            'logistics': self.build_sector_detail(
+                sector_id='logistics',
+                title='Logistics',
+                changes=[
+                    ('BLY', 428.02, 65_000_000),
+                    ('CXO', 12.12, 15_000_000),
+                    ('PPT', -3.31, 4_200_000),
+                    ('VET', -2.44, 7_400_000),
+                ],
+            ),
+            'binance-buildkey-tge': self.build_sector_detail(
+                sector_id='binance-buildkey-tge',
+                title='Binance Buildkey TGE',
+                changes=[
+                    ('RIVER', -7.25, 3_600_000),
+                    ('FIGHT', -5.81, 2_200_000),
+                ],
+            ),
+        }
+
+        message_sender = CryptoDigestMessageSender()
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=[
+                sector_details['logistics'],
+                sector_details['binance-buildkey-tge'],
+            ]
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 2
+        digest_message, detail_message = messages
+        assert 'leaders BLY, CXO' in digest_message
+        assert 'losers PPT, VET' in digest_message
+        assert 'losers RIVER, FIGHT' in digest_message
+        assert 'Leaders BLY \\+428\\.02%, vol 65 M, vol chg \\+161\\.37%' in detail_message
+        assert 'Losers PPT \\-3\\.31%, vol 4\\.2 M, vol chg \\+161\\.37%' in detail_message
+        assert 'Weakest 24h: *Binance Buildkey TGE*' in detail_message
+        assert 'Losers RIVER \\-7\\.25%, vol 3\\.6 M, vol chg \\+161\\.37%' in detail_message
 
     @pytest.mark.asyncio
     async def test_format_message_omits_sector_side_when_no_matching_sign_exists(self):
@@ -263,12 +432,22 @@ class TestCryptoDigestMessageSender:
             'logistics': self.build_sector_detail(
                 sector_id='logistics',
                 title='Logistics',
-                changes=[('BLY', 391.81), ('CXO', 18.4), ('PPT', 0.24), ('TRAC', 0.11)],
+                changes=[
+                    ('BLY', 391.81, 24_000_000),
+                    ('CXO', 18.4, 12_000_000),
+                    ('PPT', 0.24, 900_000),
+                    ('TRAC', 0.11, 700_000),
+                ],
             ),
             'music': self.build_sector_detail(
                 sector_id='music',
                 title='Music',
-                changes=[('ARIAIP', 30.17), ('VOISE', 15.84), ('ARTX', -13.75), ('DMCC', 15.36)],
+                changes=[
+                    ('ARIAIP', 30.17, 1_500_000),
+                    ('VOISE', 15.84, 1_200_000),
+                    ('ARTX', -13.75, 980_000),
+                    ('DMCC', 15.36, 850_000),
+                ],
             ),
         }
 
@@ -280,6 +459,7 @@ class TestCryptoDigestMessageSender:
             side_effect=[[strongest_sector], [weakest_sector]]
         )
         message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
         message_sender.cmc_service.get_sector_detail = AsyncMock(
             side_effect=[
                 sector_details['logistics'],
@@ -297,7 +477,11 @@ class TestCryptoDigestMessageSender:
         assert 'losers ARTX' in digest_message
         assert 'DMCC' not in detail_message
         assert 'Losers BLY' not in detail_message
+        assert detail_message.index('Losers ARTX \\-13\\.75%') < detail_message.index(
+            'Leaders ARIAIP \\+30\\.17%'
+        )
         assert 'Losers ARTX \\-13\\.75%' in detail_message
+        assert 'vol chg \\+161\\.37%' in detail_message
 
     @pytest.mark.asyncio
     async def test_format_message_falls_back_when_sector_detail_fetch_fails(self):
@@ -322,6 +506,9 @@ class TestCryptoDigestMessageSender:
             side_effect=[[strongest_sector], [weakest_sector]]
         )
         message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(
+            side_effect=RuntimeError('coin detail unavailable')
+        )
         message_sender.cmc_service.get_sector_detail = AsyncMock(
             side_effect=RuntimeError('403 Forbidden')
         )
@@ -333,4 +520,45 @@ class TestCryptoDigestMessageSender:
         assert 'Strongest 24h: *Video*' in message
         assert '; leaders ' not in message
         assert '; losers ' not in message
+        assert '*Hifi Finance*' in message
+        assert 'volume 1\\.26 B' in message
+        assert 'volume change ' not in message
         assert '*Sector detail*' not in message
+
+    @pytest.mark.asyncio
+    async def test_format_message_uses_clean_decimal_price_formatting(self):
+        spotlight = copy.deepcopy(self.spotlight)
+        spotlight.trendingList[1].priceChange.price = 0.14879999999999999
+        spotlight.gainerList[1].priceChange.price = 0.0569
+        spotlight.loserList[1].priceChange.price = 0.12529999999999999
+
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+        strongest_sector.title = 'Video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'music'
+        weakest_sector.title = 'Music'
+        weakest_sector.avgPriceChange = -7.4
+
+        message_sender = CryptoDigestMessageSender()
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 1
+        message = messages[0]
+        assert 'price 0\\.1488' in message
+        assert 'price 0\\.0569' in message
+        assert 'price 0\\.1253' in message
+        assert '999999' not in message

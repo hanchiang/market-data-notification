@@ -168,6 +168,10 @@ redis-server
 poetry run python main.py
 ```
 
+Host-side Python runs can still use local Selenium mode if you explicitly set
+`SELENIUM_REMOTE_MODE=false` and have Chrome plus ChromeDriver available on
+your machine. That is no longer the default local workflow.
+
 Run jobs manually:
 
 ```bash
@@ -198,6 +202,7 @@ docker compose up -d
 ```
 
 The compose backend enables remote Selenium and points CNN fear/greed scraping at the `chrome` container.
+The backend image does not bundle Chrome or ChromeDriver; local browser mode is only for host-side Python runs with your own local browser installed.
 
 Run jobs in the backend container:
 

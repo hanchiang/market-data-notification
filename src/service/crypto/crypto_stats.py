@@ -25,6 +25,12 @@ class CryptoStatsService:
         coin_detail: cmc_type.CMCCoinDetail = await self.cmc_service.get_coin_detail(id=id)
         return coin_detail.data
 
+    async def get_sector_detail(self, sector_id: str) -> cmc_type.SectorDetail:
+        data: cmc_type.CMCSectorDetail = await self.cmc_service.get_sector_detail(
+            sector_id=sector_id
+        )
+        return data.data
+
     async def get_spotlight(self, limit=30, rank_range=500, timeframe='24h') -> cmc_type.Spotlight:
         data: cmc_type.CMCSpotlight = await self.cmc_service.get_spotlight(limit=limit, rank_range=rank_range, timeframe=timeframe)
         return data.data

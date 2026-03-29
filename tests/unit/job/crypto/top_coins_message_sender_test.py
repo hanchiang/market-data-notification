@@ -36,7 +36,7 @@ def remove_unknown_fields(my_value, fields: List[dataclasses.Field]):
                 if generic_type != typing.Any and not isinstance(generic_type(), (str, int, bool, float)):
                     remove_unknown_fields(v, dataclasses.fields(typing.get_args(field.type)[0]))
 
-class TestTopSectorsMessageSender:
+class TestTopCoinsMessageSender:
     def load_spotlight(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         file_path = os.path.join(dir_path, '..', '..', '..', 'data', 'cmc', 'cmc_spotlight.json')

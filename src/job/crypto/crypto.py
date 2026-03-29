@@ -1,12 +1,9 @@
 import asyncio
 import logging
 
-from src.job.crypto.sentiment_message_sender import SentimentMessageSender
-from src.job.crypto.top_coins_message_sender import TopCoinsMessageSender
-from src.job.crypto.top_sectors_message_sender import TopSectorsMessageSender
+from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
 from src.job.job_wrapper import JobWrapper
 from src.config import config
-from src.type.cmc import CMCSectorSortBy, CMCSectorSortDirection, CMCSpotlightType
 from src.type.market_data_type import MarketDataType
 from src.util.date_util import get_current_datetime
 
@@ -45,14 +42,7 @@ class CryptoNotificationJob(JobWrapper):
     @property
     def message_senders(self):
         return [
-            TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
-            TopSectorsMessageSender(sort_by=CMCSectorSortBy.MARKET_CAP_CHANGE, sort_direction=CMCSectorSortDirection.DESCENDING),
-            TopSectorsMessageSender(sort_by=CMCSectorSortBy.AVG_PRICE_CHANGE, sort_direction=CMCSectorSortDirection.ASCENDING),
-            TopSectorsMessageSender(sort_by=CMCSectorSortBy.MARKET_CAP_CHANGE, sort_direction=CMCSectorSortDirection.ASCENDING),
-            TopCoinsMessageSender(spotlight_type=CMCSpotlightType.TRENDING),
-            TopCoinsMessageSender(spotlight_type=CMCSpotlightType.GAINER_LIST),
-            TopCoinsMessageSender(spotlight_type=CMCSpotlightType.LOSER_LIST),
-            SentimentMessageSender(),
+            CryptoDigestMessageSender(),
         ]
 
     @property

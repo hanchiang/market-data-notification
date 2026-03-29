@@ -103,7 +103,7 @@ class TestCryptoDigestMessageSender:
         assert '*Sector breadth*' in message
         assert 'Strongest 24h: *Video*' in message
         assert '*Standout coins*' in message
-        assert '*Hifi Finance*' in message
-        assert 'trending, top loser' in message
-        assert '*Cannation*' in message
-        assert 'top gainer' in message
+        assert 'gainers 9, losers 3' in message
+        assert 'top coins' not in message
+        assert '• trending, top loser: *Hifi Finance*' in message
+        assert '• top gainer: *Cannation*' in message

@@ -172,16 +172,12 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             spotlight_entries[coin.id] = (existing_coin, reasons)
 
     def _format_sector_line(self, label: str, sector: cmc_type.Sector24hChange) -> str:
-        top_coin_symbols = ', '.join(
-            escape_markdown(top_coin.symbol) for top_coin in sector.topCoins[:2]
-        )
         return (
             f"{label}: *{escape_markdown(sector.title)}* "
             f"24h {self._format_signed_percentage(sector.avgPriceChange)}, "
             f"mcap {self._format_signed_percentage(sector.marketChange)}, "
             f"volume {self._format_signed_percentage(sector.volumeChange)}, "
-            f"gainers {sector.gainersNum}, losers {sector.losersNum}, "
-            f"top coins {top_coin_symbols}"
+            f"gainers {sector.gainersNum}, losers {sector.losersNum}"
         )
 
     def _format_coin_line(
@@ -190,14 +186,12 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         reason_text = escape_markdown(', '.join(reasons))
         symbol = escape_markdown(coin.symbol)
         return (
-            f"• *{escape_markdown(coin.name)}* {symbol}, "
-            f"labels {reason_text}: "
-            f"price {escape_markdown(friendly_number(coin.priceChange.price))}, "
+            f"• {reason_text}: *{escape_markdown(coin.name)}* {symbol}, "
             f"24h {self._format_signed_percentage(coin.priceChange.priceChange24h)}, "
             f"7d {self._format_signed_percentage(coin.priceChange.priceChange7d)}, "
-            f"volume {escape_markdown(friendly_number(coin.priceChange.volume24h))}, "
+            f"price {self._format_price(coin.priceChange.price)}, "
             f"mcap {escape_markdown(friendly_number(coin.marketCap))}, "
-            f"rank {coin.rank}"
+            f"volume {escape_markdown(friendly_number(coin.priceChange.volume24h))}"
         )
 
     def _format_sentiment_point(self, point: FearGreedData) -> str:
@@ -222,3 +216,14 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
 
     def _format_signed_percentage(self, value: float) -> str:
         return escape_markdown(f'{value:+.2f}%')
+
+    def _format_price(self, value: float) -> str:
+        if value >= 1000:
+            return escape_markdown(friendly_number(value))
+        if value >= 1:
+            return escape_markdown(friendly_number(value, decimal_places=2))
+        if value >= 0.01:
+            return escape_markdown(friendly_number(value, decimal_places=4))
+        if value >= 0.0001:
+            return escape_markdown(friendly_number(value, decimal_places=6))
+        return escape_markdown(friendly_number(value, decimal_places=8))

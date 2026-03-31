@@ -264,6 +264,13 @@ If you want TradingView itself to post into the backend, configure the webhook U
 https://<your-ngrok-domain>/tradingview/daily-stocks
 ```
 
+When you run the stocks job with `--test_mode=1`, the volume-alert checks are intentionally easier to trigger for local visual review:
+
+- `NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK` defaults to `2,5` in test mode instead of `5,30`
+- `STOCKS_VOLUME_ALERT_RATIO_THRESHOLD` defaults to `0.05` in test mode instead of `0.2`
+
+That keeps the alert logic honest while making old replay snapshots more likely to show at least one volume alert during Telegram screenshot testing. If you need exact behavior, set those env vars explicitly before running the job.
+
 ## API
 
 When the server is running:

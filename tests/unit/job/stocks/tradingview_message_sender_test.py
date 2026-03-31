@@ -202,3 +202,213 @@ class TestTradingviewMessageSender:
         assert len(res) == 1
         assert 'Trading view market data' in res[0]
         assert 'VIX' not in res[0]
+
+    @pytest.mark.asyncio
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    @patch('src.job.stocks.tradingview_message_sender.config.get_is_testing_telegram')
+    async def test_format_tradingview_message_sections_stocks_and_economy_indicators(
+        self,
+        get_is_testing_telegram,
+        get_barchart_service,
+        get_tradingview_service,
+        get_current_date_preserve_time,
+        monkeypatch,
+    ):
+        redis_score = 1689685800
+        stocks_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.STOCKS,
+                unix_ms=1,
+                data=[
+                    TradingViewStocksData(
+                        symbol='SPY',
+                        timeframe='1D',
+                        close_prices=[10],
+                        ema20s=[11],
+                        volumes=[100],
+                    ),
+                    TradingViewStocksData(
+                        symbol='QQQ',
+                        timeframe='1D',
+                        close_prices=[12],
+                        ema20s=[12.5],
+                        volumes=[110],
+                    ),
+                    TradingViewStocksData(
+                        symbol='AMD',
+                        timeframe='1D',
+                        close_prices=[20],
+                        ema20s=[18],
+                        volumes=[120],
+                    ),
+                    TradingViewStocksData(
+                        symbol='AMZN',
+                        timeframe='1D',
+                        close_prices=[30],
+                        ema20s=[29.7],
+                        volumes=[130],
+                    ),
+                    TradingViewStocksData(
+                        symbol='META',
+                        timeframe='1D',
+                        close_prices=[40],
+                        ema20s=[38],
+                        volumes=[140],
+                    ),
+                    TradingViewStocksData(
+                        symbol='TSLA',
+                        timeframe='1D',
+                        close_prices=[50],
+                        ema20s=[49.5],
+                        volumes=[150],
+                    ),
+                ],
+            ),
+        )
+        economy_indicator_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.ECONOMY_INDICATOR,
+                unix_ms=1,
+                data=[
+                    TradingViewStocksData(symbol='VIX', timeframe='1D', close_prices=[25]),
+                    TradingViewStocksData(symbol='SKEW', timeframe='1D', close_prices=[142]),
+                ],
+            ),
+        )
+
+        get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(
+            redis_score,
+            tz=datetime.timezone.utc,
+        )
+        get_is_testing_telegram.return_value = False
+        monkeypatch.setattr(
+            'src.job.stocks.tradingview_message_sender.config.get_should_compare_stocks_volume_rank',
+            lambda: False,
+        )
+
+        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
+            side_effect=[stocks_data, economy_indicator_data]
+        )
+
+        res = await tradingview_message_sender.format_message()
+
+        assert len(res) == 1
+        assert '*Indices*' in res[0]
+        assert '*Other tracked names*' in res[0]
+        assert '*Economy indicators*' in res[0]
+        assert '\n\n*Economy indicators*' in res[0]
+        assert 'Below ema20' in res[0] or 'At/above ema20' in res[0]
+
+    @pytest.mark.asyncio
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    @patch('src.job.stocks.tradingview_message_sender.config.get_is_testing_telegram')
+    async def test_format_tradingview_message_uses_lower_volume_threshold_in_test_mode(
+        self,
+        get_is_testing_telegram,
+        get_barchart_service,
+        get_tradingview_service,
+        get_current_date_preserve_time,
+    ):
+        redis_score = 1689685800
+        stocks_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.STOCKS,
+                unix_ms=1,
+                data=[
+                    TradingViewStocksData(
+                        symbol='SPY',
+                        timeframe='1D',
+                        close_prices=[10],
+                        ema20s=[10],
+                        volumes=[100],
+                    ),
+                    TradingViewStocksData(
+                        symbol='AMD',
+                        timeframe='1D',
+                        close_prices=[20],
+                        ema20s=[20],
+                        volumes=[110],
+                    ),
+                ],
+            ),
+        )
+        economy_indicator_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.ECONOMY_INDICATOR,
+                unix_ms=1,
+                data=[],
+            ),
+        )
+
+        get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(
+            redis_score,
+            tz=datetime.timezone.utc,
+        )
+        get_is_testing_telegram.return_value = True
+
+        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
+            side_effect=[stocks_data, economy_indicator_data]
+        )
+        tradingview_message_sender.barchart_service.get_stock_price = AsyncMock(
+            side_effect=[
+                [
+                    barchart_type.StockPrice(
+                        symbol='SPY',
+                        date='2023-06-09',
+                        open_price=1,
+                        high_price=1,
+                        low_price=1,
+                        close_price=1,
+                        volume=100,
+                    ),
+                    barchart_type.StockPrice(
+                        symbol='SPY',
+                        date='2023-06-08',
+                        open_price=1,
+                        high_price=1,
+                        low_price=1,
+                        close_price=1,
+                        volume=95,
+                    ),
+                ],
+                [
+                    barchart_type.StockPrice(
+                        symbol='AMD',
+                        date='2023-06-09',
+                        open_price=1,
+                        high_price=1,
+                        low_price=1,
+                        close_price=1,
+                        volume=110,
+                    ),
+                    barchart_type.StockPrice(
+                        symbol='AMD',
+                        date='2023-06-08',
+                        open_price=1,
+                        high_price=1,
+                        low_price=1,
+                        close_price=1,
+                        volume=100,
+                    ),
+                ],
+            ]
+        )
+
+        res = await tradingview_message_sender.format_message()
+
+        assert len(res) == 1
+        assert 'Highest\\(' in res[0]

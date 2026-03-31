@@ -138,9 +138,21 @@ def get_display_vix_futures_contango_decrease_past_n_days() -> bool:
     return True if val == 'true' or not val else False
 
 def get_number_of_past_days_range_for_stock_volume_rank() -> Tuple[int, int]:
-    data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', '5,30')
+    # Test-mode replay often uses older snapshots, so keep the comparison window
+    # shorter there to make legitimate volume alerts easier to surface locally.
+    default = '2,5' if get_is_testing_telegram() else '5,30'
+    data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', default)
     string_list = data.replace(' ', '').split(',')
     return tuple((int(x) for x in string_list))
+
+def get_stocks_volume_alert_ratio_threshold() -> float:
+    # Lower the default threshold in test mode for the same reason: easier local
+    # visibility of real alert text without fabricating alerts in formatter code.
+    default = '0.05' if get_is_testing_telegram() else '0.2'
+    try:
+        return float(os.getenv('STOCKS_VOLUME_ALERT_RATIO_THRESHOLD', default))
+    except Exception:
+        return float(default)
 def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
     if not get_is_testing_telegram():
         return value

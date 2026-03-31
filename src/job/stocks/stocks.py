@@ -2,9 +2,7 @@ import asyncio
 import logging
 
 from src.job.job_wrapper import JobWrapper
-from src.job.stocks.sentiment_message_sender import StocksSentimentMessageSender
-from src.job.stocks.vix_central_message_sender import VixCentralMessageSender
-from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
+from src.job.stocks.stocks_digest_message_sender import StocksDigestMessageSender
 from src.config import config
 from src.util.date_util import get_current_datetime
 from src.type.market_data_type import MarketDataType
@@ -30,10 +28,7 @@ class StocksNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        senders = [TradingViewMessageSender(), VixCentralMessageSender()]
-        if config.get_should_send_stocks_sentiment_message():
-            senders.append(StocksSentimentMessageSender())
-        return senders
+        return [StocksDigestMessageSender()]
 
     @property
     def market_data_type(self):

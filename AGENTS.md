@@ -1,10 +1,11 @@
 # market-data-notification-backend Agent Guide
 
-Last verified: 2026-03-23
+Last verified: 2026-04-01
 
 ## Scope
 - Applies to `market-data-notification-backend/` unless a deeper `AGENTS.md` overrides it.
 - Follow the workspace root `AGENTS.md` first for cross-repo rules.
+- Use workspace-root task memory for canonical active work. Any repo-local `ACTIVE_TASK.md` or `ACTIVE_TASKS/` paths are scratch only unless the human explicitly asks for them.
 
 ## Repo Role
 - FastAPI webhook receiver and scheduled job backend for stocks and crypto notifications.
@@ -29,9 +30,7 @@ Last verified: 2026-03-23
 - Be careful with startup side effects in `src/server.py`; app startup initializes dependencies, Redis, Telegram bots, and the shared market data clients.
 
 ## Validation
-- Lint: `uv run ruff check .`
-- Syntax check: `uv run python -m compileall src tests main.py`
-- Tests: `uv run pytest tests/unit`
+- Use workspace `EVALS.md` as the default validation matrix for this repo.
 - For auth or routing changes, inspect `src/server.py` and the relevant router module together.
 - For message changes, prefer targeted unit tests under `tests/unit/job/` or `tests/unit/service/`.
 

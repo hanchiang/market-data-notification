@@ -48,26 +48,42 @@ class TestTradingViewService:
 
 
     @pytest.mark.parametrize(
-        'redis_data, add_res, num_elements, remove_res, input_data, test_mode, expected',
+        'redis_data, add_res, num_elements, trim_remove_res, input_data, test_mode, expected, use_pipeline',
         [
-            ([[]], 1, 1, 0, 'data', False, [0, 0]),
-            ([], 1, 1, 0, 'data', False, [1, 0]),
-            ([], 1, 31, 1, 'data', False, [1, 1]),
-            ([[]], 1, 1, 0, 'data', True, [1, 0]),
-            ([[]], 1, 31, 1, 'data', True, [1, 1]),
+            ([[]], 1, 1, 0, 'data', False, [1, 0], True),
+            ([], 1, 1, 0, 'data', False, [1, 0], False),
+            ([], 1, 31, 1, 'data', False, [1, 1], False),
+            ([[]], 1, 1, 0, 'data', True, [1, 0], False),
+            ([[]], 1, 31, 1, 'data', True, [1, 1], False),
         ]
     )
     @patch("src.service.tradingview_service.Redis")
     @pytest.mark.asyncio
-    async def test_save_tradingview_data(self, redis_mock, redis_data, add_res, num_elements, remove_res, input_data, test_mode, expected):
-        redis_mock.get_client.return_value.zrange = AsyncMock(return_value=redis_data)
-        redis_mock.get_client.return_value.zadd = AsyncMock(return_value=add_res)
-        redis_mock.get_client.return_value.zcard = AsyncMock(return_value=num_elements)
-        redis_mock.get_client.return_value.zremrangebyrank = AsyncMock(return_value=remove_res)
+    async def test_save_tradingview_data(self, redis_mock, redis_data, add_res, num_elements, trim_remove_res, input_data, test_mode, expected, use_pipeline):
+        pipeline = Mock()
+        pipeline.zremrangebyscore = Mock(return_value=pipeline)
+        pipeline.zadd = Mock(return_value=pipeline)
+        pipeline.execute = AsyncMock(return_value=[1, add_res])
+
+        redis_client = redis_mock.get_client.return_value
+        redis_client.zrange = AsyncMock(return_value=redis_data)
+        redis_client.zadd = AsyncMock(return_value=add_res)
+        redis_client.zcard = AsyncMock(return_value=num_elements)
+        redis_client.zremrangebyrank = AsyncMock(return_value=trim_remove_res)
+        redis_client.pipeline = Mock(return_value=pipeline)
 
         res = await self.tradingview_service.save_tradingview_data(data=input_data, key='key', score=1, test_mode=test_mode)
 
         assert res == expected
+        if use_pipeline:
+            redis_client.pipeline.assert_called_once_with(transaction=True)
+            pipeline.zremrangebyscore.assert_called_once_with('key', min=1, max=1)
+            pipeline.zadd.assert_called_once_with('key', {'data': 1})
+            pipeline.execute.assert_awaited_once()
+            redis_client.zadd.assert_not_awaited()
+        else:
+            redis_client.pipeline.assert_not_called()
+            redis_client.zadd.assert_awaited_once_with('key', {'data': 1})
 
     @pytest.mark.parametrize(
         'data, expected',

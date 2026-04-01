@@ -78,6 +78,7 @@ class TestTradingViewRouter:
         tradingview_service.get_redis_key_for_stocks.assert_called_once_with(type=TradingViewDataType.STOCKS)
         saved_payload = json.loads(tradingview_service.save_tradingview_data.await_args.kwargs['data'])
         assert saved_payload == {'type': 'stocks', 'test_mode': 'false', 'unix_ms': 1, 'data': []}
+        assert tradingview_service.save_tradingview_data.await_args.kwargs['score'] == 1
         emitted.assert_called_once()
 
     @pytest.mark.asyncio
@@ -114,3 +115,49 @@ class TestTradingViewRouter:
         assert response == {'data': {'num_added': 1, 'num_removed': 0}}
         tradingview_service.get_redis_key_for_stocks.assert_called_once_with(type=TradingViewDataType.STOCKS)
         assert tradingview_service.save_tradingview_data.await_args.kwargs['key'] == 'tradingview-stocks'
+        assert tradingview_service.save_tradingview_data.await_args.kwargs['test_mode'] is True
+
+    @pytest.mark.asyncio
+    async def test_tradingview_daily_stocks_data_ignores_test_mode_request_in_prod(self, monkeypatch):
+        tradingview_service = SimpleNamespace(
+            get_redis_key_for_stocks=Mock(return_value='tradingview-stocks'),
+            save_tradingview_data=AsyncMock(return_value=[1, 0]),
+        )
+        emitted = Mock()
+        set_is_testing_telegram = Mock()
+
+        monkeypatch.setattr(tradingview.Dependencies, 'get_tradingview_service', lambda: tradingview_service)
+        monkeypatch.setattr(tradingview.async_ee, 'emit', emitted)
+        monkeypatch.setattr(tradingview.config, 'get_env', lambda: 'prod')
+        monkeypatch.setattr(tradingview.config, 'get_is_testing_telegram', lambda: False)
+        monkeypatch.setattr(tradingview.config, 'set_is_testing_telegram', set_is_testing_telegram)
+        monkeypatch.setattr(tradingview.config, 'get_telegram_stocks_admin_id', lambda: 'admin-chat')
+
+        request = DummyRequest(
+            r'{\"type\": \"stocks\", \"secret\": \"secret\", \"test_mode\": \"true\", \"unix_ms\": 1774468860948, \"data\": []}'
+        )
+
+        response = await tradingview.tradingview_daily_stocks_data(request)
+
+        assert response == {'data': None}
+        tradingview_service.save_tradingview_data.assert_not_awaited()
+        set_is_testing_telegram.assert_not_called()
+        emitted.assert_called_once()
+
+    @pytest.mark.parametrize(
+        'unix_ms, expected',
+        [
+            (1774468860948, 1774468860),
+            (1774468860, 1774468860),
+            ('1774468860948', 1774468860),
+            (None, None),
+        ],
+    )
+    def test_get_tradingview_score(self, unix_ms, expected):
+        fallback = datetime.datetime(2026, 3, 25, 9, 0, tzinfo=datetime.timezone.utc)
+
+        result = tradingview.get_tradingview_score({'unix_ms': unix_ms}, fallback=fallback)
+
+        expected_score = int(fallback.timestamp()) if expected is None else expected
+
+        assert result == expected_score

@@ -4,6 +4,7 @@ import logging
 from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
 from src.job.job_wrapper import JobWrapper
 from src.config import config
+from src.runtime.runtime_mode import RuntimeMode
 from src.type.market_data_type import MarketDataType
 from src.util.date_util import get_current_datetime
 
@@ -12,8 +13,11 @@ from src.util.date_util import get_current_datetime
 logger = logging.getLogger('Crypto notification job')
 class CryptoNotificationJob(JobWrapper):
     # run at 8.45am, 4.15pm
-    def should_run(self) -> bool:
-        if config.get_is_testing_telegram():
+    def should_run(self, runtime_mode: RuntimeMode | None = None) -> bool:
+        active_runtime_mode = (
+            self.runtime_mode if runtime_mode is None else runtime_mode
+        )
+        if active_runtime_mode.bypass_schedule:
             return True
 
         now = get_current_datetime()
@@ -42,7 +46,7 @@ class CryptoNotificationJob(JobWrapper):
     @property
     def message_senders(self):
         return [
-            CryptoDigestMessageSender(),
+            CryptoDigestMessageSender(runtime_mode=self.runtime_mode),
         ]
 
     @property

@@ -3,6 +3,7 @@ from typing import Tuple, List
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 
 load_dotenv()
 
@@ -95,11 +96,11 @@ def get_telegram_crypto_dev_id():
         raise RuntimeError("telegram crypto dev id is missing")
     return os.getenv('CRYPTO_TELEGRAM_DEV_ID')
 
-def get_is_testing_telegram():
-    return os.getenv('IS_TESTING_TELEGRAM', 'false') == 'true'
-
-def set_is_testing_telegram(testing: str):
-    os.environ['IS_TESTING_TELEGRAM'] = testing
+def resolve_test_mode(is_test_mode: bool | None = None) -> bool:
+    # Keep helper defaults production-safe. RuntimeMode is now the supported
+    # source for test-mode behavior; the legacy env flag should not implicitly
+    # reroute helpers when a caller forgets to pass explicit runtime state.
+    return DEFAULT_RUNTIME_MODE.is_test_mode if is_test_mode is None else is_test_mode
 
 def get_simulate_tradingview_traffic():
     return os.getenv('SIMULATE_TRADINGVIEW_TRAFFIC', 'false') == 'true'
@@ -120,8 +121,10 @@ def get_api_auth_token():
         raise RuntimeError("api auth token is missing")
     return os.getenv('API_AUTH_TOKEN')
 
-def get_contango_single_day_decrease_threshold_ratio():
-    return 0.4 if not get_is_testing_telegram() else 0.01
+def get_contango_single_day_decrease_threshold_ratio(
+    is_test_mode: bool | None = None,
+):
+    return 0.4 if not resolve_test_mode(is_test_mode) else 0.01
 
 def get_contango_decrease_past_n_days_threshold():
     return 5
@@ -137,84 +140,122 @@ def get_display_vix_futures_contango_decrease_past_n_days() -> bool:
     val = os.getenv('DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS', 'true')
     return True if val == 'true' or not val else False
 
-def get_number_of_past_days_range_for_stock_volume_rank() -> Tuple[int, int]:
+def get_number_of_past_days_range_for_stock_volume_rank(
+    is_test_mode: bool | None = None,
+) -> Tuple[int, int]:
     # Test-mode replay often uses older snapshots, so keep the comparison window
     # shorter there to make legitimate volume alerts easier to surface locally.
-    default = '2,5' if get_is_testing_telegram() else '5,30'
+    default = '2,5' if resolve_test_mode(is_test_mode) else '5,30'
     data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', default)
     string_list = data.replace(' ', '').split(',')
     return tuple((int(x) for x in string_list))
 
-def get_stocks_volume_alert_ratio_threshold() -> float:
+def get_stocks_volume_alert_ratio_threshold(
+    is_test_mode: bool | None = None,
+) -> float:
     # Lower the default threshold in test mode for the same reason: easier local
     # visibility of real alert text without fabricating alerts in formatter code.
-    default = '0.05' if get_is_testing_telegram() else '0.2'
+    default = '0.05' if resolve_test_mode(is_test_mode) else '0.2'
     try:
         return float(os.getenv('STOCKS_VOLUME_ALERT_RATIO_THRESHOLD', default))
     except Exception:
         return float(default)
-def overextended_helper(value: float, is_negative=False, default=0.01) -> float:
-    if not get_is_testing_telegram():
+
+def overextended_helper(
+    value: float,
+    is_negative=False,
+    default=0.01,
+    is_test_mode: bool | None = None,
+) -> float:
+    if not resolve_test_mode(is_test_mode):
         return value
     return default if not is_negative else -default
 
-median_overextended_by_symbol = {
-    'DIA': {
+def get_potential_overextended_by_symbol(is_test_mode: bool | None = None):
+    resolved_test_mode = resolve_test_mode(is_test_mode)
+    return {
+        'DIA': {
 
-    },
-    'IWM': {
+        },
+        'IWM': {
 
-    },
-    'QQQ': {
-        'above': overextended_helper(value=0.058) if not get_is_testing_telegram() else overextended_helper(value=0.01),
-        'below': overextended_helper(value=-0.081, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True),
-    },
-    'SPY': {
-        'above': overextended_helper(value=0.0435) if not get_is_testing_telegram() else overextended_helper(value=0.01),
-        'below': overextended_helper(value=-0.067, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True),
-    },
-    'AAPL': {
-        'above': overextended_helper(value=0.0735) if not get_is_testing_telegram() else overextended_helper(value=0.01),
-        'below': overextended_helper(value=-0.081, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True)
-    },
-    'AMD': {
+        },
+        'QQQ': {
+            'above': overextended_helper(
+                value=0.058,
+                is_test_mode=resolved_test_mode,
+            ),
+            'below': overextended_helper(
+                value=-0.081,
+                is_negative=True,
+                is_test_mode=resolved_test_mode,
+            ),
+        },
+        'SPY': {
+            'above': overextended_helper(
+                value=0.0435,
+                is_test_mode=resolved_test_mode,
+            ),
+            'below': overextended_helper(
+                value=-0.067,
+                is_negative=True,
+                is_test_mode=resolved_test_mode,
+            ),
+        },
+        'AAPL': {
+            'above': overextended_helper(
+                value=0.0735,
+                is_test_mode=resolved_test_mode,
+            ),
+            'below': overextended_helper(
+                value=-0.081,
+                is_negative=True,
+                is_test_mode=resolved_test_mode,
+            )
+        },
+        'AMD': {
 
-    },
-    'AMZN': {
-        'above': overextended_helper(value=0.087) if not get_is_testing_telegram() else overextended_helper(value=0.01),
-        'below': overextended_helper(value=-0.111, is_negative=True) if not get_is_testing_telegram() else overextended_helper(value=-0.01, is_negative=True)
-    },
-    'BABA': {
+        },
+        'AMZN': {
+            'above': overextended_helper(
+                value=0.087,
+                is_test_mode=resolved_test_mode,
+            ),
+            'below': overextended_helper(
+                value=-0.111,
+                is_negative=True,
+                is_test_mode=resolved_test_mode,
+            )
+        },
+        'BABA': {
 
-    },
-    'COIN': {
+        },
+        'COIN': {
 
-    },
-    'GOOGL': {
+        },
+        'GOOGL': {
 
-    },
-    'META': {
+        },
+        'META': {
 
-    },
-    'MSFT': {
+        },
+        'MSFT': {
 
-    },
-    'NFLX': {
+        },
+        'NFLX': {
 
-    },
-    'NVDA': {
+        },
+        'NVDA': {
 
-    },
-    'TSLA': {
+        },
+        'TSLA': {
 
-    },
-    'VIX': {
-        'above': 30 if not get_is_testing_telegram() else 26,
-        'below': 15.5 if not get_is_testing_telegram() else 26
+        },
+        'VIX': {
+            'above': 30 if not resolved_test_mode else 26,
+            'below': 15.5 if not resolved_test_mode else 26
+        }
     }
-}
-def get_potential_overextended_by_symbol():
-    return median_overextended_by_symbol
 
 def get_tradingview_webhook_secret():
     if not os.getenv('TRADING_VIEW_WEBHOOK_SECRET', None):

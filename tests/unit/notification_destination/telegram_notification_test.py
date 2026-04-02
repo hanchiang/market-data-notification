@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.notification_destination import telegram_notification
+from src.runtime.runtime_mode import RuntimeMode
 from src.type.market_data_type import MarketDataType
 
 
@@ -128,11 +129,6 @@ async def test_send_message_to_channel_splits_large_user_facing_message(monkeypa
     )
     monkeypatch.setattr(
         telegram_notification.config,
-        'get_is_testing_telegram',
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        telegram_notification.config,
         'get_simulate_tradingview_traffic',
         lambda: False,
     )
@@ -183,11 +179,6 @@ async def test_send_message_to_channel_keeps_admin_path_explicit_when_too_large(
     )
     monkeypatch.setattr(
         telegram_notification.config,
-        'get_is_testing_telegram',
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        telegram_notification.config,
         'get_simulate_tradingview_traffic',
         lambda: False,
     )
@@ -203,3 +194,101 @@ async def test_send_message_to_channel_keeps_admin_path_explicit_when_too_large(
     second_call = admin_client.send_message.await_args_list[1]
     assert first_call.kwargs['text'] == 'x' * 5000
     assert 'send\\_message\\_to\\_channel failed' in second_call.kwargs['text']
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_channel_uses_runtime_mode_for_dev_routing(monkeypatch):
+    dev_client = AsyncMock()
+    dev_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=7)
+    )
+    prod_client = AsyncMock()
+    prod_client.send_message = AsyncMock()
+
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {
+            'crypto-dev-chat': dev_client,
+            'crypto-channel': prod_client,
+        },
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_dev_channel_id_from_market_data_type',
+        lambda _market_data_type: 'crypto-dev-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda _market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_disable_telegram',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_simulate_tradingview_traffic',
+        lambda: False,
+    )
+
+    await telegram_notification.send_message_to_channel(
+        message='crypto alert',
+        chat_id='crypto-channel',
+        market_data_type=MarketDataType.CRYPTO,
+        runtime_mode=RuntimeMode.from_test_mode(True),
+    )
+
+    dev_client.send_message.assert_awaited_once()
+    prod_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_channel_defaults_to_prod_routing_without_runtime_mode(
+    monkeypatch,
+):
+    dev_client = AsyncMock()
+    dev_client.send_message = AsyncMock()
+    prod_client = AsyncMock(
+        send_message=AsyncMock(return_value=_build_message_response(message_id=8))
+    )
+
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {
+            'crypto-dev-chat': dev_client,
+            'crypto-channel': prod_client,
+        },
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_dev_channel_id_from_market_data_type',
+        lambda _market_data_type: 'crypto-dev-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda _market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_disable_telegram',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_simulate_tradingview_traffic',
+        lambda: False,
+    )
+
+    await telegram_notification.send_message_to_channel(
+        message='crypto alert',
+        chat_id='crypto-channel',
+        market_data_type=MarketDataType.CRYPTO,
+    )
+
+    prod_client.send_message.assert_awaited_once()
+    dev_client.send_message.assert_not_awaited()

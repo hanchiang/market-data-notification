@@ -1,6 +1,6 @@
 # market-data-notification-backend Agent Guide
 
-Last verified: 2026-04-01
+Last verified: 2026-04-02
 
 ## Scope
 - Applies to `market-data-notification-backend/` unless a deeper `AGENTS.md` overrides it.
@@ -24,7 +24,7 @@ Last verified: 2026-04-01
 
 ## Repo-Specific Rules
 - Treat Telegram delivery, webhook auth, and Redis state as critical paths. Trace changes from router or job entry points through service code before claiming correctness.
-- Avoid live sends by default. Use test paths, fixtures, or `IS_TESTING_TELEGRAM` behavior when validating message logic.
+- Avoid live sends by default. Use fixtures, explicit `--test_mode=1` job paths, or runtime-mode-aware tests when validating message logic.
 - Check the shared library dependency before assuming local `market-data-library/` edits are in use. `pyproject.toml` currently pins the library from git.
 - `local-build-push-dockerfile.sh` is a local helper, not the canonical build contract. Keep tracked docs and workflows authoritative for container build and dependency-auth behavior.
 - Be careful with startup side effects in `src/server.py`; app startup initializes dependencies, Redis, Telegram bots, and the shared market data clients.

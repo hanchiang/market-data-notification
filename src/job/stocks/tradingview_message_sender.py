@@ -40,8 +40,8 @@ class TradingViewMessageSender(MessageSenderWrapper):
     def market_data_type(self):
         return MarketDataType.STOCKS
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, runtime_mode=None):
+        super().__init__(runtime_mode=runtime_mode)
         self.tradingview_service = Dependencies.get_tradingview_service()
         self.barchart_service = Dependencies.get_barchart_service()
         self.market_indices = ['SPY', 'QQQ', 'IWM', 'DIA']
@@ -61,8 +61,12 @@ class TradingViewMessageSender(MessageSenderWrapper):
         now = get_current_date_preserve_time()
         most_recent_day = get_most_recent_non_weekend_or_today(now - datetime.timedelta(days=1))
         time_diff = abs(int(most_recent_day.timestamp()) - tradingview_stocks_data.score)
-        if not config.get_is_testing_telegram() and time_diff > 86400:
-            logger.info(f'Skip formatting message. is testing telegram: {config.get_is_testing_telegram()}, time difference: {time_diff}')
+        if not self.runtime_mode.allow_stale_replay and time_diff > 86400:
+            logger.info(
+                'Skip formatting message. runtime test mode: %s, time difference: %s',
+                self.runtime_mode.is_test_mode,
+                time_diff,
+            )
             return messages
 
         tradingview_economy_indicator_data = await self.tradingview_service.get_tradingview_daily_stocks_data(
@@ -189,7 +193,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
                     )
                     if (
                         volume_ratio_diff
-                        > config.get_stocks_volume_alert_ratio_threshold()
+                        > config.get_stocks_volume_alert_ratio_threshold(
+                            is_test_mode=self.runtime_mode.relax_thresholds
+                        )
                     ):
                         volume_alert = (
                             f'Highest(+{volume_ratio_diff:.2%} vs previous day) volume for the '
@@ -197,7 +203,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
                         )
 
         overextended_alert = None
-        potential_overextended_by_symbol = config.get_potential_overextended_by_symbol()
+        potential_overextended_by_symbol = config.get_potential_overextended_by_symbol(
+            is_test_mode=self.runtime_mode.relax_thresholds
+        )
         close_ema20_direction = 'above' if close > ema20 else 'below'
         symbol_thresholds = potential_overextended_by_symbol.get(symbol, {})
         overextended_threshold = symbol_thresholds.get(close_ema20_direction)
@@ -322,7 +330,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
 
             # TODO: Compare recent prices/volumes
             close = p.close_prices[0]
-            potential_overextended_by_symbol = config.get_potential_overextended_by_symbol()
+            potential_overextended_by_symbol = config.get_potential_overextended_by_symbol(
+                is_test_mode=self.runtime_mode.relax_thresholds
+            )
 
             # Compare close and overextended threshold
             message = f'*{symbol}*, close {escape_markdown(str(close))}'
@@ -361,7 +371,9 @@ class TradingViewMessageSender(MessageSenderWrapper):
         if data_by_date is None or len(data_by_date) < 2:
             return None
         if num_days_range is None:
-            num_days_range = config.get_number_of_past_days_range_for_stock_volume_rank()
+            num_days_range = config.get_number_of_past_days_range_for_stock_volume_rank(
+                is_test_mode=self.runtime_mode.relax_thresholds
+            )
         (num_days_min, num_days_max) = num_days_range
 
         # get the largest number of days that fit within the data length
@@ -377,7 +389,7 @@ class TradingViewMessageSender(MessageSenderWrapper):
             else:
                 break
 
-        if not config.get_is_testing_telegram():
+        if not self.runtime_mode.relax_thresholds:
             if first_day_greater_count < min(num_days_min - 1, max_days_to_compare):
                 return None
             return first_day_greater_count + 1

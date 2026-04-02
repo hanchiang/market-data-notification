@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 from types import SimpleNamespace
@@ -51,16 +52,9 @@ class TestTradingViewRouter:
         )
         emitted = Mock()
 
-        def discard_task(coro):
-            coro.close()
-            return None
-
         monkeypatch.setattr(tradingview, 'get_current_date', lambda: fixed_now)
         monkeypatch.setattr(tradingview.Dependencies, 'get_tradingview_service', lambda: tradingview_service)
         monkeypatch.setattr(tradingview.async_ee, 'emit', emitted)
-        monkeypatch.setattr(tradingview.asyncio, 'create_task', discard_task)
-        monkeypatch.setattr(tradingview.config, 'get_is_testing_telegram', lambda: False)
-        monkeypatch.setattr(tradingview.config, 'set_is_testing_telegram', lambda _: None)
         monkeypatch.setattr(tradingview.config, 'get_tradingview_webhook_secret', lambda: 'secret')
         monkeypatch.setattr(tradingview.config, 'get_simulate_tradingview_traffic', lambda: True)
         monkeypatch.setattr(tradingview.config, 'get_trading_view_ips', lambda: [])
@@ -89,16 +83,9 @@ class TestTradingViewRouter:
             save_tradingview_data=AsyncMock(return_value=[1, 0]),
         )
 
-        def discard_task(coro):
-            coro.close()
-            return None
-
         monkeypatch.setattr(tradingview, 'get_current_date', lambda: fixed_now)
         monkeypatch.setattr(tradingview.Dependencies, 'get_tradingview_service', lambda: tradingview_service)
         monkeypatch.setattr(tradingview.async_ee, 'emit', Mock())
-        monkeypatch.setattr(tradingview.asyncio, 'create_task', discard_task)
-        monkeypatch.setattr(tradingview.config, 'get_is_testing_telegram', lambda: False)
-        monkeypatch.setattr(tradingview.config, 'set_is_testing_telegram', lambda _: None)
         monkeypatch.setattr(tradingview.config, 'get_tradingview_webhook_secret', lambda: 'secret')
         monkeypatch.setattr(tradingview.config, 'get_simulate_tradingview_traffic', lambda: True)
         monkeypatch.setattr(tradingview.config, 'get_trading_view_ips', lambda: [])
@@ -124,13 +111,10 @@ class TestTradingViewRouter:
             save_tradingview_data=AsyncMock(return_value=[1, 0]),
         )
         emitted = Mock()
-        set_is_testing_telegram = Mock()
 
         monkeypatch.setattr(tradingview.Dependencies, 'get_tradingview_service', lambda: tradingview_service)
         monkeypatch.setattr(tradingview.async_ee, 'emit', emitted)
         monkeypatch.setattr(tradingview.config, 'get_env', lambda: 'prod')
-        monkeypatch.setattr(tradingview.config, 'get_is_testing_telegram', lambda: False)
-        monkeypatch.setattr(tradingview.config, 'set_is_testing_telegram', set_is_testing_telegram)
         monkeypatch.setattr(tradingview.config, 'get_telegram_stocks_admin_id', lambda: 'admin-chat')
 
         request = DummyRequest(
@@ -141,8 +125,73 @@ class TestTradingViewRouter:
 
         assert response == {'data': None}
         tradingview_service.save_tradingview_data.assert_not_awaited()
-        set_is_testing_telegram.assert_not_called()
         emitted.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_tradingview_daily_stocks_data_keeps_test_mode_request_local_under_concurrency(
+        self,
+        monkeypatch,
+    ):
+        fixed_now = datetime.datetime(2026, 3, 26, 9, 0, tzinfo=datetime.timezone.utc)
+        saved_test_modes = []
+
+        async def save_tradingview_data(**kwargs):
+            await asyncio.sleep(0)
+            saved_test_modes.append(kwargs['test_mode'])
+            return [1, 0]
+
+        tradingview_service = SimpleNamespace(
+            get_redis_key_for_stocks=Mock(return_value='tradingview-stocks'),
+            save_tradingview_data=AsyncMock(side_effect=save_tradingview_data),
+        )
+
+        monkeypatch.setattr(tradingview, 'get_current_date', lambda: fixed_now)
+        monkeypatch.setattr(
+            tradingview.Dependencies,
+            'get_tradingview_service',
+            lambda: tradingview_service,
+        )
+        monkeypatch.setattr(tradingview.async_ee, 'emit', Mock())
+        monkeypatch.setattr(
+            tradingview.config,
+            'get_tradingview_webhook_secret',
+            lambda: 'secret',
+        )
+        monkeypatch.setattr(
+            tradingview.config,
+            'get_simulate_tradingview_traffic',
+            lambda: True,
+        )
+        monkeypatch.setattr(tradingview.config, 'get_trading_view_ips', lambda: [])
+        monkeypatch.setattr(tradingview.config, 'get_whitelist_ips', lambda: [])
+        monkeypatch.setattr(
+            tradingview.config,
+            'get_trading_view_days_to_store',
+            lambda: 30,
+        )
+        monkeypatch.setattr(
+            tradingview.config,
+            'get_telegram_stocks_admin_id',
+            lambda: 'admin-chat',
+        )
+
+        prod_request = DummyRequest(
+            r'{\"type\": \"stocks\", \"secret\": \"secret\", \"test_mode\": \"false\", \"unix_ms\": 1, \"data\": []}'
+        )
+        test_request = DummyRequest(
+            r'{\"type\": \"stocks\", \"secret\": \"secret\", \"test_mode\": \"true\", \"unix_ms\": 2, \"data\": []}'
+        )
+
+        responses = await asyncio.gather(
+            tradingview.tradingview_daily_stocks_data(prod_request),
+            tradingview.tradingview_daily_stocks_data(test_request),
+        )
+
+        assert responses == [
+            {'data': {'num_added': 1, 'num_removed': 0}},
+            {'data': {'num_added': 1, 'num_removed': 0}},
+        ]
+        assert sorted(saved_test_modes) == [False, True]
 
     @pytest.mark.parametrize(
         'unix_ms, expected',

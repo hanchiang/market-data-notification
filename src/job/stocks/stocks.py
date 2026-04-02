@@ -4,6 +4,7 @@ import logging
 from src.job.job_wrapper import JobWrapper
 from src.job.stocks.stocks_digest_message_sender import StocksDigestMessageSender
 from src.config import config
+from src.runtime.runtime_mode import RuntimeMode
 from src.util.date_util import get_current_datetime
 from src.type.market_data_type import MarketDataType
 
@@ -11,8 +12,11 @@ from src.type.market_data_type import MarketDataType
 logger = logging.getLogger('Stocks notification job')
 class StocksNotificationJob(JobWrapper):
     # run at 8.45am
-    def should_run(self) -> bool:
-        if config.get_is_testing_telegram():
+    def should_run(self, runtime_mode: RuntimeMode | None = None) -> bool:
+        active_runtime_mode = (
+            self.runtime_mode if runtime_mode is None else runtime_mode
+        )
+        if active_runtime_mode.bypass_schedule:
             return True
 
         now = get_current_datetime()
@@ -28,7 +32,7 @@ class StocksNotificationJob(JobWrapper):
 
     @property
     def message_senders(self):
-        return [StocksDigestMessageSender()]
+        return [StocksDigestMessageSender(runtime_mode=self.runtime_mode)]
 
     @property
     def market_data_type(self):

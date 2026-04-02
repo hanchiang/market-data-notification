@@ -21,10 +21,17 @@ logger = logging.getLogger('Stocks digest message sender')
 
 
 class StocksDigestMessageSender(MessageSenderWrapper):
-    def __init__(self):
-        self.tradingview_message_sender = TradingViewMessageSender()
-        self.vix_central_message_sender = VixCentralMessageSender()
-        self.sentiment_message_sender = StocksSentimentMessageSender()
+    def __init__(self, runtime_mode=None):
+        super().__init__(runtime_mode=runtime_mode)
+        self.tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=self.runtime_mode
+        )
+        self.vix_central_message_sender = VixCentralMessageSender(
+            runtime_mode=self.runtime_mode
+        )
+        self.sentiment_message_sender = StocksSentimentMessageSender(
+            runtime_mode=self.runtime_mode
+        )
 
     @property
     def data_source(self):
@@ -56,6 +63,7 @@ class StocksDigestMessageSender(MessageSenderWrapper):
                         message=message,
                         chat_id=market_data_type_to_chat_id[self.market_data_type],
                         market_data_type=self.market_data_type,
+                        runtime_mode=self.runtime_mode,
                     )
                 )
             return responses
@@ -74,6 +82,7 @@ class StocksDigestMessageSender(MessageSenderWrapper):
                 message=message,
                 chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
                 market_data_type=self.market_data_type,
+                runtime_mode=self.runtime_mode,
             )
             return None
 
@@ -137,4 +146,5 @@ class StocksDigestMessageSender(MessageSenderWrapper):
             message=message,
             chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
             market_data_type=self.market_data_type,
+            runtime_mode=self.runtime_mode,
         )

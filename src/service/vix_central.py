@@ -1,8 +1,10 @@
-import datetime
 import asyncio
+import copy
+import datetime
 import logging
 from typing import List
 from src.config import config
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
 from src.util import date_util
 
@@ -72,8 +74,14 @@ class VixCentralService:
         self.recent_values.clear_current_value()
 
     # Stateful: Cache historical results. Retrieves current result on demand
-    async def get_recent_values(self) -> RecentVixFuturesValues:
+    async def get_recent_values(
+        self,
+        runtime_mode: RuntimeMode | None = None,
+    ) -> RecentVixFuturesValues:
         coros = []
+        active_runtime_mode = (
+            DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+        )
 
         self.clear_current_values()
 
@@ -82,11 +90,23 @@ class VixCentralService:
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
             logger.info('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
+            self.recent_values.vix_futures_values.insert(
+                0,
+                self._current_to_vix_futures_value(
+                    current,
+                    current_date=current_date,
+                ),
+            )
         else:
             logger.info('Retrieving current and historical vix central data')
             current = await self.third_party_service.get_current()
-            self.recent_values.vix_futures_values.insert(0, self._current_to_vix_futures_value(current, current_date=current_date))
+            self.recent_values.vix_futures_values.insert(
+                0,
+                self._current_to_vix_futures_value(
+                    current,
+                    current_date=current_date,
+                ),
+            )
             historical_dates = []
 
             for _ in range(0, self.number_of_days_to_store - len(self.recent_values.vix_futures_values)):
@@ -101,23 +121,38 @@ class VixCentralService:
 
             for i in range(0, len(res)):
                 self.recent_values.vix_futures_values.append(
-                    self._historical_to_vix_futures_value(historical=res[i], current_date=historical_dates[i]))
+                    self._historical_to_vix_futures_value(
+                        historical=res[i],
+                        current_date=historical_dates[i],
+                    )
+                )
 
-        if config.get_is_testing_telegram():
-            self._modify_contango_testing_mode()
+        values_to_return = self.recent_values
+        if active_runtime_mode.relax_thresholds:
+            # Keep the cached series canonical so a test-mode call cannot leak
+            # relaxed thresholds or replay shaping into later production calls.
+            values_to_return = copy.deepcopy(self.recent_values)
+            self._modify_contango_testing_mode(values_to_return)
 
-        return self._compute_contango_alert_threshold(self.recent_values)
+        return self._compute_contango_alert_threshold(values_to_return)
 
-    def _modify_contango_testing_mode(self):
+    def _modify_contango_testing_mode(
+        self,
+        recent_values: RecentVixFuturesValues,
+    ):
         next_month_futures_value = 50
         futures_value = 47
         diff = next_month_futures_value - futures_value
-        for vix_futures_value in self.recent_values.vix_futures_values:
+        threshold_ratio = config.get_contango_single_day_decrease_threshold_ratio(
+            is_test_mode=True
+        )
+        for vix_futures_value in recent_values.vix_futures_values:
             vix_futures_value.futures_value = futures_value
             vix_futures_value.next_month_futures_value = next_month_futures_value
             vix_futures_value.raw_contango = self._calculate_contango(futures_value, next_month_futures_value)
             vix_futures_value.formatted_contango = f"{self._calculate_contango(futures_value, next_month_futures_value):.2%}"
             vix_futures_value.is_contango_single_day_decrease_alert = False
+            vix_futures_value.contango_single_day_decrease_alert_ratio = threshold_ratio
             next_month_futures_value = futures_value
             futures_value -= diff
 
@@ -165,7 +200,11 @@ class VixCentralService:
             recent_values.actual_contango_decrease_past_n_days = decrease_counter
         return recent_values
 
-    def _current_to_vix_futures_value(self, current, current_date: datetime.datetime) -> VixFuturesValue:
+    def _current_to_vix_futures_value(
+        self,
+        current,
+        current_date: datetime.datetime,
+    ) -> VixFuturesValue:
         current_months = current[0]
         current_last_prices = current[2]
         if VixCentralService.MONTH_OF_INTEREST is None:
@@ -173,7 +212,11 @@ class VixCentralService:
         month_of_interest = current_months[0]
         contango = self._calculate_contango(current_last_prices[0], current_last_prices[1])
 
-        ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
+        ret_val = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio(
+                is_test_mode=DEFAULT_RUNTIME_MODE.relax_thresholds
+            )
+        )
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
         ret_val.futures_date = self._format_futures_date(month_of_interest, current_date)
         ret_val.futures_value = current_last_prices[0]
@@ -183,10 +226,18 @@ class VixCentralService:
         ret_val.is_contango_single_day_decrease_alert = False
         return ret_val
 
-    def _historical_to_vix_futures_value(self, historical, current_date: datetime.datetime) -> VixFuturesValue:
+    def _historical_to_vix_futures_value(
+        self,
+        historical,
+        current_date: datetime.datetime,
+    ) -> VixFuturesValue:
         contango = self._calculate_contango(historical[1], historical[2])
 
-        ret_val = VixFuturesValue(contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio())
+        ret_val = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio(
+                is_test_mode=DEFAULT_RUNTIME_MODE.relax_thresholds
+            )
+        )
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
         ret_val.futures_date = self._format_futures_date(VixCentralService.MONTH_OF_INTEREST, current_date)
         ret_val.futures_value = historical[1]

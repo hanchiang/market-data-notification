@@ -20,7 +20,9 @@ class VixCentralMessageSender(MessageSenderWrapper):
     async def format_message(self):
         messages = []
         vix_central_service = Dependencies.get_vix_central_service()
-        vix_central_data = await vix_central_service.get_recent_values()
+        vix_central_data = await vix_central_service.get_recent_values(
+            runtime_mode=self.runtime_mode
+        )
         vix_central_message = self._format_vix_central_message(vix_central_data)
 
         if vix_central_message is not None:
@@ -47,4 +49,3 @@ class VixCentralMessageSender(MessageSenderWrapper):
             threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
             message = f"{message}, *greater than the threshold {escape_markdown(threshold)}, watch for potential reversal {exclamation_mark()}*"
         return message
-

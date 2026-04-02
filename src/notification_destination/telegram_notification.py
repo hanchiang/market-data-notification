@@ -3,6 +3,7 @@ from typing import List
 
 import telegram
 import src.config.config as config
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.type.market_data_type import MarketDataType
 from src.util.exception import get_exception_message
 from src.util.my_telegram import escape_markdown, message_separator
@@ -52,7 +53,12 @@ def init_telegram_bots():
 
 
 
-async def send_message_to_channel(message: str, chat_id, market_data_type: MarketDataType):
+async def send_message_to_channel(
+    message: str,
+    chat_id,
+    market_data_type: MarketDataType,
+    runtime_mode: RuntimeMode | None = None,
+):
     if config.get_disable_telegram():
         logger.info('Telegram is disabled')
         return
@@ -61,7 +67,11 @@ async def send_message_to_channel(message: str, chat_id, market_data_type: Marke
         logger.warning('market_data_type is not passed in')
         return
 
-    if config.get_is_testing_telegram() or config.get_simulate_tradingview_traffic():
+    active_runtime_mode = (
+        DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+    )
+    use_dev_telegram = active_runtime_mode.use_dev_telegram
+    if use_dev_telegram or config.get_simulate_tradingview_traffic():
         chat_id = get_dev_channel_id_from_market_data_type(market_data_type)
 
     telegram_client = chat_id_to_telegram_client[chat_id]

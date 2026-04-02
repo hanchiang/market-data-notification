@@ -20,7 +20,8 @@ logger = logging.getLogger('Crypto digest message sender')
 
 
 class CryptoDigestMessageSender(MessageSenderWrapper):
-    def __init__(self):
+    def __init__(self, runtime_mode=None):
+        super().__init__(runtime_mode=runtime_mode)
         self.cmc_service = Dependencies.get_crypto_stats_service()
         self.sentiment_service = Dependencies.get_crypto_sentiment_service()
 

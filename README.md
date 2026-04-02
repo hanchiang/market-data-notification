@@ -56,7 +56,7 @@ flowchart LR
 ### Stocks
 
 1. TradingView posts daily data to `POST /tradingview/daily-stocks`
-2. The backend validates and stores the payload in Redis
+2. The backend validates and stores production payloads in Redis
 3. The stock job reads Redis data, adds VIX and sentiment context, and sends Telegram output before market open
 
 ### Crypto
@@ -137,8 +137,6 @@ CRYPTOQUANT_API_TOKEN=...
 
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
-
-IS_TESTING_TELEGRAM=false
 ```
 
 ## Local Development
@@ -180,6 +178,10 @@ Run jobs manually:
 ENV=dev poetry run python -m src.job.stocks.stocks --force_run=1 --test_mode=1
 ENV=dev poetry run python -m src.job.crypto.crypto --force_run=1 --test_mode=1
 ```
+
+`--test_mode=1` now builds an explicit runtime mode for dev Telegram routing,
+schedule bypass, stale replay allowance, and relaxed thresholds. You do not need
+to set a separate startup flag for those local test runs.
 
 If you invoke the job files directly instead of using `python -m`, add the repo root to `PYTHONPATH` first:
 
@@ -247,6 +249,8 @@ docker compose up -d redis
 bash scripts/import_tradingview_sample_data_to_redis.sh
 ```
 
+Production ignores TradingView webhook requests that set `test_mode=true`, so replay payloads are for local or non-production debugging only.
+
 By default that imports into:
 
 - `tradingview-stocks`
@@ -300,7 +304,7 @@ docker logs redis
 
 - Verify bot tokens and chat IDs
 - Check the admin Telegram channel for runtime error notifications
-- Confirm whether `IS_TESTING_TELEGRAM` is routing sends to dev channels
+- Confirm whether the job was started with `--test_mode=1` when you expect dev-channel routing
 
 ### Jobs
 

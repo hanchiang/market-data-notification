@@ -5,6 +5,7 @@ from market_data_library.types import barchart_type
 import pytest
 
 from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
+from src.runtime.runtime_mode import RuntimeMode
 from src.type.trading_view import TradingViewRedisData, TradingViewData, TradingViewStocksData, TradingViewDataType
 
 
@@ -52,7 +53,9 @@ class TestTradingviewMessageSender:
         ]
     )
     def test_get_current_data_highest_volume_info_test_mode(self, data, num_days_range, expected):
-        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
         res = tradingview_message_sender.get_current_data_highest_volume_info(data_by_date=data,
                                                                               num_days_range=num_days_range)
 
@@ -126,7 +129,9 @@ class TestTradingviewMessageSender:
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
     @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
     async def test_format_tradingview_message_returns_empty_when_stocks_data_missing(self, get_barchart_service, get_tradingview_service):
-        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(return_value=None)
 
         res = await tradingview_message_sender.format_message()
@@ -170,7 +175,9 @@ class TestTradingviewMessageSender:
         )
         get_is_testing_telegram.return_value = False
 
-        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
             side_effect=[stocks_data, TradingViewRedisData(key='key', score=None, data=None)]
         )
@@ -292,7 +299,9 @@ class TestTradingviewMessageSender:
             lambda: False,
         )
 
-        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
             side_effect=[stocks_data, economy_indicator_data]
         )
@@ -359,7 +368,9 @@ class TestTradingviewMessageSender:
         )
         get_is_testing_telegram.return_value = True
 
-        tradingview_message_sender = TradingViewMessageSender()
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
         tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
             side_effect=[stocks_data, economy_indicator_data]
         )

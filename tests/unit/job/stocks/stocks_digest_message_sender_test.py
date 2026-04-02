@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 from src.job.stocks.stocks_digest_message_sender import StocksDigestMessageSender
 from src.type.market_data_type import MarketDataType
 from src.util.my_telegram import format_messages_to_telegram
@@ -137,9 +138,11 @@ class TestStocksDigestMessageSender:
             'message': 'message one',
             'chat_id': 'stocks-chat',
             'market_data_type': MarketDataType.STOCKS,
+            'runtime_mode': DEFAULT_RUNTIME_MODE,
         }
         assert send_message_to_channel.await_args_list[1].kwargs == {
             'message': 'message two',
             'chat_id': 'stocks-chat',
             'market_data_type': MarketDataType.STOCKS,
+            'runtime_mode': DEFAULT_RUNTIME_MODE,
         }

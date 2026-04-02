@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 
@@ -55,11 +54,6 @@ async def tradingview_daily_stocks_data(request: Request):
         )
         return {"data": None}
 
-    original_is_testing_telegram = config.get_is_testing_telegram()
-    config.set_is_testing_telegram('true' if request_test_mode else 'false')
-    # Manipulating environment variable to trigger testing logic is not the best way to go
-    asyncio.create_task(reset_is_testing_telegram('true' if original_is_testing_telegram else 'false'))
-
     if not request_test_mode and body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
@@ -114,11 +108,6 @@ async def tradingview_daily_stocks_data(request: Request):
             'num_removed': remove_res
         }
     }
-
-async def reset_is_testing_telegram(original_value: str, delay: int = 3):
-    await asyncio.sleep(delay)
-    logger.info(f'Set is_telegram_telegram to original value {original_value} after sleeping for {delay} seconds')
-    config.set_is_testing_telegram(original_value)
 
 async def parse_tradingview_request_body(request: Request) -> dict:
     raw_body = await request.body()

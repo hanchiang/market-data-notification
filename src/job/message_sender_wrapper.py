@@ -4,12 +4,18 @@ from typing import List
 
 from src.notification_destination.telegram_notification import send_message_to_channel, \
     market_data_type_to_admin_chat_id, market_data_type_to_chat_id
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram
 
 
 logger = logging.getLogger('Message sender wrapper')
 class MessageSenderWrapper(ABC):
+    def __init__(self, runtime_mode: RuntimeMode | None = None):
+        self.runtime_mode = (
+            DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+        )
+
     async def start(self):
         try:
             messages = await self.format_message()
@@ -21,14 +27,16 @@ class MessageSenderWrapper(ABC):
             telegram_message = format_messages_to_telegram(messages)
             res = await send_message_to_channel(message=telegram_message,
                                                 chat_id=market_data_type_to_chat_id[self.market_data_type],
-                                                market_data_type=self.market_data_type)
+                                                market_data_type=self.market_data_type,
+                                                runtime_mode=self.runtime_mode)
             return res
         except Exception as e:
             logger.error(get_exception_message(e, cls=self.__class__.__name__))
             messages = [f"{get_exception_message(e, cls=self.__class__.__name__, should_escape_markdown=True)}"]
             message = format_messages_to_telegram(messages)
             await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
-                                          market_data_type=self.market_data_type)
+                                          market_data_type=self.market_data_type,
+                                          runtime_mode=self.runtime_mode)
             return None
 
     @abstractmethod

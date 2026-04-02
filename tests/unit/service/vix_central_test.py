@@ -5,7 +5,9 @@ from unittest.mock import Mock, patch, AsyncMock
 import pytest
 
 from src.dependencies import Dependencies
+from src.runtime.runtime_mode import RuntimeMode
 from src.service.vix_central import VixCentralService, RecentVixFuturesValues, VixFuturesValue
+
 
 class TestVixCentralService:
     CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO = 0.2
@@ -296,6 +298,48 @@ class TestVixCentralService:
         thirdparty_vix_central_service.get_current.assert_called_once()
 
         assert len(result.vix_futures_values) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_recent_values_test_mode_keeps_cached_values_canonical(self):
+        class StubThirdPartyService:
+            async def get_current(self):
+                return [['Apr'], None, [47, 50]]
+
+            async def get_historical(self, _):
+                return ['Apr', 46, 49]
+
+            async def cleanup(self):
+                return None
+
+        vix_central_service = VixCentralService(
+            third_party_service=StubThirdPartyService(),
+            number_of_days_to_store=3,
+        )
+
+        test_values = await vix_central_service.get_recent_values(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
+
+        assert all(
+            value.contango_single_day_decrease_alert_ratio == 0.01
+            for value in test_values.vix_futures_values
+        )
+        assert all(
+            value.contango_single_day_decrease_alert_ratio == 0.4
+            for value in vix_central_service.recent_values.vix_futures_values
+        )
+
+        prod_values = await vix_central_service.get_recent_values(
+            runtime_mode=RuntimeMode()
+        )
+
+        assert all(
+            value.contango_single_day_decrease_alert_ratio == 0.4
+            for value in prod_values.vix_futures_values
+        )
+        assert prod_values.vix_futures_values[1].raw_contango == pytest.approx(
+            (49 / 46) - 1
+        )
 
     def test_calculate_contango(self):
         assert self.vix_central_service._calculate_contango(23, 24) == 0.04347826086956519

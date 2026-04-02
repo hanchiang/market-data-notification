@@ -96,13 +96,7 @@ def get_telegram_crypto_dev_id():
         raise RuntimeError("telegram crypto dev id is missing")
     return os.getenv('CRYPTO_TELEGRAM_DEV_ID')
 
-def get_is_testing_telegram():
-    return os.getenv('IS_TESTING_TELEGRAM', 'false') == 'true'
-
-def set_is_testing_telegram(testing: str):
-    os.environ['IS_TESTING_TELEGRAM'] = testing
-
-def resolve_is_testing_telegram(is_test_mode: bool | None = None) -> bool:
+def resolve_test_mode(is_test_mode: bool | None = None) -> bool:
     # Keep helper defaults production-safe. RuntimeMode is now the supported
     # source for test-mode behavior; the legacy env flag should not implicitly
     # reroute helpers when a caller forgets to pass explicit runtime state.
@@ -130,7 +124,7 @@ def get_api_auth_token():
 def get_contango_single_day_decrease_threshold_ratio(
     is_test_mode: bool | None = None,
 ):
-    return 0.4 if not resolve_is_testing_telegram(is_test_mode) else 0.01
+    return 0.4 if not resolve_test_mode(is_test_mode) else 0.01
 
 def get_contango_decrease_past_n_days_threshold():
     return 5
@@ -151,7 +145,7 @@ def get_number_of_past_days_range_for_stock_volume_rank(
 ) -> Tuple[int, int]:
     # Test-mode replay often uses older snapshots, so keep the comparison window
     # shorter there to make legitimate volume alerts easier to surface locally.
-    default = '2,5' if resolve_is_testing_telegram(is_test_mode) else '5,30'
+    default = '2,5' if resolve_test_mode(is_test_mode) else '5,30'
     data = os.getenv('NUM_PAST_DAYS_RANGE_STOCKS_VOLUME_RANK', default)
     string_list = data.replace(' ', '').split(',')
     return tuple((int(x) for x in string_list))
@@ -161,7 +155,7 @@ def get_stocks_volume_alert_ratio_threshold(
 ) -> float:
     # Lower the default threshold in test mode for the same reason: easier local
     # visibility of real alert text without fabricating alerts in formatter code.
-    default = '0.05' if resolve_is_testing_telegram(is_test_mode) else '0.2'
+    default = '0.05' if resolve_test_mode(is_test_mode) else '0.2'
     try:
         return float(os.getenv('STOCKS_VOLUME_ALERT_RATIO_THRESHOLD', default))
     except Exception:
@@ -173,12 +167,12 @@ def overextended_helper(
     default=0.01,
     is_test_mode: bool | None = None,
 ) -> float:
-    if not resolve_is_testing_telegram(is_test_mode):
+    if not resolve_test_mode(is_test_mode):
         return value
     return default if not is_negative else -default
 
 def get_potential_overextended_by_symbol(is_test_mode: bool | None = None):
-    resolved_test_mode = resolve_is_testing_telegram(is_test_mode)
+    resolved_test_mode = resolve_test_mode(is_test_mode)
     return {
         'DIA': {
 

@@ -280,11 +280,6 @@ async def test_send_message_to_channel_defaults_to_prod_routing_without_runtime_
     )
     monkeypatch.setattr(
         telegram_notification.config,
-        'get_is_testing_telegram',
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        telegram_notification.config,
         'get_simulate_tradingview_traffic',
         lambda: False,
     )

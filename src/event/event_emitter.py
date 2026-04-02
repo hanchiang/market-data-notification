@@ -21,6 +21,8 @@ async def send_to_telegram_handler(*args, **kwargs):
         channel = kwargs['channel']
         message = kwargs['message']
         market_data_type = kwargs['market_data_type']
+        # Router and background events are production-style by default; only
+        # explicit job entry points should opt into test-mode delivery behavior.
         res = await telegram_notification.send_message_to_channel(
             message=message,
             chat_id=channel,

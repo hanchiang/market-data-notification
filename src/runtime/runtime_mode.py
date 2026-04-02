@@ -17,6 +17,8 @@ class RuntimeMode:
 
     @classmethod
     def from_test_mode(cls, test_mode: bool) -> "RuntimeMode":
+        # CLI jobs still expose one operator-facing test flag, so derive the
+        # narrower runtime concerns from that entry-point switch in one place.
         return cls(
             is_test_mode=test_mode,
             use_dev_telegram=test_mode,

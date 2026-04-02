@@ -67,6 +67,8 @@ async def send_message_to_channel(
         logger.warning('market_data_type is not passed in')
         return
 
+    # Callers that omit runtime_mode should stay on the normal delivery path
+    # instead of inheriting dev routing from any ambient process configuration.
     active_runtime_mode = (
         DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
     )

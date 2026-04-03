@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -14,6 +14,111 @@ def _build_message_response(message_id: int):
         date='2026-03-29T00:00:00Z',
         id=message_id,
     )
+
+
+def test_init_telegram_bots_uses_configured_httpx_request(monkeypatch):
+    bot_ctor = Mock()
+    request_ctor = Mock()
+    request_ctor.side_effect = [object(), object(), object(), object(), object(), object()]
+
+    monkeypatch.setattr(telegram_notification.telegram, 'Bot', bot_ctor)
+    monkeypatch.setattr(
+        telegram_notification.telegram.request,
+        'HTTPXRequest',
+        request_ctor,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_connect_timeout_seconds',
+        lambda: 12.0,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_read_timeout_seconds',
+        lambda: 13.0,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_write_timeout_seconds',
+        lambda: 14.0,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_pool_timeout_seconds',
+        lambda: 15.0,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_bot_token',
+        lambda: 'stocks-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_admin_bot_token',
+        lambda: 'stocks-admin-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_dev_bot_token',
+        lambda: 'stocks-dev-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_bot_token',
+        lambda: 'crypto-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_admin_bot_token',
+        lambda: 'crypto-admin-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_dev_bot_token',
+        lambda: 'crypto-dev-token',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_channel_id',
+        lambda: 'stocks-channel',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_admin_id',
+        lambda: 'stocks-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_stocks_dev_id',
+        lambda: 'stocks-dev-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_channel_id',
+        lambda: 'crypto-channel',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_admin_id',
+        lambda: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_dev_id',
+        lambda: 'crypto-dev-chat',
+    )
+
+    telegram_notification.init_telegram_bots()
+
+    assert request_ctor.call_count == 6
+    for call in request_ctor.call_args_list:
+        assert call.kwargs == {
+            'connect_timeout': 12.0,
+            'read_timeout': 13.0,
+            'write_timeout': 14.0,
+            'pool_timeout': 15.0,
+        }
+    assert bot_ctor.call_count == 6
 
 
 @pytest.mark.asyncio

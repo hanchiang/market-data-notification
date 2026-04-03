@@ -33,6 +33,20 @@ def get_selenium_server_host():
 def get_selenium_stealth():
     return os.getenv('SELENIUM_STEALTH', 'true') == 'true'
 
+def get_cnn_page_load_timeout_seconds() -> int:
+    raw_value = os.getenv('CNN_PAGE_LOAD_TIMEOUT_SECONDS', '45')
+    try:
+        timeout_seconds = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(
+            'CNN_PAGE_LOAD_TIMEOUT_SECONDS must be a positive integer'
+        ) from error
+    if timeout_seconds <= 0:
+        raise RuntimeError(
+            'CNN_PAGE_LOAD_TIMEOUT_SECONDS must be a positive integer'
+        )
+    return timeout_seconds
+
 def is_running_in_container():
     return os.path.exists('/.dockerenv')
 
@@ -264,6 +278,28 @@ def get_tradingview_webhook_secret():
 
 def get_disable_telegram():
     return os.getenv('DISABLE_TELEGRAM', 'false') == 'true'
+
+def _get_positive_float_env(var_name: str, default: str) -> float:
+    raw_value = os.getenv(var_name, default)
+    try:
+        parsed_value = float(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f'{var_name} must be a positive number') from error
+    if parsed_value <= 0:
+        raise RuntimeError(f'{var_name} must be a positive number')
+    return parsed_value
+
+def get_telegram_connect_timeout_seconds() -> float:
+    return _get_positive_float_env('TELEGRAM_CONNECT_TIMEOUT_SECONDS', '20')
+
+def get_telegram_read_timeout_seconds() -> float:
+    return _get_positive_float_env('TELEGRAM_READ_TIMEOUT_SECONDS', '20')
+
+def get_telegram_write_timeout_seconds() -> float:
+    return _get_positive_float_env('TELEGRAM_WRITE_TIMEOUT_SECONDS', '20')
+
+def get_telegram_pool_timeout_seconds() -> float:
+    return _get_positive_float_env('TELEGRAM_POOL_TIMEOUT_SECONDS', '5')
 
 def get_redis_host():
     return os.getenv('REDIS_HOST', 'localhost')

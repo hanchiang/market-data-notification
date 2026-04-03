@@ -24,15 +24,41 @@ market_data_type_to_chat_id = {}
 logger = logging.getLogger('Telegram notification')
 MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 
+def _build_telegram_request() -> telegram.request.HTTPXRequest:
+    return telegram.request.HTTPXRequest(
+        connect_timeout=config.get_telegram_connect_timeout_seconds(),
+        read_timeout=config.get_telegram_read_timeout_seconds(),
+        write_timeout=config.get_telegram_write_timeout_seconds(),
+        pool_timeout=config.get_telegram_pool_timeout_seconds(),
+    )
+
 def init_telegram_bots():
     global stocks_bot, stocks_admin_bot, stocks_dev_bot, crypto_bot, crypto_admin_bot, crypto_dev_bot
     logger.info('Initialising telegram bots')
-    stocks_bot = telegram.Bot(token=config.get_telegram_stocks_bot_token())
-    stocks_admin_bot = telegram.Bot(token=config.get_telegram_stocks_admin_bot_token())
-    stocks_dev_bot = telegram.Bot(token=config.get_telegram_stocks_dev_bot_token())
-    crypto_bot = telegram.Bot(token=config.get_telegram_crypto_bot_token())
-    crypto_admin_bot = telegram.Bot(token=config.get_telegram_crypto_admin_bot_token())
-    crypto_dev_bot = telegram.Bot(token=config.get_telegram_crypto_dev_bot_token())
+    stocks_bot = telegram.Bot(
+        token=config.get_telegram_stocks_bot_token(),
+        request=_build_telegram_request(),
+    )
+    stocks_admin_bot = telegram.Bot(
+        token=config.get_telegram_stocks_admin_bot_token(),
+        request=_build_telegram_request(),
+    )
+    stocks_dev_bot = telegram.Bot(
+        token=config.get_telegram_stocks_dev_bot_token(),
+        request=_build_telegram_request(),
+    )
+    crypto_bot = telegram.Bot(
+        token=config.get_telegram_crypto_bot_token(),
+        request=_build_telegram_request(),
+    )
+    crypto_admin_bot = telegram.Bot(
+        token=config.get_telegram_crypto_admin_bot_token(),
+        request=_build_telegram_request(),
+    )
+    crypto_dev_bot = telegram.Bot(
+        token=config.get_telegram_crypto_dev_bot_token(),
+        request=_build_telegram_request(),
+    )
 
     global chat_id_to_telegram_client
     chat_id_to_telegram_client[config.get_telegram_stocks_channel_id()] = stocks_bot

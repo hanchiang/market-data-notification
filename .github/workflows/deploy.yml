@@ -153,8 +153,8 @@ jobs:
           backup_name="${APP_NAME}_backup"
           candidate_name="${APP_NAME}_candidate"
           chrome_name="chrome"
-          chrome_backup_name="${chrome_name}_backup"
-          chrome_candidate_name="${chrome_name}_candidate"
+          chrome_backup_name="chrome_backup"
+          chrome_candidate_name="chrome_candidate"
           chrome_image="selenium/standalone-chromium:145.0.7632.109-20260222"
 
           cleanup_candidate() {

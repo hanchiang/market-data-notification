@@ -140,7 +140,6 @@ jobs:
           SHOULD_COMPARE_STOCKS_VOLUME_RANK: ${{ vars.SHOULD_COMPARE_STOCKS_VOLUME_RANK }}
           DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS: ${{ vars.DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS }}
           SELENIUM_REMOTE_MODE: ${{ vars.SELENIUM_REMOTE_MODE }}
-          SELENIUM_SERVER_HOST: ${{ vars.SELENIUM_SERVER_HOST }}
           SELENIUM_STEALTH: ${{ vars.SELENIUM_STEALTH }}
           ENV: ${{ vars.ENV }}
           SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE: ${{ vars.SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE }}
@@ -156,6 +155,7 @@ jobs:
           chrome_backup_name="${chrome_name}_backup"
           chrome_candidate_name="${chrome_name}_candidate"
           chrome_image="selenium/standalone-chromium:145.0.7632.109-20260222"
+          selenium_server_host="http://127.0.0.1:4444"
 
           cleanup_candidate() {
             docker rm -f "\$candidate_name" >/dev/null 2>&1 || true
@@ -227,6 +227,8 @@ jobs:
           fi
 
           echo "Starting candidate container"
+          # Production deploy uses host networking for both containers, so the backend must
+          # reach Selenium over loopback rather than the Docker Compose-only hostname `chrome`.
           docker run --name "\$candidate_name" -p 8080:8080 --network host --memory="512m" --cpus="0.5" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
           -e STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_CHANNEL_ID -e STOCKS_TELEGRAM_ADMIN_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN \
           -e STOCKS_TELEGRAM_ADMIN_ID=$STOCKS_TELEGRAM_ADMIN_ID -e STOCKS_TELEGRAM_DEV_BOT_TOKEN=$STOCKS_TELEGRAM_DEV_BOT_TOKEN \
@@ -239,7 +241,7 @@ jobs:
           -e DISABLE_TELEGRAM=$DISABLE_TELEGRAM -e REDIS_HOST=$REDIS_HOST -e REDIS_PORT=$REDIS_PORT -e REDIS_DB=$REDIS_DB \
           -e MESSARI_ASSET_METRICS_SHA256=$MESSARI_ASSET_METRICS_SHA256 -e SHOULD_COMPARE_STOCKS_VOLUME_RANK=$SHOULD_COMPARE_STOCKS_VOLUME_RANK \
           -e DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS=$DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS \
-          -e SELENIUM_REMOTE_MODE=$SELENIUM_REMOTE_MODE -e SELENIUM_SERVER_HOST=$SELENIUM_SERVER_HOST -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
+          -e SELENIUM_REMOTE_MODE=$SELENIUM_REMOTE_MODE -e SELENIUM_SERVER_HOST=$selenium_server_host -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
           -e SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE=$SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE \
           -e API_AUTH_TOKEN=$API_AUTH_TOKEN -e AUTH_EXCLUDE_ENDPOINTS=$AUTH_EXCLUDE_ENDPOINTS \
           -e CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD=$CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD \

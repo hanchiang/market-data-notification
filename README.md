@@ -137,6 +137,11 @@ CRYPTOQUANT_API_TOKEN=...
 
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
+CNN_PAGE_LOAD_TIMEOUT_SECONDS=45
+TELEGRAM_CONNECT_TIMEOUT_SECONDS=20
+TELEGRAM_READ_TIMEOUT_SECONDS=20
+TELEGRAM_WRITE_TIMEOUT_SECONDS=20
+TELEGRAM_POOL_TIMEOUT_SECONDS=5
 ```
 
 ## Local Development
@@ -171,6 +176,8 @@ poetry run python main.py
 Host-side Python runs can still use local Selenium mode if you explicitly set
 `SELENIUM_REMOTE_MODE=false` and have Chrome plus ChromeDriver available on
 your machine. That is no longer the default local workflow.
+Use `CNN_PAGE_LOAD_TIMEOUT_SECONDS` to tune the Selenium page-load bound for
+the CNN Fear & Greed scraper when provider latency changes; the default is `45`.
 
 Run jobs manually:
 

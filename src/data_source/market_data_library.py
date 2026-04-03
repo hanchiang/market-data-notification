@@ -31,6 +31,7 @@ def init_market_data_api() -> None:
         tradfi_api_kwargs: dict[str, Any] = {
             'is_stealth': config.get_selenium_stealth(),
             'remote_mode': config.get_selenium_remote_mode(),
+            'page_load_timeout_seconds': config.get_cnn_page_load_timeout_seconds(),
         }
         selenium_server_host = config.get_selenium_server_host()
         if selenium_server_host is not None:

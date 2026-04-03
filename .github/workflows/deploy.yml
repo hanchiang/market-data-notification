@@ -152,9 +152,21 @@ jobs:
           # Keep the previous container around until the replacement has passed a health check.
           backup_name="${APP_NAME}_backup"
           candidate_name="${APP_NAME}_candidate"
+          chrome_name="chrome"
+          chrome_backup_name="${chrome_name}_backup"
+          chrome_candidate_name="${chrome_name}_candidate"
+          chrome_image="selenium/standalone-chromium:145.0.7632.109-20260222"
 
           cleanup_candidate() {
             docker rm -f "\$candidate_name" >/dev/null 2>&1 || true
+          }
+
+          cleanup_chrome_candidate() {
+            docker rm -f "\$chrome_candidate_name" >/dev/null 2>&1 || true
+          }
+
+          cleanup_chrome_backup() {
+            docker rm -f "\$chrome_backup_name" >/dev/null 2>&1 || true
           }
 
           rollback() {
@@ -166,6 +178,35 @@ jobs:
               docker rename "\$backup_name" "$APP_NAME"
               docker start "$APP_NAME" >/dev/null 2>&1 || true
             fi
+          }
+
+          rollback_chrome() {
+            echo "Chrome deployment failed, restoring previous chrome container"
+            cleanup_chrome_candidate
+            if docker container inspect "\$chrome_backup_name" >/dev/null 2>&1
+            then
+              docker rm -f "\$chrome_name" >/dev/null 2>&1 || true
+              docker rename "\$chrome_backup_name" "\$chrome_name"
+              docker start "\$chrome_name" >/dev/null 2>&1 || true
+            fi
+          }
+
+          wait_for_chrome_ready() {
+            # Probe the Selenium status endpoint from the host so promotion only
+            # happens after the replacement container is actually serving WebDriver.
+            for attempt in \$(seq 1 12)
+            do
+              if curl -fsS http://127.0.0.1:4444/status | grep -q '"ready":[[:space:]]*true'
+              then
+                return 0
+              fi
+              if [ "\$attempt" -eq 12 ]
+              then
+                echo "Chrome container did not become ready"
+                return 1
+              fi
+              sleep 5
+            done
           }
 
           trap rollback ERR
@@ -226,15 +267,57 @@ jobs:
           trap - ERR
           docker rm -f "\$backup_name" >/dev/null 2>&1 || true
 
-          if docker container inspect chrome >/dev/null 2>&1
+          cleanup_chrome_candidate
+          if ! docker container inspect "\$chrome_name" >/dev/null 2>&1 && docker container inspect "\$chrome_backup_name" >/dev/null 2>&1
           then
-            if [ "\$(docker inspect -f '{{.State.Running}}' chrome)" != "true" ]
+            echo "Restoring leftover chrome backup container before rollout"
+            docker rename "\$chrome_backup_name" "\$chrome_name"
+          fi
+          if docker container inspect "\$chrome_name" >/dev/null 2>&1
+          then
+            cleanup_chrome_backup
+            current_chrome_image="\$(docker inspect -f '{{.Config.Image}}' "\$chrome_name")"
+            if [ "\$current_chrome_image" != "\$chrome_image" ]
             then
-              docker start chrome >/dev/null
+              # Keep the previous Chrome container as a rollback target until the
+              # replacement image has started and reported Selenium readiness.
+              echo "Recreating chrome container for image change: \$current_chrome_image -> \$chrome_image"
+              echo "Pulling chrome image"
+              docker pull "\$chrome_image"
+              trap rollback_chrome ERR
+              if [ "\$(docker inspect -f '{{.State.Running}}' "\$chrome_name")" = "true" ]
+              then
+                docker stop "\$chrome_name" >/dev/null
+              fi
+              docker rename "\$chrome_name" "\$chrome_backup_name"
+              echo "Starting chrome candidate container"
+              docker run --name "\$chrome_candidate_name" -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1.2g" --cpus="1.5" -d "\$chrome_image"
+              echo "Checking chrome candidate readiness"
+              wait_for_chrome_ready
+              docker rename "\$chrome_candidate_name" "\$chrome_name"
+              trap - ERR
+              cleanup_chrome_backup
+            elif [ "\$(docker inspect -f '{{.State.Running}}' "\$chrome_name")" != "true" ]
+            then
+              # Even a restart-only path must prove Selenium is responsive before
+              # the deploy is allowed to continue.
+              echo "Starting existing chrome container"
+              docker start "\$chrome_name" >/dev/null
+              echo "Checking restarted chrome readiness"
+              wait_for_chrome_ready
             fi
           else
-            echo "Starting chrome container"
-            docker run --name chrome -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1.2g" --cpus="1.5" -d selenium/standalone-chromium:145.0.7632.109-20260222
+            # No existing Chrome container: create one and wait for readiness
+            # before considering the deploy complete.
+            echo "Pulling chrome image"
+            docker pull "\$chrome_image"
+            trap rollback_chrome ERR
+            echo "Starting chrome candidate container"
+            docker run --name "\$chrome_candidate_name" -p 4444:4444 -p 5900:5900 -p 7900:7900 --network host --memory="1.2g" --cpus="1.5" -d "\$chrome_image"
+            echo "Checking chrome candidate readiness"
+            wait_for_chrome_ready
+            docker rename "\$chrome_candidate_name" "\$chrome_name"
+            trap - ERR
           fi
 
           docker ps

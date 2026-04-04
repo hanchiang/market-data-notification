@@ -184,42 +184,13 @@ class VixCentralService:
         for i in range(0, len(recent_values.vix_futures_values) - 1):
             current_value = recent_values.vix_futures_values[i]
             previous_value = recent_values.vix_futures_values[i + 1]
-            curr_contango = current_value.raw_contango
-            prev_contango = previous_value.raw_contango
-
-            if self._is_contract_roll_boundary(current_value, previous_value):
-                # Do not compare contango across a front-month rollover. The
-                # underlying contracts changed, so a day-over-day delta here
-                # would be a false signal instead of a real contango move.
-                current_value.raw_contango_change_prev_day = None
-                current_value.formatted_contango_change_prev_day = None
-                current_value.is_contango_single_day_decrease_alert = False
-                if not is_decrease_for_past_n_days:
-                    decrease_counter = 0
-                continue
-
-            delta_ratio = 0
-            if prev_contango != 0:
-                contango_change = (curr_contango - prev_contango) / abs(prev_contango)
-                current_value.raw_contango_change_prev_day = contango_change
-                current_value.formatted_contango_change_prev_day = f"{contango_change:.2%}"
-                delta_ratio = (curr_contango - prev_contango) / prev_contango
-
-            if delta_ratio < 0 and abs(delta_ratio) >= current_value.contango_single_day_decrease_alert_ratio:
-                current_value.is_contango_single_day_decrease_alert = True
-            else:
-                current_value.is_contango_single_day_decrease_alert = False
-
-            if curr_contango >= prev_contango:
-                # set to a negative value because once the current value is more than the previous value,
-                # is_decrease_for_past_n_days should not be True anymore
-                if not is_decrease_for_past_n_days:
-                    decrease_counter = 0
-                continue
-            else:
-                decrease_counter += 1
-                if decrease_counter >= recent_values.contango_decrease_past_n_days_threshold and not is_decrease_for_past_n_days:
-                    is_decrease_for_past_n_days = True
+            is_decrease_for_past_n_days, decrease_counter = self._update_contango_alert_state(
+                current_value=current_value,
+                previous_value=previous_value,
+                decrease_counter=decrease_counter,
+                is_decrease_for_past_n_days=is_decrease_for_past_n_days,
+                decrease_threshold=recent_values.contango_decrease_past_n_days_threshold,
+            )
 
         # For the last item, there is no previous item to compare to, so it is always false
         recent_values.vix_futures_values[len(recent_values.vix_futures_values) - 1].is_contango_single_day_decrease_alert = False
@@ -228,6 +199,62 @@ class VixCentralService:
         if is_decrease_for_past_n_days:
             recent_values.actual_contango_decrease_past_n_days = decrease_counter
         return recent_values
+
+    def _update_contango_alert_state(
+        self,
+        current_value: VixFuturesValue,
+        previous_value: VixFuturesValue,
+        decrease_counter: int,
+        is_decrease_for_past_n_days: bool,
+        decrease_threshold: int,
+    ) -> tuple[bool, int]:
+        curr_contango = current_value.raw_contango
+        prev_contango = previous_value.raw_contango
+
+        if self._is_contract_roll_boundary(current_value, previous_value):
+            # Do not compare contango across a front-month rollover. The
+            # underlying contracts changed, so a day-over-day delta here
+            # would be a false signal instead of a real contango move.
+            current_value.raw_contango_change_prev_day = None
+            current_value.formatted_contango_change_prev_day = None
+            current_value.is_contango_single_day_decrease_alert = False
+            if not is_decrease_for_past_n_days:
+                decrease_counter = 0
+            return is_decrease_for_past_n_days, decrease_counter
+
+        delta_ratio = self._set_contango_change(current_value, curr_contango, prev_contango)
+        current_value.is_contango_single_day_decrease_alert = (
+            delta_ratio < 0
+            and abs(delta_ratio) >= current_value.contango_single_day_decrease_alert_ratio
+        )
+
+        if curr_contango >= prev_contango:
+            # set to a negative value because once the current value is more than the previous value,
+            # is_decrease_for_past_n_days should not be True anymore
+            if not is_decrease_for_past_n_days:
+                decrease_counter = 0
+            return is_decrease_for_past_n_days, decrease_counter
+
+        decrease_counter += 1
+        if decrease_counter >= decrease_threshold and not is_decrease_for_past_n_days:
+            is_decrease_for_past_n_days = True
+        return is_decrease_for_past_n_days, decrease_counter
+
+    def _set_contango_change(
+        self,
+        current_value: VixFuturesValue,
+        curr_contango: float,
+        prev_contango: float,
+    ) -> float:
+        if prev_contango == 0:
+            current_value.raw_contango_change_prev_day = None
+            current_value.formatted_contango_change_prev_day = None
+            return 0
+
+        contango_change = (curr_contango - prev_contango) / abs(prev_contango)
+        current_value.raw_contango_change_prev_day = contango_change
+        current_value.formatted_contango_change_prev_day = f"{contango_change:.2%}"
+        return (curr_contango - prev_contango) / prev_contango
 
     def _current_to_vix_futures_value(
         self,

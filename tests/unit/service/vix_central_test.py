@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from unittest.mock import Mock, patch, AsyncMock
 

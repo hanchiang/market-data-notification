@@ -5,6 +5,7 @@ set -euo pipefail
 EMAIL_BACKUP_ENV_FILE=${EMAIL_BACKUP_ENV_FILE:-}
 REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
+MAILJET_PAYLOAD_FILE=""
 
 usage() {
     echo "EMAIL_BACKUP_ENV_FILE must point to a readable env file"
@@ -20,6 +21,7 @@ require_var() {
 }
 
 cleanup() {
+    rm -f "$MAILJET_PAYLOAD_FILE"
     sudo rm -f "$REDIS_BACKUP_FILE_NAME"
 }
 
@@ -56,45 +58,75 @@ send_redis_mail() {
     local redis_data_date
     local from_name
     local redis_file
-    local maildata
 
     redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
     unix_timestamp=$(echo "$redis_data" | tail -1)
     redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
     from_name="Market data notification"
     redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
+    MAILJET_PAYLOAD_FILE=$(mktemp /tmp/mailjet-email-backup.XXXXXX.json)
 
-    maildata='{
-      "Messages": [
+    python3 - "$MAILJET_PAYLOAD_FILE" \
+        "$EMAIL_SENDER" \
+        "$from_name" \
+        "$EMAIL_RECIPIENT" \
+        "$MAILJET_REDIS_TEMPLATE_ID" \
+        "$redis_data" \
+        "$redis_data_date" \
+        "$REDIS_BACKUP_FILE_NAME" \
+        "$redis_file" <<'PY'
+import json
+import sys
+
+payload_file = sys.argv[1]
+email_sender = sys.argv[2]
+from_name = sys.argv[3]
+email_recipient = sys.argv[4]
+template_id = int(sys.argv[5])
+redis_data = sys.argv[6]
+redis_data_date = sys.argv[7]
+backup_filename = sys.argv[8]
+backup_b64 = sys.argv[9]
+
+payload = {
+    "Messages": [
         {
-          "From": {
-            "Email": "'${EMAIL_SENDER}'",
-            "Name": "'${from_name}'"
-          },
-          "To": [{"Email": "'${EMAIL_RECIPIENT}'"}],
-          "TemplateID": '${MAILJET_REDIS_TEMPLATE_ID}',
-          "TemplateLanguage": true,
-          "Variables": {
-            "redis_data": "'${redis_data}'",
-            "redis_data_date": "'${redis_data_date}'"
-          },
-          "Attachments": [
-            {
-              "ContentType": "application/zip",
-              "Filename": "'${REDIS_BACKUP_FILE_NAME}'",
-              "Base64Content": "'${redis_file}'"
-            }
-          ]
+            "From": {
+                "Email": email_sender,
+                "Name": from_name,
+            },
+            "To": [
+                {
+                    "Email": email_recipient,
+                }
+            ],
+            "TemplateID": template_id,
+            "TemplateLanguage": True,
+            "Variables": {
+                "redis_data": redis_data,
+                "redis_data_date": redis_data_date,
+            },
+            "Attachments": [
+                {
+                    "ContentType": "application/zip",
+                    "Filename": backup_filename,
+                    "Base64Content": backup_b64,
+                }
+            ],
         }
-      ]
-    }'
+    ]
+}
+
+with open(payload_file, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle)
+PY
 
     curl --fail --silent --show-error --request POST \
         --url "${MAILJET_API_BASE_URL}/v3.1/send" \
         --header "accept: application/json" \
         --header "Content-Type: application/json" \
         --user "${MAILJET_API_KEY}:${MAILJET_SECRET_KEY}" \
-        --data "$maildata"
+        --data-binary "@${MAILJET_PAYLOAD_FILE}"
 }
 
 notify_telegram() {

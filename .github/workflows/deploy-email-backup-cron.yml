@@ -53,11 +53,13 @@ jobs:
         run: ssh production 'echo "SSH connectivity confirmed"'
       - name: Upload email backup script and env file
         env:
-          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+          MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
+          MAILJET_API_BASE_URL: ${{ secrets.MAILJET_API_BASE_URL }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           REDIS_KEY: ${{ secrets.REDIS_KEY }}
-          SENDGRID_REDIS_TEMPLATE_ID: ${{ secrets.SENDGRID_REDIS_TEMPLATE_ID }}
+          MAILJET_REDIS_TEMPLATE_ID: ${{ secrets.MAILJET_REDIS_TEMPLATE_ID }}
           STOCKS_TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.STOCKS_TELEGRAM_ADMIN_BOT_TOKEN }}
           STOCKS_TELEGRAM_ADMIN_ID: ${{ secrets.STOCKS_TELEGRAM_ADMIN_ID }}
         run: |
@@ -66,11 +68,13 @@ jobs:
           ssh production "chmod 755 '$REMOTE_BASE_DIR/cron/email_backup.sh'"
           # Store secrets in a protected env file instead of exposing them in the crontab command line.
           ssh production "cat > '$REMOTE_BASE_DIR/config/email_backup.env' <<'EOF'
-          SENDGRID_API_KEY=$SENDGRID_API_KEY
+          MAILJET_API_KEY=$MAILJET_API_KEY
+          MAILJET_SECRET_KEY=$MAILJET_SECRET_KEY
+          MAILJET_API_BASE_URL=$MAILJET_API_BASE_URL
           EMAIL_RECIPIENT=$EMAIL_RECIPIENT
           EMAIL_SENDER=$EMAIL_SENDER
           REDIS_KEY=$REDIS_KEY
-          SENDGRID_REDIS_TEMPLATE_ID=$SENDGRID_REDIS_TEMPLATE_ID
+          MAILJET_REDIS_TEMPLATE_ID=$MAILJET_REDIS_TEMPLATE_ID
           STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN
           STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_ADMIN_ID
           EOF

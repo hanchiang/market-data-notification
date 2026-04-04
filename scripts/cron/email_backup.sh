@@ -31,11 +31,14 @@ fi
 # shellcheck disable=SC1090
 source "$EMAIL_BACKUP_ENV_FILE"
 
-require_var SENDGRID_API_KEY
+MAILJET_API_BASE_URL=${MAILJET_API_BASE_URL:-https://api.mailjet.com}
+
+require_var MAILJET_API_KEY
+require_var MAILJET_SECRET_KEY
 require_var EMAIL_RECIPIENT
 require_var EMAIL_SENDER
 require_var REDIS_KEY
-require_var SENDGRID_REDIS_TEMPLATE_ID
+require_var MAILJET_REDIS_TEMPLATE_ID
 require_var STOCKS_TELEGRAM_BOT_TOKEN
 require_var STOCKS_TELEGRAM_CHANNEL_ID
 
@@ -61,35 +64,36 @@ send_redis_mail() {
     from_name="Market data notification"
     redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
 
-    maildata='{"personalizations":
-      [
+    maildata='{
+      "Messages": [
         {
-          "to": [{"email": "'${EMAIL_RECIPIENT}'"}],
-          "dynamic_template_data": {
+          "From": {
+            "Email": "'${EMAIL_SENDER}'",
+            "Name": "'${from_name}'"
+          },
+          "To": [{"Email": "'${EMAIL_RECIPIENT}'"}],
+          "TemplateID": '${MAILJET_REDIS_TEMPLATE_ID}',
+          "TemplateLanguage": true,
+          "Variables": {
             "redis_data": "'${redis_data}'",
             "redis_data_date": "'${redis_data_date}'"
-          }
-        }
-      ],
-      "from": {
-        "email": "'${EMAIL_SENDER}'",
-        "name": "'${from_name}'"
-      },
-      "template_id": "'${SENDGRID_REDIS_TEMPLATE_ID}'",
-      "attachments": [
-        {
-          "content": "'${redis_file}'",
-          "filename": "'${REDIS_BACKUP_FILE_NAME}'",
-          "type": "application/zip",
-          "disposition": "attachment"
+          },
+          "Attachments": [
+            {
+              "ContentType": "application/zip",
+              "Filename": "'${REDIS_BACKUP_FILE_NAME}'",
+              "Base64Content": "'${redis_file}'"
+            }
+          ]
         }
       ]
     }'
 
     curl --fail --silent --show-error --request POST \
-        --url https://api.sendgrid.com/v3/mail/send \
-        --header "Authorization: Bearer ${SENDGRID_API_KEY}" \
+        --url "${MAILJET_API_BASE_URL}/v3.1/send" \
+        --header "accept: application/json" \
         --header "Content-Type: application/json" \
+        --user "${MAILJET_API_KEY}:${MAILJET_SECRET_KEY}" \
         --data "$maildata"
 }
 

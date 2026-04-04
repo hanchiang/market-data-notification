@@ -148,6 +148,10 @@ jobs:
         run: |
           ssh production << EOF
           set -euo pipefail
+          # This heredoc is intentionally unquoted so GitHub Actions env values
+          # expand on the runner before the script is sent over SSH. Any value
+          # that only exists on the remote shell must therefore be escaped or
+          # assigned as a literal here, or the runner will erase it first.
           # Keep the previous container around until the replacement has passed a health check.
           backup_name="${APP_NAME}_backup"
           candidate_name="${APP_NAME}_candidate"
@@ -241,7 +245,7 @@ jobs:
           -e DISABLE_TELEGRAM=$DISABLE_TELEGRAM -e REDIS_HOST=$REDIS_HOST -e REDIS_PORT=$REDIS_PORT -e REDIS_DB=$REDIS_DB \
           -e MESSARI_ASSET_METRICS_SHA256=$MESSARI_ASSET_METRICS_SHA256 -e SHOULD_COMPARE_STOCKS_VOLUME_RANK=$SHOULD_COMPARE_STOCKS_VOLUME_RANK \
           -e DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS=$DISPLAY_VIX_FUTURES_CONTANGO_DECREASE_PAST_N_DAYS \
-          -e SELENIUM_REMOTE_MODE=$SELENIUM_REMOTE_MODE -e SELENIUM_SERVER_HOST=$selenium_server_host -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
+          -e SELENIUM_REMOTE_MODE=$SELENIUM_REMOTE_MODE -e SELENIUM_SERVER_HOST=\$selenium_server_host -e SELENIUM_STEALTH=$SELENIUM_STEALTH \
           -e SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE=$SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE \
           -e API_AUTH_TOKEN=$API_AUTH_TOKEN -e AUTH_EXCLUDE_ENDPOINTS=$AUTH_EXCLUDE_ENDPOINTS \
           -e CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD=$CMC_COIN_PRICE_CHANGE_24H_PERCENTAGE_THRESHOLD \

@@ -19,11 +19,12 @@ class ThirdPartyVixCentralService:
   async def cleanup(self):
     await self.http_client.cleanup()
 
-  # response: list of list
-  # 0: list of 8 months. e.g. ["Jan", "Feb", ...]
-  # 1: list of empty string
-  # 2: list of last prices(we want to calculate the contango % for the first value). e.g. [23.6, 24.9, ...]
-  # 8: list of VIX index(same values). e.g. [20.87, 20.87, ...]
+  # `ajax_update` returns a nested list rather than a typed object.
+  # 0: front-month labels from the provider, e.g. ["Apr", "May", ...]
+  # 1: spacer strings
+  # 2: live last-price strip; indices 0 and 1 are the current and next month
+  #    prices used for contango
+  # 8: repeated spot VIX index values
   async def get_current(self):
     res = await self.http_client.get(url='/ajax_update')
     if res.status != 200:
@@ -33,9 +34,9 @@ class ThirdPartyVixCentralService:
     return res_json
 
   # date: yyyy-mm-dd
-  # response: list of 10 numbers
-  # first number is not used
-  # we want to calculate the contango % for the second value
+  # `ajax_historical` returns only numeric values, with no contract month labels.
+  # Index 1 is the front month and index 2 is the next month for that historical
+  # date, so downstream code has to infer contract identity separately.
   async def get_historical(self, date: str):
     res = await self.http_client.get(url='/ajax_historical',
                                      params={"n1": date})

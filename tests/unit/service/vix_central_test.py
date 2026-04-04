@@ -1,10 +1,8 @@
-import asyncio
 import datetime
 from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
 
-from src.dependencies import Dependencies
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.vix_central import VixCentralService, RecentVixFuturesValues, VixFuturesValue
 
@@ -169,14 +167,6 @@ class TestVixCentralService:
     def setup_method(self):
         self.vix_central_service = VixCentralService(number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS)
 
-    @classmethod
-    def setup_class(cls):
-        asyncio.run(Dependencies.build())
-
-    @classmethod
-    def teardown_class(cls):
-        asyncio.run(Dependencies.cleanup())
-
     def test_compute_contango_alert_threshold_no_vix_futures_values(self):
         recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
 
@@ -250,13 +240,130 @@ class TestVixCentralService:
         # Verify the fix
         assert result.vix_futures_values[0].raw_contango_change_prev_day == 0.5, "Expected raw_contango_change_prev_day to be 0.5"
 
+    def test_compute_contango_alert_threshold_suppresses_contract_roll_boundary(self):
+        recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
+
+        v1 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v1.current_date = '2024-04-17'
+        v1.futures_date = '2024 May'
+        v1.raw_contango = 0.05
+        v1.formatted_contango = f"{v1.raw_contango:.2%}"
+
+        v2 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v2.current_date = '2024-04-16'
+        v2.futures_date = '2024 Apr'
+        v2.raw_contango = 0.10
+        v2.formatted_contango = f"{v2.raw_contango:.2%}"
+
+        v3 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v3.current_date = '2024-04-15'
+        v3.futures_date = '2024 Apr'
+        v3.raw_contango = 0.12
+        v3.formatted_contango = f"{v3.raw_contango:.2%}"
+
+        recent_vix_futures_values.vix_futures_values = [v1, v2, v3]
+
+        result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
+
+        assert result.vix_futures_values[0].formatted_contango_change_prev_day is None
+        assert result.vix_futures_values[0].is_contango_single_day_decrease_alert is False
+        assert result.is_contango_decrease_for_past_n_days is False
+
+    def test_compute_contango_alert_threshold_preserves_same_contract_alert(self):
+        recent_vix_futures_values = RecentVixFuturesValues(decrease_past_n_days=2)
+
+        v1 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v1.current_date = '2024-04-16'
+        v1.futures_date = '2024 Apr'
+        v1.raw_contango = 0.05
+        v1.formatted_contango = f"{v1.raw_contango:.2%}"
+
+        v2 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v2.current_date = '2024-04-15'
+        v2.futures_date = '2024 Apr'
+        v2.raw_contango = 0.10
+        v2.formatted_contango = f"{v2.raw_contango:.2%}"
+
+        v3 = VixFuturesValue(
+            contango_single_day_decrease_alert_ratio=TestVixCentralService.CONTANGO_SINGLE_DAY_DECREASE_ALERT_RATIO
+        )
+        v3.current_date = '2024-04-12'
+        v3.futures_date = '2024 Apr'
+        v3.raw_contango = 0.12
+        v3.formatted_contango = f"{v3.raw_contango:.2%}"
+
+        recent_vix_futures_values.vix_futures_values = [v1, v2, v3]
+
+        result = self.vix_central_service._compute_contango_alert_threshold(recent_vix_futures_values)
+
+        assert result.vix_futures_values[0].is_contango_single_day_decrease_alert is True
+        assert result.vix_futures_values[0].formatted_contango_change_prev_day == "-50.00%"
+        assert result.is_contango_decrease_for_past_n_days is True
+
+    def test_get_front_month_contract_date_rolls_on_settlement_date(self):
+        assert self.vix_central_service._get_current_contract_date_from_provider(
+            "Apr",
+            datetime.date(2024, 4, 16)
+        ) == datetime.date(2024, 4, 1)
+        assert self.vix_central_service._get_current_contract_date_from_provider(
+            "May",
+            datetime.date(2024, 4, 17)
+        ) == datetime.date(2024, 5, 1)
+        assert self.vix_central_service._get_current_contract_date_from_provider(
+            "Jan",
+            datetime.date(2022, 12, 31)
+        ) == datetime.date(2023, 1, 1)
+
+    def test_infer_historical_contract_date_uses_current_provider_anchor(self):
+        assert self.vix_central_service._infer_historical_contract_date(
+            observation_date=datetime.date(2024, 4, 16),
+            reference_current_date=datetime.date(2024, 4, 17),
+            reference_current_contract_date=datetime.date(2024, 5, 1),
+        ) == datetime.date(2024, 4, 1)
+        assert self.vix_central_service._infer_historical_contract_date(
+            observation_date=datetime.date(2024, 4, 17),
+            reference_current_date=datetime.date(2024, 4, 17),
+            reference_current_contract_date=datetime.date(2024, 5, 1),
+        ) == datetime.date(2024, 5, 1)
+
+    def test_current_to_vix_futures_value_uses_provider_front_month_label(self):
+        result = self.vix_central_service._current_to_vix_futures_value(
+            current=[["May"], None, [17.2, 17.5]],
+            current_date=datetime.datetime(2024, 4, 17),
+            contract_date=datetime.date(2024, 5, 1),
+        )
+
+        assert result.futures_date == "2024 May"
+
     @pytest.mark.asyncio
     @patch("asyncio.gather", new_callable=AsyncMock)
     async def test_get_recent_values_empty_state(self, asyncio_gather_mock: AsyncMock):
-        thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
+        class StubThirdPartyService:
+            async def get_current(self):
+                return self.current_vix_futures
+
+            def get_historical(self, _):
+                return self.historical_vix_futures
+
+        thirdparty_vix_central_service = StubThirdPartyService()
+        thirdparty_vix_central_service.current_vix_futures = self.current_vix_futures
+        thirdparty_vix_central_service.historical_vix_futures = self.historical_vix_futures
         thirdparty_vix_central_service.get_current = AsyncMock(return_value=self.current_vix_futures)
         thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)
-        vix_central_service = VixCentralService(third_party_service=thirdparty_vix_central_service, number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS)
+        vix_central_service = VixCentralService(
+            third_party_service=thirdparty_vix_central_service,
+            number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS,
+        )
 
         vix_futures_values = VixFuturesValue()
         vix_futures_values.futures_value = self.historical_vix_futures[1]
@@ -275,12 +382,22 @@ class TestVixCentralService:
     @patch("asyncio.gather", new_callable=AsyncMock)
     @patch("src.service.vix_central.date_util.get_most_recent_non_weekend_or_today")
     async def test_get_recent_values_full_state_most_recent_value_already_retrieved(self, get_most_recent_non_weekend_or_today: Mock, asyncio_gather_mock: AsyncMock):
-        thirdparty_vix_central_service = Dependencies.get_thirdparty_vix_central_service()
+        class StubThirdPartyService:
+            async def get_current(self):
+                return self.current_vix_futures
 
+            def get_historical(self, _):
+                return self.historical_vix_futures
+
+        thirdparty_vix_central_service = StubThirdPartyService()
+        thirdparty_vix_central_service.current_vix_futures = self.current_vix_futures
+        thirdparty_vix_central_service.historical_vix_futures = self.historical_vix_futures
         thirdparty_vix_central_service.get_current = AsyncMock(return_value=self.current_vix_futures)
         thirdparty_vix_central_service.get_historical = Mock(return_value=self.historical_vix_futures)
-        vix_central_service = VixCentralService(third_party_service=thirdparty_vix_central_service,
-                                                number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS)
+        vix_central_service = VixCentralService(
+            third_party_service=thirdparty_vix_central_service,
+            number_of_days_to_store=TestVixCentralService.VIX_CENTRAL_NUMBER_OF_DAYS,
+        )
 
         vix_futures_values = VixFuturesValue()
         vix_futures_values.futures_value = self.historical_vix_futures[1]

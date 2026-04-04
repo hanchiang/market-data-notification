@@ -6,6 +6,7 @@ EMAIL_BACKUP_ENV_FILE=${EMAIL_BACKUP_ENV_FILE:-}
 REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
 MAILJET_PAYLOAD_FILE=""
+REDIS_DATA_FILE=""
 
 usage() {
     echo "EMAIL_BACKUP_ENV_FILE must point to a readable env file"
@@ -22,6 +23,7 @@ require_var() {
 
 cleanup() {
     rm -f "$MAILJET_PAYLOAD_FILE"
+    rm -f "$REDIS_DATA_FILE"
     sudo rm -f "$REDIS_BACKUP_FILE_NAME"
 }
 
@@ -57,24 +59,25 @@ send_redis_mail() {
     local unix_timestamp
     local redis_data_date
     local from_name
-    local redis_file
 
     redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
     unix_timestamp=$(echo "$redis_data" | tail -1)
     redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
     from_name="Market data notification"
-    redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
     MAILJET_PAYLOAD_FILE=$(mktemp /tmp/mailjet-email-backup.XXXXXX.json)
+    REDIS_DATA_FILE=$(mktemp /tmp/mailjet-redis-data.XXXXXX.txt)
+    printf '%s' "$redis_data" > "$REDIS_DATA_FILE"
 
     python3 - "$MAILJET_PAYLOAD_FILE" \
         "$EMAIL_SENDER" \
         "$from_name" \
         "$EMAIL_RECIPIENT" \
         "$MAILJET_REDIS_TEMPLATE_ID" \
-        "$redis_data" \
         "$redis_data_date" \
         "$REDIS_BACKUP_FILE_NAME" \
-        "$redis_file" <<'PY'
+        "$REDIS_BACKUP_FILE_NAME" \
+        "$REDIS_DATA_FILE" <<'PY'
+import base64
 import json
 import sys
 
@@ -83,10 +86,16 @@ email_sender = sys.argv[2]
 from_name = sys.argv[3]
 email_recipient = sys.argv[4]
 template_id = int(sys.argv[5])
-redis_data = sys.argv[6]
-redis_data_date = sys.argv[7]
+redis_data_date = sys.argv[6]
+backup_path = sys.argv[7]
 backup_filename = sys.argv[8]
-backup_b64 = sys.argv[9]
+redis_data_path = sys.argv[9]
+
+with open(redis_data_path, "r", encoding="utf-8") as handle:
+    redis_data = handle.read()
+
+with open(backup_path, "rb") as handle:
+    backup_b64 = base64.b64encode(handle.read()).decode("ascii")
 
 payload = {
     "Messages": [

@@ -154,6 +154,7 @@ poetry install
 ```
 
 `poetry install` pulls `market-data-library` from Git over SSH, so the machine must have access to `git@github.com:hanchiang/market_data_api.git`.
+Use the sibling workspace override only when backend validation must exercise unpublished local `market-data-library` changes.
 
 Switch to the sibling workspace copy of `market-data-library` when needed:
 
@@ -165,6 +166,12 @@ Switch back to the Git dependency:
 
 ```bash
 ./scripts/use_git_market_data_library.sh
+```
+
+Confirm which source the backend currently imports before running validation:
+
+```bash
+./scripts/show_market_data_library_source.sh
 ```
 
 Run the backend:

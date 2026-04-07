@@ -43,7 +43,15 @@ class VixCentralMessageSender(MessageSenderWrapper):
     def _format_vix_futures_values(self, res, curr):
         message = f"{res}\ndate: {escape_markdown(curr.current_date)}, contango %: {escape_markdown(curr.formatted_contango)}"
         if curr.formatted_contango_change_prev_day is not None:
-            message = f"{message}, changed by {escape_markdown(curr.formatted_contango_change_prev_day)} from the previous day"
+            if curr.raw_contango_change_prev_day == 0:
+                message = f"{message}, unchanged from the previous day"
+            else:
+                direction = "increased" if curr.raw_contango_change_prev_day > 0 else "decreased"
+                message = (
+                    f"{message}, {escape_markdown(direction)} by "
+                    f"{escape_markdown(f'{abs(curr.raw_contango_change_prev_day):.2%}')} "
+                    f"from the previous day"
+                )
         if curr.is_contango_single_day_decrease_alert:
             threshold = f"{curr.contango_single_day_decrease_alert_ratio:.1%}"
             message = f"{message}, *greater than the threshold {escape_markdown(threshold)}, watch for potential reversal {exclamation_mark()}*"

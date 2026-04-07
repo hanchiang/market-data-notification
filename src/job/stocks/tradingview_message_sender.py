@@ -174,33 +174,40 @@ class TradingViewMessageSender(MessageSenderWrapper):
         if volumes is not None and isinstance(volumes, list) and len(volumes) > 0:
             volume_text = friendly_number(volumes[0], decimal_places=2)
             if config.get_should_compare_stocks_volume_rank():
-                stock_prices = await self.barchart_service.get_stock_price(
-                    symbol=symbol,
-                    num_days=30,
-                )
-                await sleep(max_sec=0.2)
-                historical_volumes = [x.volume for x in stock_prices]
-                max_days_to_compare = self.get_current_data_highest_volume_info(
-                    historical_volumes
-                )
-                if max_days_to_compare is not None and len(historical_volumes) > 1:
-                    # Require both conditions: today's volume must remain the highest
-                    # over the accepted lookback window, and the jump versus the prior
-                    # day must still clear a ratio threshold worth calling out.
-                    volume_ratio_diff = abs(
-                        (historical_volumes[0] - historical_volumes[1])
-                        / historical_volumes[1]
+                try:
+                    stock_prices = await self.barchart_service.get_stock_price(
+                        symbol=symbol,
+                        num_days=30,
                     )
-                    if (
-                        volume_ratio_diff
-                        > config.get_stocks_volume_alert_ratio_threshold(
-                            is_test_mode=self.runtime_mode.relax_thresholds
+                    await sleep(max_sec=0.2)
+                    historical_volumes = [x.volume for x in stock_prices]
+                    max_days_to_compare = self.get_current_data_highest_volume_info(
+                        historical_volumes
+                    )
+                    if max_days_to_compare is not None and len(historical_volumes) > 1:
+                        # Require both conditions: today's volume must remain the highest
+                        # over the accepted lookback window, and the jump versus the prior
+                        # day must still clear a ratio threshold worth calling out.
+                        volume_ratio_diff = abs(
+                            (historical_volumes[0] - historical_volumes[1])
+                            / historical_volumes[1]
                         )
-                    ):
-                        volume_alert = (
-                            f'Highest(+{volume_ratio_diff:.2%} vs previous day) volume for the '
-                            f'past {max_days_to_compare} days {exclamation_mark()}'
-                        )
+                        if (
+                            volume_ratio_diff
+                            > config.get_stocks_volume_alert_ratio_threshold(
+                                is_test_mode=self.runtime_mode.relax_thresholds
+                            )
+                        ):
+                            volume_alert = (
+                                f'Highest(+{volume_ratio_diff:.2%} vs previous day) volume for the '
+                                f'past {max_days_to_compare} days {exclamation_mark()}'
+                            )
+                except Exception as error:
+                    logger.warning(
+                        'Skip Barchart volume enrichment for %s after provider failure: %s',
+                        symbol,
+                        error,
+                    )
 
         overextended_alert = None
         potential_overextended_by_symbol = config.get_potential_overextended_by_symbol(

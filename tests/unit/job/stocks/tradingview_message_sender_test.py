@@ -410,3 +410,64 @@ class TestTradingviewMessageSender:
 
         assert len(res) == 1
         assert 'Highest\\(' in res[0]
+
+    @pytest.mark.asyncio
+    @patch('src.job.stocks.tradingview_message_sender.get_current_date_preserve_time')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_tradingview_service')
+    @patch('src.job.stocks.tradingview_message_sender.Dependencies.get_barchart_service')
+    async def test_format_tradingview_message_degrades_when_barchart_enrichment_fails(
+        self,
+        get_barchart_service,
+        get_tradingview_service,
+        get_current_date_preserve_time,
+    ):
+        redis_score = 1689685800
+        stocks_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.STOCKS,
+                unix_ms=1,
+                data=[
+                    TradingViewStocksData(
+                        symbol='SPY',
+                        timeframe='1D',
+                        close_prices=[10],
+                        ema20s=[10],
+                        volumes=[100],
+                    ),
+                ],
+            ),
+        )
+        economy_indicator_data = TradingViewRedisData(
+            key='key',
+            score=redis_score,
+            data=TradingViewData(
+                type=TradingViewDataType.ECONOMY_INDICATOR,
+                unix_ms=1,
+                data=[],
+            ),
+        )
+
+        get_current_date_preserve_time.return_value = datetime.datetime.fromtimestamp(
+            redis_score,
+            tz=datetime.timezone.utc,
+        )
+
+        tradingview_message_sender = TradingViewMessageSender(
+            runtime_mode=RuntimeMode.from_test_mode(True)
+        )
+        tradingview_message_sender.tradingview_service.get_tradingview_daily_stocks_data = AsyncMock(
+            side_effect=[stocks_data, economy_indicator_data]
+        )
+        tradingview_message_sender.barchart_service.get_stock_price = AsyncMock(
+            side_effect=RuntimeError('barchart failed')
+        )
+
+        res = await tradingview_message_sender.format_message()
+
+        assert len(res) == 1
+        assert 'Trading view market data' in res[0]
+        assert '*SPY*' in res[0]
+        assert 'vol 100' in res[0]
+        assert 'Highest\\(' not in res[0]

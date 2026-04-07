@@ -158,6 +158,7 @@ jobs:
           chrome_name="chrome"
           chrome_backup_name="chrome_backup"
           chrome_candidate_name="chrome_candidate"
+          chrome_repository="selenium/standalone-chromium"
           chrome_image="selenium/standalone-chromium:145.0.7632.109-20260222"
           selenium_server_host="http://127.0.0.1:4444"
 
@@ -213,9 +214,56 @@ jobs:
             done
           }
 
+          show_docker_disk_usage() {
+            docker system df || true
+          }
+
+          cleanup_old_repo_images() {
+            repository="\$1"
+            shift
+            protected_image_ids="$(
+              for container_name in "\$@"
+              do
+                docker container inspect "\$container_name" --format '{{.Image}}' 2>/dev/null || true
+              done | sort -u
+            )"
+
+            docker image ls "\$repository" --format '{{.ID}}' | sort -u | while read -r image_id
+            do
+              if [ -z "\$image_id" ]
+              then
+                continue
+              fi
+              if printf '%s\n' "\$protected_image_ids" | grep -Fxq "\$image_id"
+              then
+                continue
+              fi
+              docker image rm -f "\$image_id" >/dev/null 2>&1 || true
+            done
+          }
+
+          cleanup_unused_docker_artifacts() {
+            echo "Docker disk usage before cleanup"
+            show_docker_disk_usage
+
+            # Remove old tagged images for the backend and Selenium without
+            # touching the images still referenced by active or rollback containers.
+            cleanup_old_repo_images "$IMAGE_REGISTRY/$APP_NAME" "$APP_NAME" "\$backup_name" "\$candidate_name"
+            cleanup_old_repo_images "\$chrome_repository" "\$chrome_name" "\$chrome_backup_name" "\$chrome_candidate_name"
+
+            docker container prune -f >/dev/null 2>&1 || true
+            docker image prune -f >/dev/null 2>&1 || true
+            docker builder prune -af >/dev/null 2>&1 || true
+
+            echo "Docker disk usage after cleanup"
+            show_docker_disk_usage
+          }
+
           trap rollback ERR
           echo "Logging into container registry"
           echo $DOCKER_PULL_PASSWORD | docker login ghcr.io -u $REGISTRY_USER --password-stdin
+
+          cleanup_unused_docker_artifacts
 
           echo "Pulling image"
           docker pull "$IMAGE_REGISTRY/$APP_NAME:$IMAGE_SHA"
@@ -327,7 +375,7 @@ jobs:
           fi
 
           docker ps
-          docker image prune -f
+          cleanup_unused_docker_artifacts
           EOF
       - name: Wait for post-deploy health check
         run: |

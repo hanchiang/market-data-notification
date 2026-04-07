@@ -161,13 +161,25 @@ class VixCentralService:
         threshold_ratio = config.get_contango_single_day_decrease_threshold_ratio(
             is_test_mode=True
         )
-        for vix_futures_value in recent_values.vix_futures_values:
+        should_hold_last_pair_equal = (
+            len(recent_values.vix_futures_values)
+            > recent_values.contango_decrease_past_n_days_threshold + 1
+        )
+
+        for index, vix_futures_value in enumerate(recent_values.vix_futures_values):
             vix_futures_value.futures_value = futures_value
             vix_futures_value.next_month_futures_value = next_month_futures_value
             vix_futures_value.raw_contango = self._calculate_contango(futures_value, next_month_futures_value)
             vix_futures_value.formatted_contango = f"{self._calculate_contango(futures_value, next_month_futures_value):.2%}"
             vix_futures_value.is_contango_single_day_decrease_alert = False
             vix_futures_value.contango_single_day_decrease_alert_ratio = threshold_ratio
+
+            # Keep the oldest comparable pair flat in sufficiently long test-mode
+            # series so local replay exercises the "unchanged" formatter branch
+            # without sacrificing the earlier single-day and consecutive-day alerts.
+            if should_hold_last_pair_equal and index == len(recent_values.vix_futures_values) - 2:
+                continue
+
             next_month_futures_value = futures_value
             futures_value -= diff
 
@@ -224,7 +236,7 @@ class VixCentralService:
 
         delta_ratio = self._set_contango_change(current_value, curr_contango, prev_contango)
         current_value.is_contango_single_day_decrease_alert = (
-            delta_ratio < 0
+            curr_contango < prev_contango
             and abs(delta_ratio) >= current_value.contango_single_day_decrease_alert_ratio
         )
 
@@ -251,10 +263,12 @@ class VixCentralService:
             current_value.formatted_contango_change_prev_day = None
             return 0
 
+        # Normalize by the previous day's absolute contango so the formatted
+        # change expresses move size consistently even when contango is negative.
         contango_change = (curr_contango - prev_contango) / abs(prev_contango)
         current_value.raw_contango_change_prev_day = contango_change
         current_value.formatted_contango_change_prev_day = f"{contango_change:.2%}"
-        return (curr_contango - prev_contango) / prev_contango
+        return contango_change
 
     def _current_to_vix_futures_value(
         self,

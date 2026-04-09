@@ -53,12 +53,10 @@ send_redis_mail() {
     local unix_timestamp
     local redis_data_date
     local redis_data
-    local redis_file
 
     unix_timestamp=$(redis-cli --raw zrange "$REDIS_KEY" -1 -1 withscores | tail -1)
     redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
     redis_data="Full TradingView redis payload is attached in ${REDIS_BACKUP_FILE_NAME}."
-    redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
     EMAIL_PAYLOAD_FILE=$(mktemp /tmp/resend-email-backup.XXXXXX.json)
 
     python3 - "$EMAIL_PAYLOAD_FILE" \
@@ -67,8 +65,8 @@ send_redis_mail() {
         "$RESEND_REDIS_TEMPLATE_ID" \
         "$redis_data" \
         "$redis_data_date" \
-        "$REDIS_BACKUP_FILE_NAME" \
-        "$redis_file" <<'PY'
+        "$REDIS_BACKUP_FILE_NAME" <<'PY'
+import base64
 import json
 import sys
 
@@ -79,7 +77,9 @@ template_id = sys.argv[4]
 redis_data = sys.argv[5]
 redis_data_date = sys.argv[6]
 backup_filename = sys.argv[7]
-backup_b64 = sys.argv[8]
+
+with open(backup_filename, "rb") as handle:
+    backup_b64 = base64.b64encode(handle.read()).decode("ascii")
 
 payload = {
     "from": email_sender,

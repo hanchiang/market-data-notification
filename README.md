@@ -31,7 +31,7 @@ FastAPI backend and scheduled job runner for stock and crypto Telegram notificat
 - Receives TradingView webhook payloads and stores them in Redis for later stock notifications
 - Runs scheduled stock and crypto jobs that fetch market data, format messages, and send them to Telegram
 - Uses Redis for transient state and local replay workflows
-- Installs a cron-backed Redis backup email flow that sends the archive through Mailjet using a hosted transactional template
+- Installs a cron-backed Redis backup email flow that sends the archive through Resend using a hosted transactional template
 - Supports local test-mode routing to dev Telegram channels
 
 ## Flow Overview

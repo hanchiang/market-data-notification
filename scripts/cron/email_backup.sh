@@ -5,7 +5,7 @@ set -euo pipefail
 EMAIL_BACKUP_ENV_FILE=${EMAIL_BACKUP_ENV_FILE:-}
 REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"
-MAILJET_PAYLOAD_FILE=""
+EMAIL_PAYLOAD_FILE=""
 
 usage() {
     echo "EMAIL_BACKUP_ENV_FILE must point to a readable env file"
@@ -21,7 +21,7 @@ require_var() {
 }
 
 cleanup() {
-    rm -f "$MAILJET_PAYLOAD_FILE"
+    rm -f "$EMAIL_PAYLOAD_FILE"
     sudo rm -f "$REDIS_BACKUP_FILE_NAME"
 }
 
@@ -33,14 +33,11 @@ fi
 # shellcheck disable=SC1090
 source "$EMAIL_BACKUP_ENV_FILE"
 
-MAILJET_API_BASE_URL=${MAILJET_API_BASE_URL:-https://api.mailjet.com}
-
-require_var MAILJET_API_KEY
-require_var MAILJET_SECRET_KEY
+require_var RESEND_API_KEY
 require_var EMAIL_RECIPIENT
 require_var EMAIL_SENDER
 require_var REDIS_KEY
-require_var MAILJET_REDIS_TEMPLATE_ID
+require_var RESEND_REDIS_TEMPLATE_ID
 require_var STOCKS_TELEGRAM_BOT_TOKEN
 require_var STOCKS_TELEGRAM_CHANNEL_ID
 
@@ -53,24 +50,21 @@ backup_redis() {
 }
 
 send_redis_mail() {
-    local redis_data
     local unix_timestamp
     local redis_data_date
-    local from_name
+    local redis_data
     local redis_file
 
-    redis_data=$(echo "zrange $REDIS_KEY -1 -1 withscores" | redis-cli)
-    unix_timestamp=$(echo "$redis_data" | tail -1)
+    unix_timestamp=$(redis-cli --raw zrange "$REDIS_KEY" -1 -1 withscores | tail -1)
     redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
-    from_name="Market data notification"
+    redis_data="Full TradingView redis payload is attached in ${REDIS_BACKUP_FILE_NAME}."
     redis_file=$(base64 -w0 "$REDIS_BACKUP_FILE_NAME")
-    MAILJET_PAYLOAD_FILE=$(mktemp /tmp/mailjet-email-backup.XXXXXX.json)
+    EMAIL_PAYLOAD_FILE=$(mktemp /tmp/resend-email-backup.XXXXXX.json)
 
-    python3 - "$MAILJET_PAYLOAD_FILE" \
+    python3 - "$EMAIL_PAYLOAD_FILE" \
         "$EMAIL_SENDER" \
-        "$from_name" \
         "$EMAIL_RECIPIENT" \
-        "$MAILJET_REDIS_TEMPLATE_ID" \
+        "$RESEND_REDIS_TEMPLATE_ID" \
         "$redis_data" \
         "$redis_data_date" \
         "$REDIS_BACKUP_FILE_NAME" \
@@ -80,41 +74,32 @@ import sys
 
 payload_file = sys.argv[1]
 email_sender = sys.argv[2]
-from_name = sys.argv[3]
-email_recipient = sys.argv[4]
-template_id = int(sys.argv[5])
-redis_data = sys.argv[6]
-redis_data_date = sys.argv[7]
-backup_filename = sys.argv[8]
-backup_b64 = sys.argv[9]
+email_recipient = sys.argv[3]
+template_id = sys.argv[4]
+redis_data = sys.argv[5]
+redis_data_date = sys.argv[6]
+backup_filename = sys.argv[7]
+backup_b64 = sys.argv[8]
 
 payload = {
-    "Messages": [
+    "from": email_sender,
+    "to": [email_recipient],
+    "template": {
+        "id": template_id,
+        "variables": {
+            "redis_data": redis_data,
+            "redis_data_date": redis_data_date,
+        },
+    },
+    "attachments": [
         {
-            "From": {
-                "Email": email_sender,
-                "Name": from_name,
-            },
-            "To": [
-                {
-                    "Email": email_recipient,
-                }
-            ],
-            "TemplateID": template_id,
-            "TemplateLanguage": True,
-            "Variables": {
-                "redis_data": redis_data,
-                "redis_data_date": redis_data_date,
-            },
-            "Attachments": [
-                {
-                    "ContentType": "application/zip",
-                    "Filename": backup_filename,
-                    "Base64Content": backup_b64,
-                }
-            ],
+            "filename": backup_filename,
+            "content": backup_b64,
         }
-    ]
+    ],
+    "headers": {
+        "X-Entity-Ref-ID": backup_filename,
+    },
 }
 
 with open(payload_file, "w", encoding="utf-8") as handle:
@@ -122,11 +107,11 @@ with open(payload_file, "w", encoding="utf-8") as handle:
 PY
 
     curl --fail --silent --show-error --request POST \
-        --url "${MAILJET_API_BASE_URL}/v3.1/send" \
+        --url "https://api.resend.com/emails" \
         --header "accept: application/json" \
         --header "Content-Type: application/json" \
-        --user "${MAILJET_API_KEY}:${MAILJET_SECRET_KEY}" \
-        --data-binary "@${MAILJET_PAYLOAD_FILE}"
+        --header "Authorization: Bearer ${RESEND_API_KEY}" \
+        --data-binary "@${EMAIL_PAYLOAD_FILE}"
 }
 
 notify_telegram() {

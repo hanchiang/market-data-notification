@@ -2,6 +2,7 @@ import asyncio
 import copy
 import datetime
 import logging
+import calendar
 from typing import List
 from src.config import config
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
@@ -48,9 +49,6 @@ class RecentVixFuturesValues:
 
 logger = logging.getLogger('Vix central service')
 class VixCentralService:
-    # month of the vix futures we are interested in. e.g. "Jan"
-    MONTH_OF_INTEREST = None
-
     def __init__(
         self,
         third_party_service=ThirdPartyVixCentralService,
@@ -90,21 +88,36 @@ class VixCentralService:
         if len(self.recent_values.vix_futures_values) == self.number_of_days_to_store - 1:
             logger.info('Refreshing current vix central data')
             current = await self.third_party_service.get_current()
+            # The live endpoint is the only place that exposes the provider's
+            # front-month label directly, so use it as the anchor for the whole
+            # recent series.
+            current_contract_date = self._get_current_contract_date_from_provider(
+                current[0][0],
+                current_date,
+            )
             self.recent_values.vix_futures_values.insert(
                 0,
                 self._current_to_vix_futures_value(
                     current,
                     current_date=current_date,
+                    contract_date=current_contract_date,
                 ),
             )
         else:
             logger.info('Retrieving current and historical vix central data')
             current = await self.third_party_service.get_current()
+            # Historical rows do not include month labels, so they are mapped
+            # relative to this current-contract anchor.
+            current_contract_date = self._get_current_contract_date_from_provider(
+                current[0][0],
+                current_date,
+            )
             self.recent_values.vix_futures_values.insert(
                 0,
                 self._current_to_vix_futures_value(
                     current,
                     current_date=current_date,
+                    contract_date=current_contract_date,
                 ),
             )
             historical_dates = []
@@ -124,6 +137,8 @@ class VixCentralService:
                     self._historical_to_vix_futures_value(
                         historical=res[i],
                         current_date=historical_dates[i],
+                        reference_current_date=current_date,
+                        reference_current_contract_date=current_contract_date,
                     )
                 )
 
@@ -146,13 +161,25 @@ class VixCentralService:
         threshold_ratio = config.get_contango_single_day_decrease_threshold_ratio(
             is_test_mode=True
         )
-        for vix_futures_value in recent_values.vix_futures_values:
+        should_hold_last_pair_equal = (
+            len(recent_values.vix_futures_values)
+            > recent_values.contango_decrease_past_n_days_threshold + 1
+        )
+
+        for index, vix_futures_value in enumerate(recent_values.vix_futures_values):
             vix_futures_value.futures_value = futures_value
             vix_futures_value.next_month_futures_value = next_month_futures_value
             vix_futures_value.raw_contango = self._calculate_contango(futures_value, next_month_futures_value)
             vix_futures_value.formatted_contango = f"{self._calculate_contango(futures_value, next_month_futures_value):.2%}"
             vix_futures_value.is_contango_single_day_decrease_alert = False
             vix_futures_value.contango_single_day_decrease_alert_ratio = threshold_ratio
+
+            # Keep the oldest comparable pair flat in sufficiently long test-mode
+            # series so local replay exercises the "unchanged" formatter branch
+            # without sacrificing the earlier single-day and consecutive-day alerts.
+            if should_hold_last_pair_equal and index == len(recent_values.vix_futures_values) - 2:
+                continue
+
             next_month_futures_value = futures_value
             futures_value -= diff
 
@@ -160,37 +187,22 @@ class VixCentralService:
     def _compute_contango_alert_threshold(self, recent_values: RecentVixFuturesValues):
         is_decrease_for_past_n_days = False
         decrease_counter = 0
+        recent_values.actual_contango_decrease_past_n_days = None
 
         if len(recent_values.vix_futures_values) == 0:
             recent_values.is_contango_decrease_for_past_n_days = False
             return recent_values
 
         for i in range(0, len(recent_values.vix_futures_values) - 1):
-            curr_contango = recent_values.vix_futures_values[i].raw_contango
-            prev_contango = recent_values.vix_futures_values[i + 1].raw_contango
-
-            if prev_contango != 0:
-                contango_change = ((curr_contango - prev_contango) / abs(prev_contango)) if prev_contango != 0 else 0
-                recent_values.vix_futures_values[i].raw_contango_change_prev_day = contango_change
-                recent_values.vix_futures_values[i].formatted_contango_change_prev_day = f"{contango_change:.2%}"
-                delta_ratio = (curr_contango - prev_contango) / prev_contango
-
-            # TODO: Compare the VIX futures contract date against yesterday. If it changed, then set is_contango_single_day_decrease_alert to false
-            if delta_ratio < 0 and abs(delta_ratio) >= recent_values.vix_futures_values[i].contango_single_day_decrease_alert_ratio:
-                recent_values.vix_futures_values[i].is_contango_single_day_decrease_alert = True
-            else:
-                recent_values.vix_futures_values[i].is_contango_single_day_decrease_alert = False
-
-            if curr_contango >= prev_contango:
-                # set to a negative value because once the current value is more than the previous value,
-                # is_decrease_for_past_n_days should not be True anymore
-                if not is_decrease_for_past_n_days:
-                    decrease_counter = 0
-                continue
-            else:
-                decrease_counter += 1
-                if decrease_counter >= recent_values.contango_decrease_past_n_days_threshold and not is_decrease_for_past_n_days:
-                    is_decrease_for_past_n_days = True
+            current_value = recent_values.vix_futures_values[i]
+            previous_value = recent_values.vix_futures_values[i + 1]
+            is_decrease_for_past_n_days, decrease_counter = self._update_contango_alert_state(
+                current_value=current_value,
+                previous_value=previous_value,
+                decrease_counter=decrease_counter,
+                is_decrease_for_past_n_days=is_decrease_for_past_n_days,
+                decrease_threshold=recent_values.contango_decrease_past_n_days_threshold,
+            )
 
         # For the last item, there is no previous item to compare to, so it is always false
         recent_values.vix_futures_values[len(recent_values.vix_futures_values) - 1].is_contango_single_day_decrease_alert = False
@@ -200,16 +212,73 @@ class VixCentralService:
             recent_values.actual_contango_decrease_past_n_days = decrease_counter
         return recent_values
 
+    def _update_contango_alert_state(
+        self,
+        current_value: VixFuturesValue,
+        previous_value: VixFuturesValue,
+        decrease_counter: int,
+        is_decrease_for_past_n_days: bool,
+        decrease_threshold: int,
+    ) -> tuple[bool, int]:
+        curr_contango = current_value.raw_contango
+        prev_contango = previous_value.raw_contango
+
+        if self._is_contract_roll_boundary(current_value, previous_value):
+            # Do not compare contango across a front-month rollover. The
+            # underlying contracts changed, so a day-over-day delta here
+            # would be a false signal instead of a real contango move.
+            current_value.raw_contango_change_prev_day = None
+            current_value.formatted_contango_change_prev_day = None
+            current_value.is_contango_single_day_decrease_alert = False
+            if not is_decrease_for_past_n_days:
+                decrease_counter = 0
+            return is_decrease_for_past_n_days, decrease_counter
+
+        delta_ratio = self._set_contango_change(current_value, curr_contango, prev_contango)
+        current_value.is_contango_single_day_decrease_alert = (
+            curr_contango < prev_contango
+            and abs(delta_ratio) >= current_value.contango_single_day_decrease_alert_ratio
+        )
+
+        if curr_contango >= prev_contango:
+            # set to a negative value because once the current value is more than the previous value,
+            # is_decrease_for_past_n_days should not be True anymore
+            if not is_decrease_for_past_n_days:
+                decrease_counter = 0
+            return is_decrease_for_past_n_days, decrease_counter
+
+        decrease_counter += 1
+        if decrease_counter >= decrease_threshold and not is_decrease_for_past_n_days:
+            is_decrease_for_past_n_days = True
+        return is_decrease_for_past_n_days, decrease_counter
+
+    def _set_contango_change(
+        self,
+        current_value: VixFuturesValue,
+        curr_contango: float,
+        prev_contango: float,
+    ) -> float:
+        if prev_contango == 0:
+            current_value.raw_contango_change_prev_day = None
+            current_value.formatted_contango_change_prev_day = None
+            return 0
+
+        # Normalize by the previous day's absolute contango so the formatted
+        # change expresses move size consistently even when contango is negative.
+        contango_change = (curr_contango - prev_contango) / abs(prev_contango)
+        current_value.raw_contango_change_prev_day = contango_change
+        current_value.formatted_contango_change_prev_day = f"{contango_change:.2%}"
+        return contango_change
+
     def _current_to_vix_futures_value(
         self,
         current,
         current_date: datetime.datetime,
+        contract_date: datetime.date,
     ) -> VixFuturesValue:
-        current_months = current[0]
+        # `ajax_update` is an untyped nested list. Index 2 holds the live last-price
+        # strip, and the front-month plus next-month prices are the first two values.
         current_last_prices = current[2]
-        if VixCentralService.MONTH_OF_INTEREST is None:
-            VixCentralService.MONTH_OF_INTEREST = current_months[0]
-        month_of_interest = current_months[0]
         contango = self._calculate_contango(current_last_prices[0], current_last_prices[1])
 
         ret_val = VixFuturesValue(
@@ -218,7 +287,7 @@ class VixCentralService:
             )
         )
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self._format_futures_date(month_of_interest, current_date)
+        ret_val.futures_date = self._format_futures_date(contract_date)
         ret_val.futures_value = current_last_prices[0]
         ret_val.next_month_futures_value = current_last_prices[1]
         ret_val.raw_contango = contango
@@ -230,8 +299,17 @@ class VixCentralService:
         self,
         historical,
         current_date: datetime.datetime,
+        reference_current_date: datetime.datetime,
+        reference_current_contract_date: datetime.date,
     ) -> VixFuturesValue:
+        # `ajax_historical` returns only numeric contract values, so historical
+        # contract identity has to be inferred from the current provider month anchor.
         contango = self._calculate_contango(historical[1], historical[2])
+        contract_date = self._infer_historical_contract_date(
+            observation_date=current_date,
+            reference_current_date=reference_current_date,
+            reference_current_contract_date=reference_current_contract_date,
+        )
 
         ret_val = VixFuturesValue(
             contango_single_day_decrease_alert_ratio=config.get_contango_single_day_decrease_threshold_ratio(
@@ -239,7 +317,7 @@ class VixCentralService:
             )
         )
         ret_val.current_date = current_date.strftime("%Y-%m-%d")
-        ret_val.futures_date = self._format_futures_date(VixCentralService.MONTH_OF_INTEREST, current_date)
+        ret_val.futures_date = self._format_futures_date(contract_date)
         ret_val.futures_value = historical[1]
         ret_val.next_month_futures_value = historical[2]
         ret_val.raw_contango = contango
@@ -251,9 +329,148 @@ class VixCentralService:
     def _calculate_contango(self, first: float, second: float) -> float:
         return (second / first) - 1
 
-    # month: mmm. e.g. Jan
-    def _format_futures_date(self, month: str, current_date: datetime.date) -> str:
-        year = current_date.year
-        if current_date.month == 12:
-            year += 1
-        return f"{year} {month}"
+    def _is_contract_roll_boundary(
+        self,
+        current_value: VixFuturesValue,
+        previous_value: VixFuturesValue,
+    ) -> bool:
+        # Message formatting stores contract identity as "YYYY Mon". Parse both
+        # sides back into normalized month-start dates before comparing them.
+        current_contract = self._parse_futures_date(current_value.futures_date)
+        previous_contract = self._parse_futures_date(previous_value.futures_date)
+        if current_contract is None or previous_contract is None:
+            return False
+        return current_contract != previous_contract
+
+    def _get_current_contract_date_from_provider(
+        self,
+        provider_front_month: str,
+        observation_date: datetime.date | datetime.datetime,
+    ) -> datetime.date:
+        if isinstance(observation_date, datetime.datetime):
+            observation_date = observation_date.date()
+
+        # The live endpoint exposes the current front-month label directly.
+        # Only the year still needs to be resolved locally: if the provider label
+        # is earlier than the observation month (for example Jan vs Dec), it
+        # refers to the next calendar year. Example: observation date 2022-12-31
+        # with provider month "Jan" maps to the contract date 2023-01-01.
+        contract_month = self._month_abbr_to_number(provider_front_month)
+        contract_year = observation_date.year
+        if contract_month < observation_date.month:
+            contract_year += 1
+        return datetime.date(contract_year, contract_month, 1)
+
+    def _infer_historical_contract_date(
+        self,
+        observation_date: datetime.date | datetime.datetime,
+        reference_current_date: datetime.date | datetime.datetime,
+        reference_current_contract_date: datetime.date,
+    ) -> datetime.date:
+        if isinstance(observation_date, datetime.datetime):
+            observation_date = observation_date.date()
+        if isinstance(reference_current_date, datetime.datetime):
+            reference_current_date = reference_current_date.date()
+
+        if observation_date >= reference_current_date:
+            return reference_current_contract_date
+
+        # Walk backward one front-month window at a time until the observation
+        # date lands inside the matching historical contract window. Example:
+        # if the current row is the May contract and the historical observation
+        # is before May's front-month start date, step back to April and repeat.
+        contract_date = reference_current_contract_date
+        while observation_date < self._get_front_month_start_date(contract_date):
+            contract_date = self._shift_contract_date(contract_date, -1)
+        return contract_date
+
+    def _get_front_month_start_date(
+        self,
+        contract_date: datetime.date,
+    ) -> datetime.date:
+        # A contract becomes the front month immediately after the previous
+        # contract's VIX settlement date.
+        previous_contract_date = self._shift_contract_date(contract_date, -1)
+        return self._get_vix_futures_settlement_date(
+            previous_contract_date.year,
+            previous_contract_date.month,
+        )
+
+    def _get_vix_futures_settlement_date(
+        self,
+        contract_year: int,
+        contract_month: int,
+    ) -> datetime.date:
+        # Cboe VIX futures settle 30 days before the third Friday of the
+        # following month. That date is the roll boundary used for historical
+        # contract inference.
+        following_year, following_month = self._shift_month(contract_year, contract_month, 1)
+        third_friday = self._get_nth_weekday_of_month(
+            following_year,
+            following_month,
+            weekday=calendar.FRIDAY,
+            occurrence=3,
+        )
+        return third_friday - datetime.timedelta(days=30)
+
+    def _get_nth_weekday_of_month(
+        self,
+        year: int,
+        month: int,
+        weekday: int,
+        occurrence: int,
+    ) -> datetime.date:
+        first_day = datetime.date(year, month, 1)
+        days_until_weekday = (weekday - first_day.weekday()) % 7
+        return first_day + datetime.timedelta(days=days_until_weekday + ((occurrence - 1) * 7))
+
+    def _shift_month(
+        self,
+        year: int,
+        month: int,
+        months: int,
+    ) -> tuple[int, int]:
+        # Convert through a linear month index so both year rollover and
+        # backward stepping use the same arithmetic.
+        month_index = (year * 12) + (month - 1) + months
+        shifted_year = month_index // 12
+        shifted_month = (month_index % 12) + 1
+        return shifted_year, shifted_month
+
+    def _shift_contract_date(
+        self,
+        contract_date: datetime.date,
+        months: int,
+    ) -> datetime.date:
+        # Contract identity is normalized to the first day of its month, so
+        # shifting a contract means shifting that normalized month marker.
+        shifted_year, shifted_month = self._shift_month(
+            contract_date.year,
+            contract_date.month,
+            months,
+        )
+        return datetime.date(shifted_year, shifted_month, 1)
+
+    def _month_abbr_to_number(
+        self,
+        month_abbr: str,
+    ) -> int:
+        try:
+            return list(calendar.month_abbr).index(month_abbr)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported VIX Central month label: {month_abbr}") from exc
+
+    def _parse_futures_date(
+        self,
+        futures_date: str | None,
+    ) -> datetime.date | None:
+        if futures_date is None:
+            return None
+
+        # `futures_date` is stored in the user-facing "YYYY Mon" format, but
+        # contract comparisons use normalized first-of-month dates.
+        year_str, month_abbr = futures_date.split(" ", 1)
+        return datetime.date(int(year_str), self._month_abbr_to_number(month_abbr), 1)
+
+    def _format_futures_date(self, contract_date: datetime.date) -> str:
+        return f"{contract_date.year} {calendar.month_abbr[contract_date.month]}"

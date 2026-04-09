@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SAMPLE_DIR="${REPO_ROOT}/sample-data"
 
-MODE="dev"
+MODE=""
 CONTAINER_NAME="redis"
 REDIS_DB="0"
 SCORE="$(date -u +%s)"
@@ -18,7 +18,8 @@ Usage: $(basename "$0") [--mode dev|prod] [--container NAME] [--db N] [--score U
 Imports TradingView sample payloads from sample-data/ into a local Docker Redis container.
 
 Options:
-  --mode       Redis key mode to load: dev or prod. Default: dev
+  --mode       Legacy compatibility flag. Accepted values: dev or prod.
+               TradingView replay now always uses the canonical Redis keys.
   --container  Docker container name for Redis. Default: redis
   --db         Redis database number. Default: 0
   --score      Sorted-set score to use. Default: current UTC epoch seconds
@@ -61,7 +62,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${MODE}" != "dev" && "${MODE}" != "prod" ]]; then
+if [[ -n "${MODE}" && "${MODE}" != "dev" && "${MODE}" != "prod" ]]; then
     echo "--mode must be either 'dev' or 'prod'" >&2
     exit 1
 fi
@@ -81,13 +82,8 @@ if [[ ! -f "${SAMPLE_DIR}/stocks.json" || ! -f "${SAMPLE_DIR}/economy-indicator.
     exit 1
 fi
 
-KEY_SUFFIX=""
-if [[ "${MODE}" == "dev" ]]; then
-    KEY_SUFFIX="-dev"
-fi
-
-STOCKS_KEY="tradingview-stocks${KEY_SUFFIX}"
-ECONOMY_KEY="tradingview-economy_indicator${KEY_SUFFIX}"
+STOCKS_KEY="tradingview-stocks"
+ECONOMY_KEY="tradingview-economy_indicator"
 
 normalize_json() {
     local input_file="$1"
@@ -113,7 +109,9 @@ docker exec "${CONTAINER_NAME}" redis-cli -n "${REDIS_DB}" ZADD "${STOCKS_KEY}" 
 docker exec "${CONTAINER_NAME}" redis-cli -n "${REDIS_DB}" ZADD "${ECONOMY_KEY}" "${SCORE}" "${ECONOMY_JSON}" >/dev/null
 
 echo "Imported TradingView sample data into Redis container '${CONTAINER_NAME}'"
-echo "Mode: ${MODE}"
+if [[ -n "${MODE}" ]]; then
+    echo "Mode flag: ${MODE} (ignored; canonical keys are always used)"
+fi
 echo "DB: ${REDIS_DB}"
 echo "Score: ${SCORE}"
 echo "Keys:"

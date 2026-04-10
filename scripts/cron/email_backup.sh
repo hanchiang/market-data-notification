@@ -59,6 +59,7 @@ send_redis_mail() {
         echo "Unable to derive backup date from Redis score for key: $REDIS_KEY" >&2
         exit 1
     fi
+    # TradingView scores are stored as Unix seconds today, but tolerate older millisecond-style values.
     if (( redis_score > 9999999999 )); then
         redis_score=$((redis_score / 1000))
     fi
@@ -66,6 +67,7 @@ send_redis_mail() {
     email_body="Full TradingView redis payload is attached in ${REDIS_BACKUP_FILE_NAME}."
     EMAIL_PAYLOAD_FILE=$(mktemp /tmp/resend-email-backup.XXXXXX.json)
 
+    # Build the attachment payload inside Python so the base64 ZIP never flows through argv.
     python3 - "$EMAIL_PAYLOAD_FILE" \
         "$EMAIL_SENDER" \
         "$EMAIL_RECIPIENT" \

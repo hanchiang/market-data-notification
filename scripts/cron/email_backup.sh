@@ -50,21 +50,28 @@ backup_redis() {
 }
 
 send_redis_mail() {
-    local unix_timestamp
-    local redis_data_date
-    local redis_data
+    local redis_score
+    local backup_date
+    local email_body
 
-    unix_timestamp=$(redis-cli --raw zrange "$REDIS_KEY" -1 -1 withscores | tail -1)
-    redis_data_date=$(date -u -d @"$((unix_timestamp / 1000))" '+%Y-%m-%d')
-    redis_data="Full TradingView redis payload is attached in ${REDIS_BACKUP_FILE_NAME}."
+    redis_score=$(redis-cli --raw zrange "$REDIS_KEY" -1 -1 withscores | tail -1)
+    if ! [[ "$redis_score" =~ ^[0-9]+$ ]]; then
+        echo "Unable to derive backup date from Redis score for key: $REDIS_KEY" >&2
+        exit 1
+    fi
+    if (( redis_score > 9999999999 )); then
+        redis_score=$((redis_score / 1000))
+    fi
+    backup_date=$(date -u -d @"$redis_score" '+%Y-%m-%d')
+    email_body="Full TradingView redis payload is attached in ${REDIS_BACKUP_FILE_NAME}."
     EMAIL_PAYLOAD_FILE=$(mktemp /tmp/resend-email-backup.XXXXXX.json)
 
     python3 - "$EMAIL_PAYLOAD_FILE" \
         "$EMAIL_SENDER" \
         "$EMAIL_RECIPIENT" \
         "$RESEND_REDIS_TEMPLATE_ID" \
-        "$redis_data" \
-        "$redis_data_date" \
+        "$email_body" \
+        "$backup_date" \
         "$REDIS_BACKUP_FILE_NAME" <<'PY'
 import base64
 import json
@@ -74,8 +81,8 @@ payload_file = sys.argv[1]
 email_sender = sys.argv[2]
 email_recipient = sys.argv[3]
 template_id = sys.argv[4]
-redis_data = sys.argv[5]
-redis_data_date = sys.argv[6]
+email_body = sys.argv[5]
+backup_date = sys.argv[6]
 backup_filename = sys.argv[7]
 
 with open(backup_filename, "rb") as handle:
@@ -87,8 +94,11 @@ payload = {
     "template": {
         "id": template_id,
         "variables": {
-            "redis_data": redis_data,
-            "redis_data_date": redis_data_date,
+            "email_body": email_body,
+            "backup_date": backup_date,
+            # Keep the original variable names until the hosted template is updated.
+            "redis_data": email_body,
+            "redis_data_date": backup_date,
         },
     },
     "attachments": [

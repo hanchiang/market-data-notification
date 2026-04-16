@@ -18,10 +18,8 @@ unset POETRY_ACTIVE
 unset PYTHONHOME
 unset PYTHONPATH
 
-site_packages="$(poetry run python -c 'import site; print(next(path for path in site.getsitepackages() if path.endswith("site-packages")))' )"
-override_file="${site_packages}/market_data_library_local_override.pth"
-
 poetry run python -m pip uninstall -y market-data-library >/dev/null 2>&1 || true
-printf '%s\n' "${library_root}" > "${override_file}"
+poetry run python -m pip install --no-deps --editable "${library_root}" >/dev/null
 
-echo "Using local market-data-library from ${library_root}"
+echo "Using local editable market-data-library from ${library_root}"
+echo "Re-run this script after poetry install if Poetry reinstalls the git dependency."

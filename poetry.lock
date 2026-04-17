@@ -930,6 +930,7 @@ develop = false
 aiohttp = "^3.8.4"
 chromedriver-autoinstaller = "^0.6.2"
 dacite = "^1.8.1"
+exchange-calendars = "^4.13.2"
 selenium = "^4.11.2"
 selenium-stealth = "^1.0.6"
 tenacity = "^9.1.2"
@@ -937,8 +938,8 @@ tenacity = "^9.1.2"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "1.4.0"
-resolved_reference = "f87fbfc1fcea250f49527d337993ed2e49688811"
+reference = "1.5.0"
+resolved_reference = "6c20642998e80f440ba67c51d8e65f0488ed5f61"
 
 [[package]]
 name = "multidict"
@@ -2349,4 +2350,4 @@ redis = []
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.13"
-content-hash = "49d4afdac2f363d1aa5416b38880696c902d7e861ab2b18d2d6e45b66222e6c9"
+content-hash = "b79c03a7b90c22596748b3c4fc9cf83b7a11d529f5970ac992a722d6cc7a8ef9"

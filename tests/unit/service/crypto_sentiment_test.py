@@ -1,24 +1,14 @@
-import asyncio
 import datetime
 from unittest.mock import Mock, AsyncMock
 
 import pytest
 from market_data_library.types import alternativeme_type
 
-from src.dependencies import Dependencies
 from src.service.crypto.crypto_sentiment import CryptoSentimentService
 from src.type.sentiment import FearGreedResult, FearGreedData
 
 
 class TestCryptoSentimentService:
-
-    @classmethod
-    def setup_class(cls):
-        asyncio.run(Dependencies.build())
-
-    @classmethod
-    def teardown_class(cls):
-        asyncio.run(Dependencies.cleanup())
 
     @pytest.mark.parametrize(
         'data, expected',
@@ -51,7 +41,7 @@ class TestCryptoSentimentService:
     )
     @pytest.mark.asyncio
     async def test_get_crypto_fear_greed_index(self, data, expected):
-        service = CryptoSentimentService()
+        service = object.__new__(CryptoSentimentService)
         service.alternativeme_service = Mock()
 
         service.alternativeme_service.get_fear_greed_index = AsyncMock(return_value=data)
@@ -59,4 +49,3 @@ class TestCryptoSentimentService:
 
         res = await service.get_crypto_fear_greed_index()
         assert res == expected
-

@@ -8,6 +8,7 @@ from market_data_library.types import cmc_type
 
 from src.service.crypto.crypto_stats import CryptoStatsService
 
+
 class TestCryptoStatsService:
 
     def setup_method(self):
@@ -29,7 +30,9 @@ class TestCryptoStatsService:
     ])
     @pytest.mark.asyncio
     async def test_get_sectors_24h_change(self, sort_by, sort_direction, limit):
-        self.service = CryptoStatsService()
+        self.service = object.__new__(CryptoStatsService)
+        self.service.cmc_type = cmc_type
+        self.service.cmc_service = AsyncMock()
         self.service.cmc_service.get_sector_24h_change = AsyncMock(return_value=self.sector_24h_change)
         res = await self.service.get_sectors_24h_change(sort_by=sort_by, sort_direction=sort_direction, limit=limit)
         assert res == self.sector_24h_change.data[:limit]

@@ -4,7 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 git_repo="${MARKET_DATA_LIBRARY_GIT_REPO:-git+ssh://git@github.com/hanchiang/market_data_api.git}"
-git_ref="${MARKET_DATA_LIBRARY_GIT_REF:-1.4.0}"
+git_ref="${MARKET_DATA_LIBRARY_GIT_REF:-1.5.0}"
 
 cd "${repo_root}"
 
@@ -14,8 +14,5 @@ unset POETRY_ACTIVE
 unset PYTHONHOME
 unset PYTHONPATH
 
-site_packages="$(poetry run python -c 'import site; print(next(path for path in site.getsitepackages() if path.endswith("site-packages")))' )"
-override_file="${site_packages}/market_data_library_local_override.pth"
-
-rm -f "${override_file}"
+poetry run python -m pip uninstall -y market-data-library >/dev/null 2>&1 || true
 poetry run python -m pip install --force-reinstall "market-data-library @ ${git_repo}@${git_ref}"

@@ -1,9 +1,7 @@
-import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
 
-from src.dependencies import Dependencies
 from src.service.tradingview_service import TradingViewService
 from src.type.trading_view import TradingViewDataType, TradingViewData, TradingViewStocksData, TradingViewRedisData
 
@@ -11,13 +9,6 @@ from src.type.trading_view import TradingViewDataType, TradingViewData, TradingV
 class TestTradingViewService:
     def setup_method(self):
         self.tradingview_service = TradingViewService()
-    @classmethod
-    def setup_class(cls):
-        asyncio.run(Dependencies.build())
-
-    @classmethod
-    def teardown_class(cls):
-        asyncio.run(Dependencies.cleanup())
 
     @pytest.mark.parametrize(
         'redis_data, expected',

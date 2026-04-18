@@ -1,4 +1,3 @@
-import asyncio
 import copy
 import dataclasses
 import datetime
@@ -11,7 +10,6 @@ import pytest
 from dacite import from_dict
 from market_data_library.types import cmc_type
 
-from src.dependencies import Dependencies
 from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
 from src.type.sentiment import FearGreedAverage, FearGreedData, FearGreedResult
 
@@ -164,13 +162,11 @@ class TestCryptoDigestMessageSender:
             coins=coins,
         )
 
-    @classmethod
-    def setup_class(cls):
-        asyncio.run(Dependencies.build())
-
-    @classmethod
-    def teardown_class(cls):
-        asyncio.run(Dependencies.cleanup())
+    def build_message_sender(self):
+        message_sender = object.__new__(CryptoDigestMessageSender)
+        message_sender.cmc_service = AsyncMock()
+        message_sender.sentiment_service = AsyncMock()
+        return message_sender
 
     @pytest.mark.asyncio
     async def test_format_message_builds_single_digest(self):
@@ -220,7 +216,7 @@ class TestCryptoDigestMessageSender:
             ),
         }
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )
@@ -311,7 +307,7 @@ class TestCryptoDigestMessageSender:
             ),
         }
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )
@@ -388,7 +384,7 @@ class TestCryptoDigestMessageSender:
             ),
         }
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )
@@ -454,7 +450,7 @@ class TestCryptoDigestMessageSender:
             ),
         }
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )
@@ -501,7 +497,7 @@ class TestCryptoDigestMessageSender:
         weakest_sector.gainersNum = '1'
         weakest_sector.losersNum = '14'
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )
@@ -544,7 +540,7 @@ class TestCryptoDigestMessageSender:
         weakest_sector.title = 'Music'
         weakest_sector.avgPriceChange = -7.4
 
-        message_sender = CryptoDigestMessageSender()
+        message_sender = self.build_message_sender()
         message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
             return_value=self.sentiment
         )

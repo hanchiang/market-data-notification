@@ -12,18 +12,27 @@ unset POETRY_ACTIVE
 unset PYTHONHOME
 unset PYTHONPATH
 
-site_packages="$(poetry run python -c 'import site; print(next(path for path in site.getsitepackages() if path.endswith("site-packages")))' )"
-override_file="${site_packages}/market_data_library_local_override.pth"
+poetry run python - <<'PY'
+import importlib.metadata as metadata
+import json
+import os
 
-if [[ -f "${override_file}" ]]; then
-  override_target="$(head -n 1 "${override_file}")"
-  printf 'Dependency mode: local-sibling-override\n'
-  printf 'Override file: %s\n' "${override_file}"
-  printf 'Configured source: %s\n' "${override_target}"
-else
-  printf 'Dependency mode: git-installed-package\n'
-  printf 'Override file: not present\n'
-fi
+import market_data_library
 
-module_dir="$(poetry run python -c 'import os, market_data_library; print(os.path.realpath(os.path.dirname(market_data_library.__file__)))')"
-printf 'Imported module path: %s\n' "${module_dir}"
+dist = metadata.distribution('market-data-library')
+direct_url_text = dist.read_text('direct_url.json')
+mode = 'unknown'
+configured_source = 'unknown'
+
+if direct_url_text:
+    direct_url = json.loads(direct_url_text)
+    configured_source = direct_url.get('url', configured_source)
+    if direct_url.get('dir_info', {}).get('editable'):
+        mode = 'local-sibling-editable'
+    elif 'vcs_info' in direct_url:
+        mode = 'git-installed-package'
+
+print(f'Dependency mode: {mode}')
+print(f'Configured source: {configured_source}')
+print(f'Imported module path: {os.path.realpath(os.path.dirname(market_data_library.__file__))}')
+PY

@@ -1,12 +1,12 @@
 name: Test and build
+concurrency:
+  group: market-data-notification-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 permissions:
   contents: read
 on:
   push:
     branches:
-      - feat/*
-      - feature/*
-      - chore/*
       - master
   pull_request:
     branches:

@@ -4,13 +4,14 @@ import datetime
 import json
 import os
 import typing
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from dacite import from_dict
 from market_data_library.types import cmc_type
 
 from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 from src.type.sentiment import FearGreedAverage, FearGreedData, FearGreedResult
 
 
@@ -166,6 +167,10 @@ class TestCryptoDigestMessageSender:
         message_sender = object.__new__(CryptoDigestMessageSender)
         message_sender.cmc_service = AsyncMock()
         message_sender.sentiment_service = AsyncMock()
+        message_sender.signal_repository = Mock()
+        message_sender.tracked_universe_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
+        message_sender.watchlist_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
+        message_sender.runtime_mode = DEFAULT_RUNTIME_MODE
         return message_sender
 
     @pytest.mark.asyncio
@@ -258,6 +263,7 @@ class TestCryptoDigestMessageSender:
         assert 'volume change \\+161\\.37%' in message
         assert '• top gainer: *Cannation*' in message
         assert '24h \\+55\\.00% ❗' in message
+        message_sender.signal_repository.save_snapshot.assert_called_once()
         standout_section = message.split('*Standout coins*', maxsplit=1)[1]
         assert '7d ' not in standout_section
         assert 'mcap ' not in standout_section
@@ -561,3 +567,44 @@ class TestCryptoDigestMessageSender:
         assert 'price 0\\.0569' in message
         assert 'price 0\\.1253' in message
         assert '999999' not in message
+
+    @pytest.mark.asyncio
+    async def test_format_message_alerts_admin_when_snapshot_persistence_fails(
+        self,
+        monkeypatch,
+    ):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'defi'
+        weakest_sector.title = 'DeFi'
+        weakest_sector.avgPriceChange = -4.8
+
+        send_message_to_admin = AsyncMock()
+        monkeypatch.setattr(
+            'src.job.crypto.crypto_digest_message_sender.send_message_to_admin',
+            send_message_to_admin,
+        )
+
+        message_sender = self.build_message_sender()
+        message_sender.signal_repository.save_snapshot.side_effect = RuntimeError(
+            'sqlite unavailable'
+        )
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 1
+        send_message_to_admin.assert_awaited_once()
+        assert 'sqlite unavailable' in send_message_to_admin.await_args.kwargs['message']

@@ -333,6 +333,78 @@ def get_cryptoquant_api_token() -> str:
 def has_cryptoquant_api_token() -> bool:
     return bool(get_cryptoquant_api_token().strip())
 
+_DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS = {
+    'BTC': 1,
+    'ETH': 1027,
+    'SOL': 5426,
+}
+
+
+def get_crypto_signal_db_path() -> str:
+    return os.getenv(
+        'CRYPTO_SIGNAL_DB_PATH',
+        'var/crypto_signal/crypto_signal.sqlite3',
+    )
+
+
+def get_crypto_signal_recipient_id() -> str:
+    return os.getenv(
+        'CRYPTO_SIGNAL_RECIPIENT_ID',
+        get_telegram_crypto_admin_id(),
+    )
+
+
+def get_crypto_signal_tracked_universe() -> list[tuple[str, int]]:
+    return _parse_crypto_signal_coin_entries(
+        env_name='CRYPTO_SIGNAL_TRACKED_UNIVERSE',
+        default_raw_value='BTC,ETH,SOL',
+    )
+
+
+def get_crypto_signal_watchlist() -> list[tuple[str, int]]:
+    return _parse_crypto_signal_coin_entries(
+        env_name='CRYPTO_SIGNAL_WATCHLIST',
+        default_raw_value='',
+    )
+
+
+def _parse_crypto_signal_coin_entries(
+    env_name: str,
+    default_raw_value: str,
+) -> list[tuple[str, int]]:
+    raw_value = os.getenv(env_name, default_raw_value)
+    entries = []
+    for raw_entry in raw_value.split(','):
+        entry = raw_entry.strip()
+        if entry == '':
+            continue
+
+        if ':' in entry:
+            symbol, raw_coin_id = entry.split(':', 1)
+            symbol = symbol.strip().upper()
+            raw_coin_id = raw_coin_id.strip()
+            if symbol == '' or raw_coin_id == '':
+                raise RuntimeError(
+                    f'{env_name} entries must look like SYMBOL or SYMBOL:ID'
+                )
+            try:
+                coin_id = int(raw_coin_id)
+            except ValueError as error:
+                raise RuntimeError(
+                    f'{env_name} coin ids must be integers'
+                ) from error
+        else:
+            symbol = entry.upper()
+            if symbol not in _DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS:
+                raise RuntimeError(
+                    f'{env_name} unqualified symbols must use a '
+                    'known default id or the SYMBOL:ID form'
+                )
+            coin_id = _DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS[symbol]
+
+        entries.append((symbol, coin_id))
+    return entries
+
 def get_should_send_stocks_sentiment_message():
     return os.getenv('SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE', 'true') == 'true'
 

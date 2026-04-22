@@ -146,3 +146,72 @@ def test_telegram_timeout_getters_require_positive_numbers(
         match=f'{env_name} must be a positive number',
     ):
         getter()
+
+
+def test_crypto_signal_db_path_defaults_to_var_sqlite(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_DB_PATH', raising=False)
+
+    assert config.get_crypto_signal_db_path() == 'var/crypto_signal/crypto_signal.sqlite3'
+
+
+def test_crypto_signal_recipient_id_defaults_to_crypto_admin(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_RECIPIENT_ID', raising=False)
+    monkeypatch.setattr(config, 'get_telegram_crypto_admin_id', lambda: 'crypto-admin')
+
+    assert config.get_crypto_signal_recipient_id() == 'crypto-admin'
+
+
+def test_crypto_signal_tracked_universe_defaults(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_TRACKED_UNIVERSE', raising=False)
+
+    assert config.get_crypto_signal_tracked_universe() == [
+        ('BTC', 1),
+        ('ETH', 1027),
+        ('SOL', 5426),
+    ]
+
+
+def test_crypto_signal_tracked_universe_supports_explicit_coin_ids(monkeypatch):
+    monkeypatch.setenv('CRYPTO_SIGNAL_TRACKED_UNIVERSE', 'BTC,TAO:22974')
+
+    assert config.get_crypto_signal_tracked_universe() == [
+        ('BTC', 1),
+        ('TAO', 22974),
+    ]
+
+
+def test_crypto_signal_tracked_universe_rejects_unknown_symbol_without_id(
+    monkeypatch,
+):
+    monkeypatch.setenv('CRYPTO_SIGNAL_TRACKED_UNIVERSE', 'TAO')
+
+    with pytest.raises(
+        RuntimeError,
+        match='CRYPTO_SIGNAL_TRACKED_UNIVERSE unqualified symbols must use a known default id or the SYMBOL:ID form',
+    ):
+        config.get_crypto_signal_tracked_universe()
+
+
+def test_crypto_signal_watchlist_defaults_to_empty(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_WATCHLIST', raising=False)
+
+    assert config.get_crypto_signal_watchlist() == []
+
+
+def test_crypto_signal_watchlist_supports_explicit_coin_ids(monkeypatch):
+    monkeypatch.setenv('CRYPTO_SIGNAL_WATCHLIST', 'BTC,TAO:22974')
+
+    assert config.get_crypto_signal_watchlist() == [
+        ('BTC', 1),
+        ('TAO', 22974),
+    ]
+
+
+def test_crypto_signal_watchlist_rejects_unknown_symbol_without_id(monkeypatch):
+    monkeypatch.setenv('CRYPTO_SIGNAL_WATCHLIST', 'TAO')
+
+    with pytest.raises(
+        RuntimeError,
+        match='CRYPTO_SIGNAL_WATCHLIST unqualified symbols must use a known default id or the SYMBOL:ID form',
+    ):
+        config.get_crypto_signal_watchlist()

@@ -397,3 +397,90 @@ async def test_send_message_to_channel_defaults_to_prod_routing_without_runtime_
 
     prod_client.send_message.assert_awaited_once()
     dev_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_crypto_signal_message_uses_admin_bot_for_custom_operator_chat(
+    monkeypatch,
+):
+    admin_client = AsyncMock()
+    admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=77)
+    )
+
+    monkeypatch.setattr(telegram_notification, 'crypto_admin_bot', admin_client)
+    monkeypatch.setattr(telegram_notification, 'crypto_dev_bot', AsyncMock())
+    monkeypatch.setattr(telegram_notification, 'crypto_bot', AsyncMock())
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_disable_telegram',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_simulate_tradingview_traffic',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_crypto_signal_recipient_id',
+        lambda: 'operator-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_channel_id',
+        lambda: 'crypto-channel',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_dev_id',
+        lambda: 'crypto-dev-chat',
+    )
+
+    await telegram_notification.send_crypto_signal_message(
+        message='signal body',
+        chat_id='operator-chat',
+        runtime_mode=RuntimeMode(),
+    )
+
+    admin_client.send_message.assert_awaited_once_with(
+        chat_id='operator-chat',
+        text='signal body',
+        parse_mode='MarkdownV2',
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_crypto_signal_message_rejects_public_crypto_channel(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_disable_telegram',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_simulate_tradingview_traffic',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_channel_id',
+        lambda: 'crypto-channel',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_dev_id',
+        lambda: 'crypto-dev-chat',
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match='public crypto channel is disabled in phase 1',
+    ):
+        await telegram_notification.send_crypto_signal_message(
+            message='signal body',
+            chat_id='crypto-channel',
+            runtime_mode=RuntimeMode(),
+        )

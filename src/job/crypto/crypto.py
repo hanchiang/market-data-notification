@@ -2,6 +2,9 @@ import asyncio
 import logging
 
 from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
+from src.job.crypto.crypto_signal_digest_message_sender import (
+    CryptoSignalDigestMessageSender,
+)
 from src.job.job_wrapper import JobWrapper
 from src.config import config
 from src.runtime.runtime_mode import RuntimeMode
@@ -47,6 +50,7 @@ class CryptoNotificationJob(JobWrapper):
     def message_senders(self):
         return [
             CryptoDigestMessageSender(runtime_mode=self.runtime_mode),
+            CryptoSignalDigestMessageSender(runtime_mode=self.runtime_mode),
         ]
 
     @property

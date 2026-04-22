@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from market_data_library.types import cmc_type
 
+from src.config import config
 from src.dependencies import Dependencies
 from src.job.crypto.crypto_digest_formatter import (
     build_digest_message,
@@ -12,8 +13,14 @@ from src.job.crypto.crypto_digest_formatter import (
     should_emit_sector_detail_message,
 )
 from src.job.message_sender_wrapper import MessageSenderWrapper
+from src.notification_destination.telegram_notification import send_message_to_admin
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.service.crypto_signal.repository import CryptoSignalRepository
+from src.service.crypto_signal.snapshot_builder import build_snapshot
 from src.type.market_data_type import MarketDataType
 from src.util.date_util import get_current_datetime
+from src.util.exception import get_exception_message
+from src.util.my_telegram import format_messages_to_telegram
 
 
 logger = logging.getLogger('Crypto digest message sender')
@@ -24,6 +31,9 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         super().__init__(runtime_mode=runtime_mode)
         self.cmc_service = Dependencies.get_crypto_stats_service()
         self.sentiment_service = Dependencies.get_crypto_sentiment_service()
+        self.signal_repository = CryptoSignalRepository()
+        self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
+        self.watchlist_entries = config.get_crypto_signal_watchlist()
 
     @property
     def data_source(self):
@@ -53,6 +63,26 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             weakest_sector=weakest_sector,
             sector_details=sector_details,
         )
+        tracked_universe_coin_details = await self._load_tracked_universe_coin_details()
+
+        persistence_failure_message = self._persist_signal_snapshot(
+            current=current,
+            sentiment=sentiment,
+            strongest_sector=strongest_sector,
+            weakest_sector=weakest_sector,
+            standout_entries=standout_entries,
+            standout_coin_details=standout_coin_details,
+            sector_details=sector_details,
+            sector_detail_coin_details=sector_detail_coin_details,
+            tracked_universe_coin_details=tracked_universe_coin_details,
+        )
+        if persistence_failure_message is not None:
+            await send_message_to_admin(
+                message=format_messages_to_telegram(
+                    [persistence_failure_message]
+                ),
+                market_data_type=MarketDataType.CRYPTO,
+            )
 
         digest_message = build_digest_message(
             current=current,
@@ -65,6 +95,59 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             sector_detail_coin_details=sector_detail_coin_details,
         )
         return [digest_message]
+
+    def _persist_signal_snapshot(
+        self,
+        current,
+        sentiment,
+        strongest_sector,
+        weakest_sector,
+        standout_entries,
+        standout_coin_details,
+        sector_details,
+        sector_detail_coin_details,
+        tracked_universe_coin_details,
+    ) -> str | None:
+        runtime_mode = getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE)
+        repository = getattr(self, 'signal_repository', CryptoSignalRepository())
+        tracked_universe_entries = getattr(
+            self,
+            'tracked_universe_entries',
+            config.get_crypto_signal_tracked_universe(),
+        )
+        watchlist_entries = getattr(
+            self,
+            'watchlist_entries',
+            config.get_crypto_signal_watchlist(),
+        )
+        snapshot = build_snapshot(
+            current=current,
+            runtime_mode=runtime_mode,
+            source_name=self.data_source,
+            sentiment=sentiment,
+            strongest_sector=strongest_sector,
+            weakest_sector=weakest_sector,
+            standout_entries=standout_entries,
+            standout_coin_details=standout_coin_details,
+            sector_details=sector_details,
+            sector_detail_coin_details=sector_detail_coin_details,
+            tracked_universe_entries=self._get_persisted_universe_entries(
+                tracked_universe_entries=tracked_universe_entries,
+                watchlist_entries=watchlist_entries,
+            ),
+            tracked_universe_coin_details=tracked_universe_coin_details,
+            watchlist_entries=watchlist_entries,
+        )
+        try:
+            repository.save_snapshot(snapshot)
+        except Exception as error:
+            logger.exception('Failed to persist crypto signal snapshot')
+            return get_exception_message(
+                error,
+                cls=self.__class__.__name__,
+                should_escape_markdown=True,
+            )
+        return None
 
     async def _load_sector_snapshots(
         self,
@@ -173,3 +256,38 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 continue
             coin_details[coin_id] = detail
         return coin_details
+
+    async def _load_tracked_universe_coin_details(self) -> Dict[int, cmc_type.CoinDetail]:
+        tracked_universe_entries = getattr(
+            self,
+            'tracked_universe_entries',
+            config.get_crypto_signal_tracked_universe(),
+        )
+        watchlist_entries = getattr(
+            self,
+            'watchlist_entries',
+            config.get_crypto_signal_watchlist(),
+        )
+        return await self._load_coin_details(
+            coin_ids=[
+                coin_id
+                for _symbol, coin_id in self._get_persisted_universe_entries(
+                    tracked_universe_entries=tracked_universe_entries,
+                    watchlist_entries=watchlist_entries,
+                )
+            ],
+            log_context='tracked universe coin enrichment',
+        )
+
+    @staticmethod
+    def _get_persisted_universe_entries(
+        tracked_universe_entries: List[tuple[str, int]],
+        watchlist_entries: List[tuple[str, int]],
+    ) -> List[tuple[str, int]]:
+        merged_entries = {
+            coin_id: (symbol, coin_id)
+            for symbol, coin_id in tracked_universe_entries
+        }
+        for symbol, coin_id in watchlist_entries:
+            merged_entries.setdefault(coin_id, (symbol, coin_id))
+        return list(merged_entries.values())

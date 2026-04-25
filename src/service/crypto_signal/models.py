@@ -59,6 +59,7 @@ class CryptoSignalCandidate:
     symbol: str
     name: str
     latest_price_usd: float | None
+    latest_volume_24h: float | None
     latest_price_change_24h: float | None
     latest_volume_change_pct_24h: float | None
     latest_context_tags: tuple[str, ...]

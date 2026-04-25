@@ -230,9 +230,8 @@ def _resolve_crypto_signal_target(
     requested_chat_id: str | None,
     runtime_mode: RuntimeMode,
 ):
-    if runtime_mode.use_dev_telegram or config.get_simulate_tradingview_traffic():
-        return crypto_dev_bot, config.get_telegram_crypto_dev_id()
-
+    # Phase 1 signal review stays on the admin/operator path even in test mode;
+    # unlike the public digest, it should not inherit generic dev-channel routing.
     resolved_chat_id = (
         config.get_crypto_signal_recipient_id()
         if requested_chat_id is None
@@ -242,8 +241,6 @@ def _resolve_crypto_signal_target(
         raise RuntimeError(
             'Crypto signal delivery to the public crypto channel is disabled in phase 1'
         )
-    if resolved_chat_id == config.get_telegram_crypto_dev_id():
-        return crypto_dev_bot, resolved_chat_id
     return crypto_admin_bot, resolved_chat_id
 
 

@@ -25,8 +25,11 @@ _SNAPSHOT_FRESHNESS_THRESHOLD = datetime.timedelta(minutes=90)
 class CryptoSignalDigestMessageSender(MessageSenderWrapper):
     def __init__(self, runtime_mode=None):
         super().__init__(runtime_mode=runtime_mode)
-        self.signal_repository = CryptoSignalRepository()
+        self.signal_repository = CryptoSignalRepository(
+            runtime_mode=self.runtime_mode
+        )
         self.watchlist_entries = config.get_crypto_signal_watchlist()
+        self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
 
     @property
     def data_source(self):
@@ -66,11 +69,18 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
             return None
 
     async def format_message(self) -> List[str]:
-        repository = getattr(self, 'signal_repository', CryptoSignalRepository())
+        repository = getattr(
+            self,
+            'signal_repository',
+            CryptoSignalRepository(runtime_mode=self.runtime_mode),
+        )
         latest_snapshot = repository.get_latest_snapshot()
         if latest_snapshot is None:
             return []
 
+        # The scheduled operator digest should not replay old signals long
+        # after the source crypto job ran; the local CLI report remains the
+        # explicit path for reviewing older retained history.
         if not self._is_fresh_enough(latest_snapshot.run.run_timestamp_utc):
             return []
 
@@ -82,8 +92,18 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
             latest_snapshot=latest_snapshot,
             history=history,
             watchlist_coin_ids={coin_id for _symbol, coin_id in self.watchlist_entries},
+            tracked_universe_coin_ids={
+                coin_id
+                for _symbol, coin_id in getattr(
+                    self,
+                    'tracked_universe_entries',
+                    config.get_crypto_signal_tracked_universe(),
+                )
+            },
             window_label=window_label,
             limit=3,
+            min_dynamic_price_usd=config.get_crypto_signal_dynamic_candidate_min_price_usd(),
+            min_dynamic_volume_24h=config.get_crypto_signal_dynamic_candidate_min_volume_24h(),
         )
         return [build_crypto_signal_message(view)]
 

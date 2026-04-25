@@ -1,7 +1,9 @@
 import datetime
 from collections import OrderedDict
+from dataclasses import dataclass
+from enum import IntEnum
 from statistics import mean
-from typing import Iterable
+from typing import Iterable, TypeVar
 
 from market_data_library.types import cmc_type
 
@@ -37,6 +39,25 @@ _SPOTLIGHT_REASON_TO_TAG = {
     'top gainer': 'spotlight_gainer',
     'top loser': 'spotlight_loser',
 }
+
+_ScalarValue = TypeVar('_ScalarValue')
+
+
+class _CoinSnapshotSource(IntEnum):
+    LIST_PAYLOAD = 1
+    SECTOR_DETAIL = 2
+    TRACKED_UNIVERSE = 3
+
+
+@dataclass(slots=True)
+class _MergedCoin:
+    snapshot: CryptoSignalCoinSnapshot
+    symbol_source: _CoinSnapshotSource
+    name_source: _CoinSnapshotSource
+    price_usd_source: _CoinSnapshotSource
+    price_change_24h_source: _CoinSnapshotSource
+    volume_24h_source: _CoinSnapshotSource
+    volume_change_pct_24h_source: _CoinSnapshotSource
 
 
 def build_snapshot(
@@ -89,7 +110,7 @@ def build_snapshot(
         weakest_sector_losers_num=_safe_int(_sector_attr(weakest_sector, 'losersNum')),
     )
 
-    merged_coins: OrderedDict[int, CryptoSignalCoinSnapshot] = OrderedDict()
+    merged_coins: OrderedDict[int, _MergedCoin] = OrderedDict()
 
     for coin, reasons in standout_entries:
         _upsert_coin(
@@ -111,6 +132,7 @@ def build_snapshot(
                 for reason in reasons
                 if reason in _SPOTLIGHT_REASON_TO_TAG
             ],
+            source=_CoinSnapshotSource.LIST_PAYLOAD,
         )
 
     if should_emit_sector_detail_message(
@@ -144,7 +166,7 @@ def build_snapshot(
         _upsert_coin(
             merged_coins=merged_coins,
             coin_id=coin_id,
-            symbol=symbol or coin_detail.symbol,
+            symbol=coin_detail.symbol or symbol,
             name=coin_detail.name,
             price_usd=_coin_detail_price(coin_detail),
             price_change_24h=_coin_detail_price_change(coin_detail),
@@ -152,19 +174,20 @@ def build_snapshot(
             volume_change_pct_24h=coin_detail.volumeChangePercentage24h,
             is_watchlist=coin_id in watchlist_ids,
             context_tags=['watchlist'] if coin_id in watchlist_ids else [],
+            source=_CoinSnapshotSource.TRACKED_UNIVERSE,
         )
 
     return CryptoSignalSnapshot(
         run=run,
         coins=sorted(
-            merged_coins.values(),
+            [merged_coin.snapshot for merged_coin in merged_coins.values()],
             key=lambda coin: (coin.symbol, coin.coin_id),
         ),
     )
 
 
 def _merge_sector_context(
-    merged_coins: OrderedDict[int, CryptoSignalCoinSnapshot],
+    merged_coins: OrderedDict[int, _MergedCoin],
     sector: cmc_type.Sector24hChange | None,
     sector_detail: cmc_type.SectorDetail | None,
     sector_detail_coin_details: dict[int, cmc_type.CoinDetail],
@@ -203,7 +226,7 @@ def _merge_sector_context(
 
 
 def _merge_sector_coin(
-    merged_coins: OrderedDict[int, CryptoSignalCoinSnapshot],
+    merged_coins: OrderedDict[int, _MergedCoin],
     coin: cmc_type.SectorCoin,
     coin_detail: cmc_type.CoinDetail | None,
     context_tag: str,
@@ -232,11 +255,16 @@ def _merge_sector_coin(
         ),
         is_watchlist=False,
         context_tags=[context_tag],
+        source=(
+            _CoinSnapshotSource.SECTOR_DETAIL
+            if coin_detail is not None
+            else _CoinSnapshotSource.LIST_PAYLOAD
+        ),
     )
 
 
 def _upsert_coin(
-    merged_coins: OrderedDict[int, CryptoSignalCoinSnapshot],
+    merged_coins: OrderedDict[int, _MergedCoin],
     coin_id: int,
     symbol: str,
     name: str,
@@ -246,11 +274,12 @@ def _upsert_coin(
     volume_change_pct_24h: float | None,
     is_watchlist: bool,
     context_tags: Iterable[str],
+    source: _CoinSnapshotSource,
 ) -> None:
     existing = merged_coins.get(coin_id)
     normalized_tags = _normalize_context_tags(context_tags)
     if existing is None:
-        merged_coins[coin_id] = CryptoSignalCoinSnapshot(
+        snapshot = CryptoSignalCoinSnapshot(
             coin_id=coin_id,
             symbol=symbol,
             name=name,
@@ -261,27 +290,102 @@ def _upsert_coin(
             is_watchlist=is_watchlist,
             context_tags=normalized_tags,
         )
+        merged_coins[coin_id] = _MergedCoin(
+            snapshot=snapshot,
+            symbol_source=source,
+            name_source=source,
+            price_usd_source=source,
+            price_change_24h_source=source,
+            volume_24h_source=source,
+            volume_change_pct_24h_source=source,
+        )
         return
 
-    merged_coins[coin_id] = CryptoSignalCoinSnapshot(
-        coin_id=coin_id,
-        symbol=existing.symbol or symbol,
-        name=existing.name or name,
-        price_usd=existing.price_usd if existing.price_usd is not None else price_usd,
-        price_change_24h=(
-            existing.price_change_24h
-            if existing.price_change_24h is not None
-            else price_change_24h
-        ),
-        volume_24h=existing.volume_24h if existing.volume_24h is not None else volume_24h,
-        volume_change_pct_24h=(
-            existing.volume_change_pct_24h
-            if existing.volume_change_pct_24h is not None
-            else volume_change_pct_24h
-        ),
-        is_watchlist=existing.is_watchlist or is_watchlist,
-        context_tags=_normalize_context_tags((*existing.context_tags, *normalized_tags)),
+    existing_snapshot = existing.snapshot
+    # Evidence is additive, but scalar values should come from the most
+    # authoritative source available for the coin in this run.
+    merged_symbol, symbol_source = _select_scalar(
+        existing_value=existing_snapshot.symbol,
+        existing_source=existing.symbol_source,
+        new_value=symbol,
+        new_source=source,
     )
+    merged_name, name_source = _select_scalar(
+        existing_value=existing_snapshot.name,
+        existing_source=existing.name_source,
+        new_value=name,
+        new_source=source,
+    )
+    merged_price_usd, price_usd_source = _select_scalar(
+        existing_value=existing_snapshot.price_usd,
+        existing_source=existing.price_usd_source,
+        new_value=price_usd,
+        new_source=source,
+    )
+    merged_price_change_24h, price_change_24h_source = _select_scalar(
+        existing_value=existing_snapshot.price_change_24h,
+        existing_source=existing.price_change_24h_source,
+        new_value=price_change_24h,
+        new_source=source,
+    )
+    merged_volume_24h, volume_24h_source = _select_scalar(
+        existing_value=existing_snapshot.volume_24h,
+        existing_source=existing.volume_24h_source,
+        new_value=volume_24h,
+        new_source=source,
+    )
+    (
+        merged_volume_change_pct_24h,
+        volume_change_pct_24h_source,
+    ) = _select_scalar(
+        existing_value=existing_snapshot.volume_change_pct_24h,
+        existing_source=existing.volume_change_pct_24h_source,
+        new_value=volume_change_pct_24h,
+        new_source=source,
+    )
+
+    merged_coins[coin_id] = _MergedCoin(
+        snapshot=CryptoSignalCoinSnapshot(
+            coin_id=coin_id,
+            symbol=merged_symbol,
+            name=merged_name,
+            price_usd=merged_price_usd,
+            price_change_24h=merged_price_change_24h,
+            volume_24h=merged_volume_24h,
+            volume_change_pct_24h=merged_volume_change_pct_24h,
+            is_watchlist=existing_snapshot.is_watchlist or is_watchlist,
+            context_tags=_normalize_context_tags(
+                (*existing_snapshot.context_tags, *normalized_tags)
+            ),
+        ),
+        symbol_source=symbol_source,
+        name_source=name_source,
+        price_usd_source=price_usd_source,
+        price_change_24h_source=price_change_24h_source,
+        volume_24h_source=volume_24h_source,
+        volume_change_pct_24h_source=volume_change_pct_24h_source,
+    )
+
+
+def _select_scalar(
+    existing_value: _ScalarValue,
+    existing_source: _CoinSnapshotSource,
+    new_value: _ScalarValue,
+    new_source: _CoinSnapshotSource,
+) -> tuple[_ScalarValue, _CoinSnapshotSource]:
+    if not _has_scalar_value(new_value):
+        return existing_value, existing_source
+    if not _has_scalar_value(existing_value) or new_source > existing_source:
+        return new_value, new_source
+    return existing_value, existing_source
+
+
+def _has_scalar_value(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value != ''
+    return True
 
 
 def _normalize_context_tags(tags: Iterable[str]) -> tuple[str, ...]:

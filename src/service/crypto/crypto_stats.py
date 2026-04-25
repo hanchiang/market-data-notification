@@ -25,6 +25,17 @@ class CryptoStatsService:
         coin_detail: cmc_type.CMCCoinDetail = await self.cmc_service.get_coin_detail(id=id)
         return coin_detail.data
 
+    async def get_ohlcv_historical(
+        self,
+        id: int,
+        interval: str = '24h',
+    ) -> cmc_type.OHLCVHistorical:
+        data: cmc_type.CMCOHLCVHistorical = await self.cmc_service.get_ohlcv_historical(
+            id=id,
+            interval=interval,
+        )
+        return data.data
+
     async def get_sector_detail(self, sector_id: str) -> cmc_type.SectorDetail:
         data: cmc_type.CMCSectorDetail = await self.cmc_service.get_sector_detail(
             sector_id=sector_id

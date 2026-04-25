@@ -84,7 +84,7 @@ async def test_main_prints_report_to_stdout_when_send_telegram_disabled(
     monkeypatch.setattr(
         crypto_signal_report,
         'CryptoSignalRepository',
-        lambda: fake_repository,
+        lambda runtime_mode=None: fake_repository,
     )
     monkeypatch.setattr(
         crypto_signal_report,

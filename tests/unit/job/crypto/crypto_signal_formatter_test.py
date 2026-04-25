@@ -51,6 +51,7 @@ def test_build_crypto_signal_message_uses_reason_tags_not_raw_context_tags():
         symbol='SOL',
         name='Solana',
         latest_price_usd=184.23,
+        latest_volume_24h=4_820_000_000,
         latest_price_change_24h=11.4,
         latest_volume_change_pct_24h=27.1,
         latest_context_tags=(

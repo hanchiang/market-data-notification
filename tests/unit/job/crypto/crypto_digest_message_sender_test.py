@@ -168,6 +168,14 @@ class TestCryptoDigestMessageSender:
         message_sender.cmc_service = AsyncMock()
         message_sender.sentiment_service = AsyncMock()
         message_sender.signal_repository = Mock()
+        message_sender.signal_repository.get_coin_observation_counts_since = Mock(
+            return_value={}
+        )
+        message_sender.signal_repository.save_or_merge_snapshot = Mock()
+        message_sender.signal_backfill_service = AsyncMock()
+        message_sender.signal_backfill_service.build_snapshots = AsyncMock(
+            return_value=[]
+        )
         message_sender.tracked_universe_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
         message_sender.watchlist_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
         message_sender.runtime_mode = DEFAULT_RUNTIME_MODE
@@ -264,9 +272,90 @@ class TestCryptoDigestMessageSender:
         assert '• top gainer: *Cannation*' in message
         assert '24h \\+55\\.00% ❗' in message
         message_sender.signal_repository.save_snapshot.assert_called_once()
+        message_sender.signal_backfill_service.build_snapshots.assert_awaited_once()
         standout_section = message.split('*Standout coins*', maxsplit=1)[1]
         assert '7d ' not in standout_section
         assert 'mcap ' not in standout_section
+
+    @pytest.mark.asyncio
+    async def test_format_message_backfills_only_coins_without_stored_history(self):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'defi'
+        weakest_sector.title = 'DeFi'
+        weakest_sector.avgPriceChange = -4.8
+
+        backfill_snapshot = Mock()
+        message_sender = self.build_message_sender()
+        message_sender.signal_repository.get_coin_observation_counts_since = Mock(
+            return_value={1: 5, 1027: 5, 5426: 0, 2469: 0}
+        )
+        message_sender.signal_backfill_service.build_snapshots = AsyncMock(
+            return_value=[backfill_snapshot]
+        )
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        await message_sender.format_message()
+
+        message_sender.signal_backfill_service.build_snapshots.assert_awaited_once()
+        coin_entries = (
+            message_sender.signal_backfill_service.build_snapshots.await_args.kwargs[
+                'coin_entries'
+            ]
+        )
+        coin_ids = {coin_id for _symbol, coin_id in coin_entries}
+        assert 1 not in coin_ids
+        assert 1027 not in coin_ids
+        assert 5426 in coin_ids
+        assert len(coin_entries) > 1
+        message_sender.signal_repository.save_or_merge_snapshot.assert_called_once_with(
+            backfill_snapshot
+        )
+
+    @pytest.mark.asyncio
+    async def test_format_message_continues_when_backfill_count_query_fails(self):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'defi'
+        weakest_sector.title = 'DeFi'
+        weakest_sector.avgPriceChange = -4.8
+
+        message_sender = self.build_message_sender()
+        message_sender.signal_repository.get_coin_observation_counts_since = Mock(
+            side_effect=RuntimeError('database is locked')
+        )
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 1
+        assert '*Crypto market digest*' in messages[0]
+        message_sender.signal_repository.save_snapshot.assert_called_once()
+        message_sender.signal_backfill_service.build_snapshots.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_format_message_adds_threshold_gated_sector_detail(self):

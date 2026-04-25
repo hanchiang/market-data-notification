@@ -22,15 +22,14 @@ _WINDOW_LENGTHS = {
     '30d': datetime.timedelta(days=30),
 }
 
-_POSITIVE_ATTENTION_TAGS = {
+_BULLISH_ATTENTION_TAGS = {
     'spotlight_trending',
     'spotlight_gainer',
-    'sector_leader_strongest',
 }
 
-_NEGATIVE_ATTENTION_TAGS = {
+_BEARISH_ATTENTION_TAGS = {
+    'spotlight_trending',
     'spotlight_loser',
-    'sector_loser_weakest',
 }
 
 _MIN_OBSERVATIONS_TO_SCORE = 2
@@ -50,8 +49,14 @@ def build_digest_view(
     history: list[CryptoSignalSnapshot],
     watchlist_coin_ids: set[int],
     window_label: str,
+    tracked_universe_coin_ids: set[int] | None = None,
     limit: int = 3,
+    min_dynamic_price_usd: float = 1.0,
+    min_dynamic_volume_24h: float = 50_000_000.0,
 ) -> CryptoSignalDigestView:
+    tracked_universe_coin_ids = (
+        set() if tracked_universe_coin_ids is None else tracked_universe_coin_ids
+    )
     latest_coins_by_id = {coin.coin_id: coin for coin in latest_snapshot.coins}
     history_by_coin_id: dict[int, list[CryptoSignalCoinSnapshot]] = defaultdict(list)
     for snapshot in history:
@@ -71,11 +76,30 @@ def build_digest_view(
         candidate.coin_id: candidate for candidate in candidates
     }
 
+    # Strong/weak sections are the operator-ranked output, so they apply the
+    # dynamic-candidate tradability floor. Watchlist continuity is handled
+    # separately below and tracked-universe coins bypass the dynamic floor.
     strong_candidates = [
-        candidate for candidate in candidates if candidate.score >= 2
+        candidate
+        for candidate in candidates
+        if candidate.score >= 2
+        and _is_rankable_candidate(
+            candidate=candidate,
+            tracked_universe_coin_ids=tracked_universe_coin_ids,
+            min_dynamic_price_usd=min_dynamic_price_usd,
+            min_dynamic_volume_24h=min_dynamic_volume_24h,
+        )
     ]
     weak_candidates = [
-        candidate for candidate in candidates if candidate.score <= -2
+        candidate
+        for candidate in candidates
+        if candidate.score <= -2
+        and _is_rankable_candidate(
+            candidate=candidate,
+            tracked_universe_coin_ids=tracked_universe_coin_ids,
+            min_dynamic_price_usd=min_dynamic_price_usd,
+            min_dynamic_volume_24h=min_dynamic_volume_24h,
+        )
     ]
     watchlist_candidates = [
         candidates_by_coin_id[coin_id]
@@ -88,6 +112,9 @@ def build_digest_view(
         recent_history = history_by_coin_id.get(coin_id)
         if not recent_history:
             continue
+        # Keep the watchlist section stable even when the latest live snapshot
+        # omitted the coin, as long as there is still recent retained history
+        # inside the requested analysis window.
         watchlist_candidates.append(
             _build_candidate(
                 latest_coin=recent_history[-1],
@@ -141,16 +168,19 @@ def _build_candidate(
         breadth_alignment_score = 0
     else:
         price_persistence_score = _score_price_persistence(price_changes)
-        trend_sign = _sign(
-            price_persistence_score,
-            fallback=latest_coin.price_change_24h,
-        )
+        trend_sign = _sign(price_persistence_score)
         volume_confirmation_score = _score_volume_confirmation(
             trend_sign=trend_sign,
             volume_changes=volume_changes,
         )
-        attention_persistence_score = _score_attention_persistence(history)
-        breadth_alignment_score = _score_breadth_alignment(history)
+        attention_persistence_score = _score_attention_persistence(
+            trend_sign=trend_sign,
+            history=history,
+        )
+        breadth_alignment_score = _score_breadth_alignment(
+            trend_sign=trend_sign,
+            history=history,
+        )
     total_score = (
         price_persistence_score
         + volume_confirmation_score
@@ -158,6 +188,8 @@ def _build_candidate(
         + breadth_alignment_score
     )
 
+    # Flags add explanatory context to the rendered digest, but they are not
+    # additional score components in the phase-1 heuristic.
     flags = []
     expected_observations = EXPECTED_OBSERVATIONS_BY_WINDOW[window_label]
     if observation_count < max(2, expected_observations // 2):
@@ -183,6 +215,7 @@ def _build_candidate(
         symbol=latest_coin.symbol,
         name=latest_coin.name,
         latest_price_usd=latest_coin.price_usd,
+        latest_volume_24h=latest_coin.volume_24h,
         latest_price_change_24h=latest_coin.price_change_24h,
         latest_volume_change_pct_24h=latest_coin.volume_change_pct_24h,
         latest_context_tags=latest_coin.context_tags,
@@ -206,6 +239,8 @@ def _score_price_persistence(price_changes: list[float]) -> int:
     negative_hits = len([change for change in price_changes if change < 0])
     balance = (positive_hits - negative_hits) / len(price_changes)
     average_change = mean(price_changes)
+    # Mix direction consistency with average move size so one outsized candle
+    # does not dominate the signal if the rest of the window disagrees.
     average_component = _clamp(average_change / 15.0, -1.0, 1.0)
     return int(round(_clamp((balance * 0.7 + average_component * 0.3) * 4, -4, 4)))
 
@@ -217,48 +252,75 @@ def _score_volume_confirmation(
     if trend_sign == 0 or len(volume_changes) == 0:
         return 0
 
-    volume_support = _clamp(mean(volume_changes) / 30.0, -1.0, 1.0)
-    return int(round(_clamp(trend_sign * volume_support * 2, -2, 2)))
+    # Volume only confirms an existing price direction in phase 1; it is not
+    # allowed to create a directional signal on its own.
+    return trend_sign * 2 if mean(volume_changes) >= 15 else 0
 
 
-def _score_attention_persistence(history: list[CryptoSignalCoinSnapshot]) -> int:
-    if len(history) == 0:
+def _score_attention_persistence(
+    trend_sign: int,
+    history: list[CryptoSignalCoinSnapshot],
+) -> int:
+    if trend_sign == 0 or len(history) == 0:
         return 0
 
-    positive_hits = len(
-        [
-            coin for coin in history
-            if any(tag in _POSITIVE_ATTENTION_TAGS for tag in coin.context_tags)
-        ]
+    # `spotlight_trending` is directional only in combination with the
+    # surrounding price signal, so phase 1 counts it toward both bullish and
+    # bearish persistence depending on `trend_sign`.
+    relevant_tags = (
+        _BULLISH_ATTENTION_TAGS if trend_sign > 0 else _BEARISH_ATTENTION_TAGS
     )
-    negative_hits = len(
-        [
-            coin for coin in history
-            if any(tag in _NEGATIVE_ATTENTION_TAGS for tag in coin.context_tags)
-        ]
+    spotlight_hits = sum(
+        1
+        for coin in history
+        for tag in coin.context_tags
+        if tag in relevant_tags
     )
-    balance = (positive_hits - negative_hits) / len(history)
-    return int(round(_clamp(balance * 2, -2, 2)))
+    if spotlight_hits >= 4:
+        return trend_sign * 2
+    if spotlight_hits >= 2:
+        return trend_sign
+    return 0
 
 
-def _score_breadth_alignment(history: list[CryptoSignalCoinSnapshot]) -> int:
-    if len(history) == 0:
+def _score_breadth_alignment(
+    trend_sign: int,
+    history: list[CryptoSignalCoinSnapshot],
+) -> int:
+    if trend_sign == 0 or len(history) == 0:
         return 0
 
-    strongest_leader_hits = len(
-        [
-            coin for coin in history
-            if 'sector_leader_strongest' in coin.context_tags
-        ]
+    if trend_sign > 0:
+        return (
+            1
+            if any('sector_leader_strongest' in coin.context_tags for coin in history)
+            else 0
+        )
+    return (
+        -1
+        if any('sector_loser_weakest' in coin.context_tags for coin in history)
+        else 0
     )
-    weakest_loser_hits = len(
-        [
-            coin for coin in history
-            if 'sector_loser_weakest' in coin.context_tags
-        ]
+
+
+def _is_rankable_candidate(
+    candidate: CryptoSignalCandidate,
+    tracked_universe_coin_ids: set[int],
+    min_dynamic_price_usd: float,
+    min_dynamic_volume_24h: float,
+) -> bool:
+    # Tracked-universe names stay eligible even when they fail the dynamic
+    # floor because the filter is for operator ranking, not persistence scope.
+    if candidate.coin_id in tracked_universe_coin_ids:
+        return True
+    # Keep persistence broad, but apply a lightweight tradability floor before
+    # ranking dynamic names into the operator-facing strong/weak sections.
+    if candidate.latest_price_usd is None or candidate.latest_volume_24h is None:
+        return False
+    return (
+        candidate.latest_price_usd >= min_dynamic_price_usd
+        and candidate.latest_volume_24h >= min_dynamic_volume_24h
     )
-    balance = (strongest_leader_hits - weakest_loser_hits) / len(history)
-    return int(round(_clamp(balance, -1, 1)))
 
 
 def _classify_market_regime(
@@ -286,7 +348,7 @@ def _classify_market_regime(
     )
 
 
-def _sign(value: int, fallback: float | None) -> int:
+def _sign(value: int, fallback: float | None = None) -> int:
     if value > 0:
         return 1
     if value < 0:

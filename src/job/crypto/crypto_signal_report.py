@@ -25,7 +25,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     runtime_mode = RuntimeMode.from_test_mode(args.test_mode == 1)
-    repository = CryptoSignalRepository()
+    repository = CryptoSignalRepository(runtime_mode=runtime_mode)
     latest_snapshot = repository.get_latest_snapshot()
     if latest_snapshot is None:
         logger.info('No crypto signal snapshots are available')
@@ -37,12 +37,18 @@ async def main() -> None:
     watchlist_coin_ids = {
         coin_id for _symbol, coin_id in config.get_crypto_signal_watchlist()
     }
+    tracked_universe_coin_ids = {
+        coin_id for _symbol, coin_id in config.get_crypto_signal_tracked_universe()
+    }
     view = build_digest_view(
         latest_snapshot=latest_snapshot,
         history=history,
         watchlist_coin_ids=watchlist_coin_ids,
+        tracked_universe_coin_ids=tracked_universe_coin_ids,
         window_label=args.window,
         limit=args.limit,
+        min_dynamic_price_usd=config.get_crypto_signal_dynamic_candidate_min_price_usd(),
+        min_dynamic_volume_24h=config.get_crypto_signal_dynamic_candidate_min_volume_24h(),
     )
     message = build_crypto_signal_message(view)
     print(message)

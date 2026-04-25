@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src.config import config
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
     CryptoSignalRunRecord,
@@ -64,8 +65,17 @@ SCHEMA_DOCS = {
 
 
 class CryptoSignalRepository:
-    def __init__(self, db_path: str | None = None) -> None:
-        self.db_path = db_path or config.get_crypto_signal_db_path()
+    def __init__(
+        self,
+        db_path: str | None = None,
+        runtime_mode: RuntimeMode | None = None,
+    ) -> None:
+        active_runtime_mode = (
+            DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+        )
+        self.db_path = db_path or config.get_crypto_signal_db_path(
+            runtime_mode=active_runtime_mode
+        )
 
     def init_schema(self) -> None:
         db_parent = Path(self.db_path).parent
@@ -251,17 +261,130 @@ class CryptoSignalRepository:
             coin.created_at_utc = created_at_utc
         return snapshot
 
-    def get_latest_snapshot(self) -> CryptoSignalSnapshot | None:
+    def save_or_merge_snapshot(
+        self,
+        snapshot: CryptoSignalSnapshot,
+    ) -> CryptoSignalSnapshot:
         self.init_schema()
+        created_at_utc = self._utcnow()
+
         with self._connect() as connection:
-            run_row = connection.execute(
+            existing_run = connection.execute(
                 """
-                SELECT *
+                SELECT run_id, created_at_utc
                 FROM crypto_signal_runs
-                ORDER BY run_timestamp_utc DESC
-                LIMIT 1
-                """
+                WHERE run_timestamp_utc = ?
+                """,
+                (self._format_timestamp(snapshot.run.run_timestamp_utc),),
             ).fetchone()
+            if existing_run is None:
+                # Keep the normal write path authoritative for first creation so
+                # bootstrap merges and live writes share the same row shape.
+                return self.save_snapshot(snapshot)
+
+            run_id = int(existing_run['run_id'])
+            # Bootstrap history is assembled coin-by-coin, but the persisted
+            # model is one run per timestamp. Merge additional coins into the
+            # existing run instead of creating duplicate run rows.
+            connection.executemany(
+                """
+                INSERT INTO crypto_signal_coin_snapshots (
+                    run_id,
+                    coin_id,
+                    symbol,
+                    name,
+                    price_usd,
+                    price_change_24h,
+                    volume_24h,
+                    volume_change_pct_24h,
+                    is_watchlist,
+                    context_tags_json,
+                    created_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, coin_id) DO UPDATE SET
+                    symbol=excluded.symbol,
+                    name=excluded.name,
+                    price_usd=excluded.price_usd,
+                    price_change_24h=excluded.price_change_24h,
+                    volume_24h=excluded.volume_24h,
+                    volume_change_pct_24h=excluded.volume_change_pct_24h,
+                    is_watchlist=excluded.is_watchlist,
+                    context_tags_json=excluded.context_tags_json,
+                    created_at_utc=excluded.created_at_utc
+                """,
+                [
+                    self._serialize_coin_snapshot(
+                        coin=coin,
+                        run_id=run_id,
+                        created_at_utc=created_at_utc,
+                    )
+                    for coin in snapshot.coins
+                ],
+            )
+            connection.commit()
+
+        existing_created_at = self._parse_timestamp(existing_run['created_at_utc'])
+        snapshot.run.run_id = run_id
+        snapshot.run.created_at_utc = existing_created_at
+        for coin in snapshot.coins:
+            coin.run_id = run_id
+            coin.created_at_utc = created_at_utc
+        return snapshot
+
+    def get_coin_observation_counts_since(
+        self,
+        coin_ids: list[int],
+        start_timestamp_utc: datetime.datetime,
+    ) -> dict[int, int]:
+        self.init_schema()
+        unique_coin_ids = list(dict.fromkeys(coin_ids))
+        if len(unique_coin_ids) == 0:
+            return {}
+
+        placeholders = ','.join('?' for _ in unique_coin_ids)
+        params = [self._format_timestamp(start_timestamp_utc), *unique_coin_ids]
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT coin.coin_id, COUNT(*) AS observation_count
+                FROM crypto_signal_coin_snapshots AS coin
+                INNER JOIN crypto_signal_runs AS run
+                  ON run.run_id = coin.run_id
+                WHERE run.run_timestamp_utc >= ?
+                  AND coin.coin_id IN ({placeholders})
+                GROUP BY coin.coin_id
+                """,
+                params,
+            ).fetchall()
+        counts = {coin_id: 0 for coin_id in unique_coin_ids}
+        counts.update(
+            {
+                int(row['coin_id']): int(row['observation_count'])
+                for row in rows
+            }
+        )
+        return counts
+
+    def get_latest_snapshot(self) -> CryptoSignalSnapshot | None:
+        if not Path(self.db_path).exists():
+            return None
+        with self._connect() as connection:
+            try:
+                # The local report path must be able to inspect an existing DB
+                # through a read-only connection, so read helpers cannot call
+                # init_schema() or perform metadata writes here.
+                run_row = connection.execute(
+                    """
+                    SELECT *
+                    FROM crypto_signal_runs
+                    ORDER BY run_timestamp_utc DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error):
+                    return None
+                raise
             if run_row is None:
                 return None
             return self._build_snapshot_from_row(connection, run_row)
@@ -270,17 +393,23 @@ class CryptoSignalRepository:
         self,
         start_timestamp_utc: datetime.datetime,
     ) -> list[CryptoSignalSnapshot]:
-        self.init_schema()
+        if not Path(self.db_path).exists():
+            return []
         with self._connect() as connection:
-            run_rows = connection.execute(
-                """
-                SELECT *
-                FROM crypto_signal_runs
-                WHERE run_timestamp_utc >= ?
-                ORDER BY run_timestamp_utc ASC
-                """,
-                (self._format_timestamp(start_timestamp_utc),),
-            ).fetchall()
+            try:
+                run_rows = connection.execute(
+                    """
+                    SELECT *
+                    FROM crypto_signal_runs
+                    WHERE run_timestamp_utc >= ?
+                    ORDER BY run_timestamp_utc ASC
+                    """,
+                    (self._format_timestamp(start_timestamp_utc),),
+                ).fetchall()
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error):
+                    return []
+                raise
             return [
                 self._build_snapshot_from_row(connection, run_row)
                 for run_row in run_rows

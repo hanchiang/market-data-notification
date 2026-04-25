@@ -49,11 +49,10 @@ async def test_build_and_cleanup_wire_dependencies_without_live_clients(monkeypa
     barchart_service = Mock()
     barchart_service.cleanup = AsyncMock()
     stocks_sentiment_service = Mock()
-    cryptoquant_underlying_service = Mock()
-    cryptoquant_underlying_service.cleanup = AsyncMock()
-    cryptoquant_service = Mock(cryptoquant_service=cryptoquant_underlying_service)
+    cryptoquant_service = Mock()
     crypto_sentiment_service = Mock()
     crypto_stats_service = Mock()
+    cleanup_market_data_api = AsyncMock()
 
     build_http_client = AsyncMock(return_value=vix_http_client)
     tradingview_cls = Mock(return_value=tradingview_service)
@@ -88,6 +87,10 @@ async def test_build_and_cleanup_wire_dependencies_without_live_clients(monkeypa
         crypto_sentiment_cls,
     )
     monkeypatch.setattr("src.dependencies.CryptoStatsService", crypto_stats_cls)
+    monkeypatch.setattr(
+        "src.dependencies.cleanup_market_data_api",
+        cleanup_market_data_api,
+    )
 
     await Dependencies.build()
     await Dependencies.build()
@@ -112,12 +115,14 @@ async def test_build_and_cleanup_wire_dependencies_without_live_clients(monkeypa
     assert Dependencies.get_vix_central_service() is vix_central_service
     assert Dependencies.get_barchart_service() is barchart_service
     assert Dependencies.get_stocks_sentiment_service() is stocks_sentiment_service
-    assert Dependencies.get_cryptoquant_api_service() is cryptoquant_service
+    assert Dependencies.get_cryptoquant_api_service() is cryptoquant_cls.return_value
     assert Dependencies.get_crypto_sentiment_service() is crypto_sentiment_service
     assert Dependencies.get_crypto_stats_service() is crypto_stats_service
 
     await Dependencies.cleanup()
 
     vix_central_service.cleanup.assert_awaited_once()
-    barchart_service.cleanup.assert_awaited_once()
-    cryptoquant_underlying_service.cleanup.assert_awaited_once()
+    cleanup_market_data_api.assert_awaited_once()
+    assert Dependencies.is_initialised is False
+    assert Dependencies.get_crypto_sentiment_service() is None
+    assert Dependencies.get_crypto_stats_service() is None

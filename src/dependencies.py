@@ -10,6 +10,7 @@ from src.http_client import HttpClient
 from src.third_party_service.barchart import ThirdPartyBarchartService
 from src.third_party_service.vix_central import ThirdPartyVixCentralService
 from src.service.vix_central import VixCentralService
+from src.data_source.market_data_library import cleanup_market_data_api
 
 logger = logging.getLogger('Dependencies')
 class Dependencies:
@@ -55,12 +56,20 @@ class Dependencies:
 
   @staticmethod
   async def cleanup():
-    await Dependencies.vix_central_service.cleanup()
-    await Dependencies.barchart_service.cleanup()
-    if Dependencies.cryptoquant_api_service is not None:
-      service = Dependencies.cryptoquant_api_service.cryptoquant_service
-      if service is not None:
-        await service.cleanup()
+    if Dependencies.vix_central_service is not None:
+      await Dependencies.vix_central_service.cleanup()
+    await cleanup_market_data_api()
+
+    Dependencies.is_initialised = False
+    Dependencies.tradingview_service = None
+    Dependencies.thirdparty_vix_central_service = None
+    Dependencies.vix_central_service = None
+    Dependencies.thirdparty_barchart_service = None
+    Dependencies.barchart_service = None
+    Dependencies.stocks_sentiment_service = None
+    Dependencies.cryptoquant_api_service = None
+    Dependencies.crypto_sentiment_service = None
+    Dependencies.crypto_stats_service = None
 
   # stocks
   @staticmethod

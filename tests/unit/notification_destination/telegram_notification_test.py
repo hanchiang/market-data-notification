@@ -484,3 +484,44 @@ async def test_send_crypto_signal_message_rejects_public_crypto_channel(
             chat_id='crypto-channel',
             runtime_mode=RuntimeMode(),
         )
+
+
+@pytest.mark.asyncio
+async def test_send_crypto_signal_message_keeps_admin_routing_in_test_mode(
+    monkeypatch,
+):
+    admin_client = AsyncMock()
+    admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=78)
+    )
+    dev_client = AsyncMock()
+
+    monkeypatch.setattr(telegram_notification, 'crypto_admin_bot', admin_client)
+    monkeypatch.setattr(telegram_notification, 'crypto_dev_bot', dev_client)
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_disable_telegram',
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_crypto_signal_recipient_id',
+        lambda: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification.config,
+        'get_telegram_crypto_channel_id',
+        lambda: 'crypto-channel',
+    )
+
+    await telegram_notification.send_crypto_signal_message(
+        message='signal body',
+        runtime_mode=RuntimeMode.from_test_mode(True),
+    )
+
+    admin_client.send_message.assert_awaited_once_with(
+        chat_id='crypto-admin-chat',
+        text='signal body',
+        parse_mode='MarkdownV2',
+    )
+    dev_client.send_message.assert_not_awaited()

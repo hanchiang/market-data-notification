@@ -86,11 +86,6 @@ remote_output="$(
     ssh "${SSH_TARGET}" "REMOTE_BASE_DIR=${REMOTE_BASE_DIR_QUOTED} bash -s" <<'REMOTE'
 set -euo pipefail
 
-if ! command -v sqlite3 >/dev/null 2>&1; then
-    echo "sqlite3 is required on the remote host" >&2
-    exit 1
-fi
-
 if ! command -v gzip >/dev/null 2>&1; then
     echo "gzip is required on the remote host" >&2
     exit 1
@@ -113,7 +108,24 @@ if [[ ! -f "${db}" ]]; then
 fi
 
 mkdir -p "${backup_dir}"
-sqlite3 "${db}" ".backup '${backup}'"
+if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "${db}" ".backup '${backup}'"
+elif command -v python3 >/dev/null 2>&1; then
+    python3 - "${db}" "${backup}" <<'PY'
+import sqlite3
+import sys
+
+source_path = sys.argv[1]
+backup_path = sys.argv[2]
+
+with sqlite3.connect(source_path) as source:
+    with sqlite3.connect(backup_path) as destination:
+        source.backup(destination)
+PY
+else
+    echo "sqlite3 or python3 is required on the remote host" >&2
+    exit 1
+fi
 gzip -kf "${backup}"
 sha256="$(sha256sum "${backup_gz}" | awk '{print $1}')"
 

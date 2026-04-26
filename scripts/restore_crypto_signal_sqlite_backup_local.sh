@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 BACKUP_FILE=""
+# Restore production-derived data into an isolated review DB by default. This
+# keeps local test/calibration history from being overwritten accidentally.
 OUTPUT_DB="${REPO_ROOT}/var/crypto_signal/prod-review/crypto_signal.sqlite3"
 OVERWRITE="false"
 TMP_DB=""
@@ -99,6 +101,8 @@ if [[ -e "${OUTPUT_DB}" && "${OVERWRITE}" != "true" ]]; then
     exit 1
 fi
 
+# Build and validate the restored DB under a temporary name; only promote it to
+# the requested output path after SQLite confirms the backup is readable.
 TMP_DB="$(mktemp "${output_dir}/crypto_signal_restore.XXXXXX.sqlite3")"
 
 if [[ "${BACKUP_FILE}" == *.gz ]]; then

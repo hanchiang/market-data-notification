@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SSH_TARGET="production"
+# Use a placeholder instead of a literal "$HOME" default so the remote shell,
+# not the local caller, resolves the production user's home directory.
 REMOTE_BASE_DIR="__HOME__/market_data_notification_jobs"
 LOCAL_BACKUP_DIR="/tmp/crypto_signal_backups"
 
@@ -80,6 +82,8 @@ fi
 
 mkdir -p "${LOCAL_BACKUP_DIR}"
 
+# Quote the value before embedding it in the SSH command; the remote script
+# treats it as data and expands only the intentional __HOME__ placeholder.
 printf -v REMOTE_BASE_DIR_QUOTED '%q' "${REMOTE_BASE_DIR}"
 
 remote_output="$(
@@ -108,9 +112,14 @@ if [[ ! -f "${db}" ]]; then
 fi
 
 mkdir -p "${backup_dir}"
+# Take an online SQLite backup instead of copying the DB file directly, so the
+# snapshot is consistent even if the scheduled crypto job writes during backup.
 if command -v sqlite3 >/dev/null 2>&1; then
     sqlite3 "${db}" ".backup '${backup}'"
 elif command -v python3 >/dev/null 2>&1; then
+    # Some production hosts do not install the sqlite3 CLI. Python's standard
+    # sqlite3 backup API gives the same online-backup property without adding a
+    # host package dependency.
     python3 - "${db}" "${backup}" <<'PY'
 import sqlite3
 import sys
@@ -155,6 +164,7 @@ fi
 local_backup="${LOCAL_BACKUP_DIR}/$(basename "${remote_backup_gz}")"
 scp "${SSH_TARGET}:${remote_backup_gz}" "${local_backup}"
 
+# Verify transfer integrity before the local restore script ever sees the file.
 local_sha256="$(sha256sum "${local_backup}" | awk '{print $1}')"
 if [[ "${local_sha256}" != "${remote_sha256}" ]]; then
     echo "Downloaded backup checksum mismatch" >&2

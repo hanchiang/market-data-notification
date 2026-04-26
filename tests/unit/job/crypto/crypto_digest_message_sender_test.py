@@ -272,6 +272,7 @@ class TestCryptoDigestMessageSender:
         assert '• top gainer: *Cannation*' in message
         assert '24h \\+55\\.00% ❗' in message
         message_sender.signal_repository.save_snapshot.assert_called_once()
+        message_sender.signal_repository.init_schema.assert_called_once()
         message_sender.signal_backfill_service.build_snapshots.assert_awaited_once()
         standout_section = message.split('*Standout coins*', maxsplit=1)[1]
         assert '7d ' not in standout_section
@@ -309,6 +310,7 @@ class TestCryptoDigestMessageSender:
 
         await message_sender.format_message()
 
+        message_sender.signal_repository.init_schema.assert_called_once()
         message_sender.signal_backfill_service.build_snapshots.assert_awaited_once()
         coin_entries = (
             message_sender.signal_backfill_service.build_snapshots.await_args.kwargs[
@@ -354,6 +356,7 @@ class TestCryptoDigestMessageSender:
 
         assert len(messages) == 1
         assert '*Crypto market digest*' in messages[0]
+        message_sender.signal_repository.init_schema.assert_called_once()
         message_sender.signal_repository.save_snapshot.assert_called_once()
         message_sender.signal_backfill_service.build_snapshots.assert_not_awaited()
 

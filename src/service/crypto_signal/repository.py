@@ -153,6 +153,10 @@ class CryptoSignalRepository:
                 ON crypto_signal_coin_snapshots (symbol, run_id)
                 """
             )
+            # Current phase-1 reads filter one run via the (run_id, coin_id)
+            # primary key, then sort a small per-run coin set in memory. Add a
+            # (run_id, symbol, coin_id) index only if that per-run sort becomes
+            # visible at a larger retained universe size.
             connection.execute(
                 """
                 INSERT INTO crypto_signal_metadata (key, value)
@@ -336,27 +340,33 @@ class CryptoSignalRepository:
         coin_ids: list[int],
         start_timestamp_utc: datetime.datetime,
     ) -> dict[int, int]:
-        self.init_schema()
         unique_coin_ids = list(dict.fromkeys(coin_ids))
         if len(unique_coin_ids) == 0:
             return {}
+        counts = {coin_id: 0 for coin_id in unique_coin_ids}
+        if not Path(self.db_path).exists():
+            return counts
 
         placeholders = ','.join('?' for _ in unique_coin_ids)
         params = [self._format_timestamp(start_timestamp_utc), *unique_coin_ids]
         with self._connect() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT coin.coin_id, COUNT(*) AS observation_count
-                FROM crypto_signal_coin_snapshots AS coin
-                INNER JOIN crypto_signal_runs AS run
-                  ON run.run_id = coin.run_id
-                WHERE run.run_timestamp_utc >= ?
-                  AND coin.coin_id IN ({placeholders})
-                GROUP BY coin.coin_id
-                """,
-                params,
-            ).fetchall()
-        counts = {coin_id: 0 for coin_id in unique_coin_ids}
+            try:
+                rows = connection.execute(
+                    f"""
+                    SELECT coin.coin_id, COUNT(*) AS observation_count
+                    FROM crypto_signal_coin_snapshots AS coin
+                    INNER JOIN crypto_signal_runs AS run
+                      ON run.run_id = coin.run_id
+                    WHERE run.run_timestamp_utc >= ?
+                      AND coin.coin_id IN ({placeholders})
+                    GROUP BY coin.coin_id
+                    """,
+                    params,
+                ).fetchall()
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error):
+                    return counts
+                raise
         counts.update(
             {
                 int(row['coin_id']): int(row['observation_count'])

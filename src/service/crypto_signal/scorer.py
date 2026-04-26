@@ -10,6 +10,9 @@ from src.service.crypto_signal.models import (
 )
 
 
+# Phase 1 is an operator-review ranking heuristic, not a trading system. Price
+# persistence sets direction; volume, attention, breadth, and sentiment only
+# confirm, contextualize, or explain that direction.
 EXPECTED_OBSERVATIONS_BY_WINDOW = {
     '3d': 6,
     '7d': 14,
@@ -32,6 +35,8 @@ _BEARISH_ATTENTION_TAGS = {
     'spotlight_loser',
 }
 
+# Require at least two observations so a single 24h move cannot masquerade as a
+# window trend.
 _MIN_OBSERVATIONS_TO_SCORE = 2
 
 
@@ -235,6 +240,8 @@ def _build_candidate(
 def _calculate_window_price_change_pct(
     history: list[CryptoSignalCoinSnapshot],
 ) -> float | None:
+    # Callers pass history ordered oldest-to-newest by run timestamp. The window
+    # move is a first-to-last price return, separate from 24h persistence scoring.
     priced_history = [
         coin for coin in history
         if coin.price_usd is not None and coin.price_usd > 0

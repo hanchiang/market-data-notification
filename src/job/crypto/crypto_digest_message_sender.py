@@ -188,6 +188,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         )
 
         try:
+            repository.init_schema()
             observation_counts = repository.get_coin_observation_counts_since(
                 coin_ids=[coin_id for _symbol, coin_id in persisted_entries],
                 start_timestamp_utc=history_start_utc,

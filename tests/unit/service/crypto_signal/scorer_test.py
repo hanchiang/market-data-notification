@@ -94,6 +94,18 @@ def test_build_digest_view_requires_two_observations_for_strong_signal():
 
 
 def test_build_digest_view_emits_score_derived_reason_tags():
+    oldest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 20, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=10.0,
+        volume_change_pct_24h=25.0,
+        price_usd=120.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            'watchlist',
+        ),
+    )
     earlier_snapshot = _build_snapshot(
         datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
         price_change_24h=8.0,
@@ -121,7 +133,7 @@ def test_build_digest_view_emits_score_derived_reason_tags():
 
     view = build_digest_view(
         latest_snapshot=latest_snapshot,
-        history=[earlier_snapshot, latest_snapshot],
+        history=[oldest_snapshot, earlier_snapshot, latest_snapshot],
         watchlist_coin_ids={5426},
         window_label='7d',
         limit=3,
@@ -138,7 +150,7 @@ def test_build_digest_view_emits_score_derived_reason_tags():
         'risk-on',
         'thin-history',
     )
-    assert candidate.window_price_change_pct == 20.0
+    assert candidate.window_price_change_pct == 50.0
 
 
 def test_build_digest_view_keeps_watchlist_candidate_from_recent_history_when_latest_snapshot_omits_it():

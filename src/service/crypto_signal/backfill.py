@@ -16,6 +16,8 @@ from src.service.crypto_signal.repository import SNAPSHOT_VERSION
 
 logger = logging.getLogger('Crypto signal backfill')
 
+# Backfill only seeds enough retained history for phase-1 operator scoring; the
+# live crypto job remains the source of truth for current snapshots and delivery.
 BACKFILL_SOURCE_NAME = 'CMC historical bootstrap'
 BACKFILL_RUNTIME_MODE = 'bootstrap'
 BACKFILL_INTERVAL = '24h'

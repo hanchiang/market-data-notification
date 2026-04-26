@@ -200,6 +200,29 @@ def test_get_latest_snapshot_returns_none_when_db_is_missing(tmp_path):
     assert not (tmp_path / 'missing_crypto_signal.sqlite3').exists()
 
 
+def test_get_coin_observation_counts_since_does_not_create_missing_db(tmp_path):
+    db_path = tmp_path / 'missing_crypto_signal.sqlite3'
+    repository = CryptoSignalRepository(db_path=str(db_path))
+
+    counts = repository.get_coin_observation_counts_since(
+        coin_ids=[1, 5426],
+        start_timestamp_utc=datetime.datetime(
+            2026,
+            4,
+            20,
+            0,
+            0,
+            tzinfo=datetime.timezone.utc,
+        ),
+    )
+
+    assert counts == {
+        1: 0,
+        5426: 0,
+    }
+    assert not db_path.exists()
+
+
 def test_save_or_merge_snapshot_reuses_run_timestamp_and_upserts_coin_rows(tmp_path):
     repository = CryptoSignalRepository(
         db_path=str(tmp_path / 'crypto_signal.sqlite3')

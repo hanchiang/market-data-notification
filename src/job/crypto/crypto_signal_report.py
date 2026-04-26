@@ -17,7 +17,20 @@ logger = logging.getLogger('Crypto signal report')
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description='Render a crypto signal report from SQLite history')
+    parser = argparse.ArgumentParser(
+        description='Render a crypto signal report from SQLite history',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Examples:
+  ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=0 --test_mode=1
+  ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=1 --test_mode=1
+
+Phase-1 safety:
+  Render with --send_telegram=0 first. Only use --send_telegram=1 after
+  confirming CRYPTO_SIGNAL_RECIPIENT_ID or CRYPTO_TELEGRAM_ADMIN_ID is a
+  private/admin recipient, not the public crypto channel.
+""",
+    )
     parser.add_argument('--window', choices=['3d', '7d', '30d'], default='7d')
     parser.add_argument('--limit', type=int, default=3)
     parser.add_argument('--send_telegram', type=int, choices=[0, 1], default=0)
@@ -64,4 +77,9 @@ async def main() -> None:
 
 
 if __name__ == '__main__':
+    # Usage:
+    # - Inspect stored history without hitting live providers or sending Telegram:
+    #   ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=0 --test_mode=1
+    # - Send the same rendered report to the private/admin signal recipient:
+    #   ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=1 --test_mode=1
     asyncio.run(main())

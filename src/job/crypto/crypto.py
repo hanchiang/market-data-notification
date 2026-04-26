@@ -57,7 +57,16 @@ class CryptoNotificationJob(JobWrapper):
     def market_data_type(self):
         return MarketDataType.CRYPTO
 
-# ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
+# Usage:
+# - Full local test path, including public digest formatting, SQLite signal
+#   snapshot persistence, and private/admin signal routing:
+#   ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
+# - Production-runtime smoke without Telegram delivery:
+#   DISABLE_TELEGRAM=true ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto.py --force_run=1
+#
+# Phase-1 crypto signal output must stay on private/admin routing. The signal
+# sender reads CRYPTO_SIGNAL_RECIPIENT_ID, falling back to CRYPTO_TELEGRAM_ADMIN_ID,
+# and rejects CRYPTO_TELEGRAM_CHANNEL_ID as an invalid destination.
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     job = CryptoNotificationJob()

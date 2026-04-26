@@ -159,6 +159,13 @@ TELEGRAM_WRITE_TIMEOUT_SECONDS=20
 TELEGRAM_POOL_TIMEOUT_SECONDS=5
 ```
 
+`CRYPTO_SIGNAL_DB_PATH` is relative to the backend process working directory
+when left as the default. In production that default resolves inside the app
+container under `/app/var/crypto_signal/crypto_signal.sqlite3`. The production
+deploy mounts that directory to persistent host storage under
+`market_data_notification_jobs/crypto_signal` so signal history survives
+container replacement.
+
 ## Local Development
 
 ### Option 1: Local Python

@@ -33,6 +33,7 @@ env:
   SSH_HOST: ${{ secrets.SSH_HOST }}
   SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
   APP_NAME: market_data_notification
+  REMOTE_BASE_DIR: /home/${{ secrets.SSH_USER }}/market_data_notification_jobs
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
   REGISTRY_USER: ${{ github.repository_owner }}
 jobs:
@@ -160,6 +161,7 @@ jobs:
           chrome_candidate_name="chrome_candidate"
           chrome_repository="selenium/standalone-chromium"
           chrome_image="selenium/standalone-chromium:145.0.7632.109-20260222"
+          crypto_signal_dir="$REMOTE_BASE_DIR/crypto_signal"
           selenium_server_host="http://127.0.0.1:4444"
 
           cleanup_candidate() {
@@ -279,9 +281,11 @@ jobs:
           fi
 
           echo "Starting candidate container"
+          mkdir -p "\$crypto_signal_dir"
           # Production deploy uses host networking for both containers, so the backend must
           # reach Selenium over loopback rather than the Docker Compose-only hostname `chrome`.
-          docker run --name "\$candidate_name" -p 8080:8080 --network host --memory="512m" --cpus="0.5" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
+          docker run --name "\$candidate_name" -p 8080:8080 --network host --memory="512m" --cpus="0.5" \
+          -v "\$crypto_signal_dir:/app/var/crypto_signal" -e ENV=$ENV -e STOCKS_TELEGRAM_BOT_TOKEN=$STOCKS_TELEGRAM_BOT_TOKEN \
           -e STOCKS_TELEGRAM_CHANNEL_ID=$STOCKS_TELEGRAM_CHANNEL_ID -e STOCKS_TELEGRAM_ADMIN_BOT_TOKEN=$STOCKS_TELEGRAM_ADMIN_BOT_TOKEN \
           -e STOCKS_TELEGRAM_ADMIN_ID=$STOCKS_TELEGRAM_ADMIN_ID -e STOCKS_TELEGRAM_DEV_BOT_TOKEN=$STOCKS_TELEGRAM_DEV_BOT_TOKEN \
           -e STOCKS_TELEGRAM_DEV_ID=$STOCKS_TELEGRAM_DEV_ID -e CRYPTO_TELEGRAM_BOT_TOKEN=$CRYPTO_TELEGRAM_BOT_TOKEN \

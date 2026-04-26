@@ -217,6 +217,7 @@ def _build_candidate(
         latest_price_usd=latest_coin.price_usd,
         latest_volume_24h=latest_coin.volume_24h,
         latest_price_change_24h=latest_coin.price_change_24h,
+        window_price_change_pct=_calculate_window_price_change_pct(history),
         latest_volume_change_pct_24h=latest_coin.volume_change_pct_24h,
         latest_context_tags=latest_coin.context_tags,
         score=total_score,
@@ -229,6 +230,23 @@ def _build_candidate(
         flags=tuple(flags),
         is_watchlist=latest_coin.is_watchlist,
     )
+
+
+def _calculate_window_price_change_pct(
+    history: list[CryptoSignalCoinSnapshot],
+) -> float | None:
+    priced_history = [
+        coin for coin in history
+        if coin.price_usd is not None and coin.price_usd > 0
+    ]
+    if len(priced_history) < 2:
+        return None
+
+    first_price = priced_history[0].price_usd
+    latest_price = priced_history[-1].price_usd
+    if first_price is None or latest_price is None:
+        return None
+    return ((latest_price - first_price) / first_price) * 100
 
 
 def _score_price_persistence(price_changes: list[float]) -> int:

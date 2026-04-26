@@ -98,6 +98,7 @@ def test_build_digest_view_emits_score_derived_reason_tags():
         datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
         price_change_24h=8.0,
         volume_change_pct_24h=25.0,
+        price_usd=150.0,
         context_tags=(
             'spotlight_trending',
             'spotlight_gainer',
@@ -109,6 +110,7 @@ def test_build_digest_view_emits_score_derived_reason_tags():
         datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
         price_change_24h=10.0,
         volume_change_pct_24h=30.0,
+        price_usd=180.0,
         context_tags=(
             'spotlight_trending',
             'spotlight_gainer',
@@ -136,6 +138,7 @@ def test_build_digest_view_emits_score_derived_reason_tags():
         'risk-on',
         'thin-history',
     )
+    assert candidate.window_price_change_pct == 20.0
 
 
 def test_build_digest_view_keeps_watchlist_candidate_from_recent_history_when_latest_snapshot_omits_it():

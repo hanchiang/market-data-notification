@@ -22,17 +22,19 @@ def build_crypto_signal_message(view: CryptoSignalDigestView) -> str:
     ]
     lines.extend(
         _format_candidate_section(
-            title='Strong momentum',
+            title=f'Strong {view.window_label} momentum',
             candidates=view.strong_candidates,
             empty_text='No strong candidates met the current threshold.',
+            window_label=view.window_label,
         )
     )
     lines.append('')
     lines.extend(
         _format_candidate_section(
-            title='Weak momentum',
+            title=f'Weak {view.window_label} momentum',
             candidates=view.weak_candidates,
             empty_text='No weak candidates met the current threshold.',
+            window_label=view.window_label,
         )
     )
     lines.append('')
@@ -41,6 +43,7 @@ def build_crypto_signal_message(view: CryptoSignalDigestView) -> str:
             title='Watchlist',
             candidates=view.watchlist_candidates,
             empty_text='No watchlist candidates were available for this window.',
+            window_label=view.window_label,
         )
     )
     return '\n'.join(lines).strip()
@@ -50,6 +53,7 @@ def _format_candidate_section(
     title: str,
     candidates: list[CryptoSignalCandidate],
     empty_text: str,
+    window_label: str,
 ) -> list[str]:
     lines = [f'*{escape_markdown(title)}*']
     if len(candidates) == 0:
@@ -57,13 +61,17 @@ def _format_candidate_section(
         return lines
 
     for candidate in candidates:
-        lines.append(_format_candidate(candidate))
+        lines.append(_format_candidate(candidate, window_label=window_label))
     return lines
 
 
-def _format_candidate(candidate: CryptoSignalCandidate) -> str:
+def _format_candidate(
+    candidate: CryptoSignalCandidate,
+    window_label: str,
+) -> str:
     metric_parts = [
         f"score {_format_signed_int(candidate.score)}",
+        f"{window_label} {_format_signed_float(candidate.window_price_change_pct)}",
         f"24h {_format_signed_float(candidate.latest_price_change_24h)}",
         f"obs {candidate.observation_count}",
     ]

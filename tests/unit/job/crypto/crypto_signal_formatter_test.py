@@ -53,6 +53,7 @@ def test_build_crypto_signal_message_uses_reason_tags_not_raw_context_tags():
         latest_price_usd=184.23,
         latest_volume_24h=4_820_000_000,
         latest_price_change_24h=11.4,
+        window_price_change_pct=24.7,
         latest_volume_change_pct_24h=27.1,
         latest_context_tags=(
             'spotlight_trending',
@@ -87,6 +88,9 @@ def test_build_crypto_signal_message_uses_reason_tags_not_raw_context_tags():
     message = build_crypto_signal_message(view)
 
     assert 'price\\-up\\-persistent' in message
+    assert '*Strong 7d momentum*' in message
+    assert '7d \\+24\\.70%' in message
+    assert '24h \\+11\\.40%' in message
     assert 'vol\\-confirm' in message
     assert 'spotlight\\_trending' not in message
     assert 'sector\\_leader\\_strongest' not in message

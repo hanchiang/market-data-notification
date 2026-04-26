@@ -13,7 +13,11 @@ from src.service.crypto_signal.models import (
 )
 
 
-def _build_snapshot(run_timestamp_utc: datetime.datetime) -> CryptoSignalSnapshot:
+def _build_snapshot(
+    run_timestamp_utc: datetime.datetime,
+    *,
+    sol_price_usd: float = 184.23,
+) -> CryptoSignalSnapshot:
     return CryptoSignalSnapshot(
         run=CryptoSignalRunRecord(
             run_timestamp_utc=run_timestamp_utc,
@@ -46,7 +50,7 @@ def _build_snapshot(run_timestamp_utc: datetime.datetime) -> CryptoSignalSnapsho
                 coin_id=5426,
                 symbol='SOL',
                 name='Solana',
-                price_usd=184.23,
+                price_usd=sol_price_usd,
                 price_change_24h=11.4,
                 volume_24h=4_820_000_000,
                 volume_change_pct_24h=27.1,
@@ -74,24 +78,36 @@ def _build_snapshot(run_timestamp_utc: datetime.datetime) -> CryptoSignalSnapsho
 
 
 class _FakeRepository:
-    def __init__(self, latest_snapshot: CryptoSignalSnapshot):
+    def __init__(
+        self,
+        latest_snapshot: CryptoSignalSnapshot,
+        history: list[CryptoSignalSnapshot] | None = None,
+    ):
         self.latest_snapshot = latest_snapshot
+        self.history = [latest_snapshot] if history is None else history
 
     def get_latest_snapshot(self):
         return self.latest_snapshot
 
     def get_snapshots_since(self, _start):
-        return [self.latest_snapshot]
+        return self.history
 
 
 @pytest.mark.asyncio
 async def test_format_message_builds_operator_digest(monkeypatch):
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 20, 8, 45, tzinfo=datetime.timezone.utc),
+        sol_price_usd=150.0,
+    )
     latest_snapshot = _build_snapshot(
         datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc)
     )
 
     sender = object.__new__(CryptoSignalDigestMessageSender)
-    sender.signal_repository = _FakeRepository(latest_snapshot)
+    sender.signal_repository = _FakeRepository(
+        latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+    )
     sender.watchlist_entries = [('BTC', 1), ('SOL', 5426)]
     sender.runtime_mode = DEFAULT_RUNTIME_MODE
 
@@ -104,7 +120,8 @@ async def test_format_message_builds_operator_digest(monkeypatch):
 
     assert len(messages) == 1
     assert '*Crypto trend signal*' in messages[0]
-    assert '*Strong momentum*' in messages[0]
+    assert '*Strong 7d momentum*' in messages[0]
+    assert '7d \\+22\\.82%' in messages[0]
     assert '*Watchlist*' in messages[0]
     assert 'Solana' in messages[0]
 

@@ -232,6 +232,8 @@ def _merge_sector_coin(
     context_tag: str,
 ) -> None:
     quote = next(iter(coin.quote.values())) if coin.quote else None
+    # Prefer the detail fetch because it carries the richer fields used for
+    # scoring; the sector-list quote is only a fallback when detail is missing.
     _upsert_coin(
         merged_coins=merged_coins,
         coin_id=coin.id,
@@ -302,8 +304,9 @@ def _upsert_coin(
         return
 
     existing_snapshot = existing.snapshot
-    # Evidence is additive, but scalar values should come from the most
-    # authoritative source available for the coin in this run.
+    # Evidence is additive, but each scalar keeps its own source because a
+    # single coin snapshot can be assembled from list payloads, sector detail,
+    # and tracked-universe detail with different completeness per field.
     merged_symbol, symbol_source = _select_scalar(
         existing_value=existing_snapshot.symbol,
         existing_source=existing.symbol_source,

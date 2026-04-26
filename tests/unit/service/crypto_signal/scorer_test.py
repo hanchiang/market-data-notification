@@ -1,0 +1,290 @@
+import datetime
+
+from src.service.crypto_signal.models import (
+    CryptoSignalCoinSnapshot,
+    CryptoSignalRunRecord,
+    CryptoSignalSnapshot,
+)
+from src.service.crypto_signal.scorer import build_digest_view
+
+
+def _build_snapshot(
+    run_timestamp_utc: datetime.datetime,
+    *,
+    price_change_24h: float,
+    volume_change_pct_24h: float,
+    context_tags: tuple[str, ...],
+    is_watchlist: bool = True,
+    price_usd: float = 184.23,
+    volume_24h: float = 4_820_000_000,
+    coin_id: int = 5426,
+    symbol: str = 'SOL',
+    name: str = 'Solana',
+) -> CryptoSignalSnapshot:
+    return CryptoSignalSnapshot(
+        run=CryptoSignalRunRecord(
+            run_timestamp_utc=run_timestamp_utc,
+            runtime_mode='prod',
+            source_name='CMC + Alternative.me',
+            snapshot_version=1,
+            sentiment_now_value=63.0,
+            sentiment_now_label='Greed',
+            sentiment_yesterday_value=58.0,
+            sentiment_last_week_value=49.0,
+            sentiment_7d_avg=55.4,
+            sentiment_30d_avg=51.8,
+            strongest_sector_id='ai-big-data',
+            strongest_sector_name='AI & Big Data',
+            strongest_sector_avg_price_change_24h=8.4,
+            strongest_sector_market_change_24h=6.9,
+            strongest_sector_volume_change_24h=21.7,
+            strongest_sector_gainers_num=18,
+            strongest_sector_losers_num=5,
+            weakest_sector_id='gaming',
+            weakest_sector_name='Gaming',
+            weakest_sector_avg_price_change_24h=-6.1,
+            weakest_sector_market_change_24h=-4.8,
+            weakest_sector_volume_change_24h=-12.3,
+            weakest_sector_gainers_num=4,
+            weakest_sector_losers_num=19,
+        ),
+        coins=[
+            CryptoSignalCoinSnapshot(
+                coin_id=coin_id,
+                symbol=symbol,
+                name=name,
+                price_usd=price_usd,
+                price_change_24h=price_change_24h,
+                volume_24h=volume_24h,
+                volume_change_pct_24h=volume_change_pct_24h,
+                is_watchlist=is_watchlist,
+                context_tags=context_tags,
+            )
+        ],
+    )
+
+
+def test_build_digest_view_requires_two_observations_for_strong_signal():
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=10.0,
+        volume_change_pct_24h=30.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            'watchlist',
+        ),
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[latest_snapshot],
+        watchlist_coin_ids={5426},
+        window_label='7d',
+        limit=3,
+    )
+
+    assert view.strong_candidates == []
+    assert len(view.watchlist_candidates) == 1
+    candidate = view.watchlist_candidates[0]
+    assert candidate.score == 0
+    assert candidate.observation_count == 1
+    assert candidate.reason_tags == ('risk-on', 'thin-history')
+
+
+def test_build_digest_view_emits_score_derived_reason_tags():
+    oldest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 20, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=10.0,
+        volume_change_pct_24h=25.0,
+        price_usd=120.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            'watchlist',
+        ),
+    )
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=8.0,
+        volume_change_pct_24h=25.0,
+        price_usd=150.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            'watchlist',
+        ),
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=10.0,
+        volume_change_pct_24h=30.0,
+        price_usd=180.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            'watchlist',
+        ),
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[oldest_snapshot, earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids={5426},
+        window_label='7d',
+        limit=3,
+    )
+
+    assert len(view.strong_candidates) == 1
+    candidate = view.strong_candidates[0]
+    assert candidate.score == 9
+    assert candidate.reason_tags == (
+        'price-up-persistent',
+        'vol-confirm',
+        'spotlight-repeat',
+        'breadth-align',
+        'risk-on',
+        'thin-history',
+    )
+    assert candidate.window_price_change_pct == 50.0
+
+
+def test_build_digest_view_keeps_watchlist_candidate_from_recent_history_when_latest_snapshot_omits_it():
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=3.4,
+        volume_change_pct_24h=9.8,
+        context_tags=('watchlist',),
+    )
+    latest_snapshot = CryptoSignalSnapshot(
+        run=CryptoSignalRunRecord(
+            run_timestamp_utc=datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+            runtime_mode='prod',
+            source_name='CMC + Alternative.me',
+            snapshot_version=1,
+            sentiment_now_value=63.0,
+            sentiment_now_label='Greed',
+            sentiment_yesterday_value=58.0,
+            sentiment_last_week_value=49.0,
+            sentiment_7d_avg=55.4,
+            sentiment_30d_avg=51.8,
+            strongest_sector_id='ai-big-data',
+            strongest_sector_name='AI & Big Data',
+            strongest_sector_avg_price_change_24h=8.4,
+            strongest_sector_market_change_24h=6.9,
+            strongest_sector_volume_change_24h=21.7,
+            strongest_sector_gainers_num=18,
+            strongest_sector_losers_num=5,
+            weakest_sector_id='gaming',
+            weakest_sector_name='Gaming',
+            weakest_sector_avg_price_change_24h=-6.1,
+            weakest_sector_market_change_24h=-4.8,
+            weakest_sector_volume_change_24h=-12.3,
+            weakest_sector_gainers_num=4,
+            weakest_sector_losers_num=19,
+        ),
+        coins=[],
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids={5426},
+        window_label='7d',
+        limit=3,
+    )
+
+    assert view.strong_candidates == []
+    assert len(view.watchlist_candidates) == 1
+    candidate = view.watchlist_candidates[0]
+    assert candidate.coin_id == 5426
+    assert candidate.symbol == 'SOL'
+    assert candidate.latest_price_change_24h == 3.4
+    assert candidate.observation_count == 1
+    assert candidate.reason_tags == ('risk-on', 'thin-history')
+
+
+def test_build_digest_view_does_not_emit_confirmation_only_signal_without_price_persistence():
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=12.0,
+        volume_change_pct_24h=40.0,
+        context_tags=('spotlight_trending',),
+        coin_id=1337,
+        symbol='BOT',
+        name='Hyperbot',
+        is_watchlist=False,
+        price_usd=0.00019439,
+        volume_24h=0.0,
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=-34.7,
+        volume_change_pct_24h=40.0,
+        context_tags=('spotlight_trending',),
+        coin_id=1337,
+        symbol='BOT',
+        name='Hyperbot',
+        is_watchlist=False,
+        price_usd=0.00019439,
+        volume_24h=0.0,
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids=set(),
+        window_label='7d',
+        limit=3,
+    )
+
+    assert view.strong_candidates == []
+    assert view.weak_candidates == []
+
+
+def test_build_digest_view_filters_dynamic_candidates_below_operator_tradability_floor():
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=12.0,
+        volume_change_pct_24h=35.0,
+        context_tags=('spotlight_trending', 'spotlight_gainer'),
+        coin_id=2048,
+        symbol='SPK',
+        name='Spark',
+        is_watchlist=False,
+        price_usd=0.0534,
+        volume_24h=907_602_301.31,
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=18.0,
+        volume_change_pct_24h=45.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+        ),
+        coin_id=2048,
+        symbol='SPK',
+        name='Spark',
+        is_watchlist=False,
+        price_usd=0.0534,
+        volume_24h=907_602_301.31,
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids=set(),
+        window_label='7d',
+        tracked_universe_coin_ids=set(),
+        limit=3,
+        min_dynamic_price_usd=1.0,
+        min_dynamic_volume_24h=50_000_000.0,
+    )
+
+    assert view.strong_candidates == []

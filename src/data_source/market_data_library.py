@@ -38,3 +38,28 @@ def init_market_data_api() -> None:
             tradfi_api_kwargs['server_host'] = selenium_server_host
 
         tradfi_api = TradFiAPI(**tradfi_api_kwargs)
+
+
+async def cleanup_market_data_api() -> None:
+    global crypto_api
+    global tradfi_api
+
+    if crypto_api is not None:
+        await crypto_api.cmc.cmc_service.cleanup()
+        await crypto_api.alternativeme.alternativeme_service.cleanup()
+        cryptoquant_service = crypto_api.cryptoquant.cryptoquant_service
+        if cryptoquant_service is not None:
+            await cryptoquant_service.cleanup()
+
+    if tradfi_api is not None:
+        await tradfi_api.barchart.barchart_stocks.cleanup()
+        await tradfi_api.barchart.barchart_options.cleanup()
+
+    reset_market_data_api()
+
+
+def reset_market_data_api() -> None:
+    global crypto_api
+    global tradfi_api
+    crypto_api = None
+    tradfi_api = None

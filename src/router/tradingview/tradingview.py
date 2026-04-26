@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Request
 
@@ -15,6 +16,10 @@ from src.util.my_telegram import format_messages_to_telegram, escape_markdown
 router = APIRouter(prefix="/tradingview")
 
 logger = logging.getLogger('Trading view')
+MAX_ALERT_SAMPLE_COUNT = 5
+MAX_ALERT_FIELD_LENGTH = 32
+MAX_ALERT_SAMPLE_LENGTH = 80
+MAX_ALERT_SERIES_LENGTH = 5
 
 
 @router.post("/daily-stocks")
@@ -30,7 +35,7 @@ async def tradingview_daily_stocks_data(request: Request):
     try:
         body = await parse_tradingview_request_body(request)
         filtered_body = filter_tradingview_request_body(body)
-        logger.info(filtered_body)
+        log_tradingview_request_metadata(filtered_body, request.client.host)
     except Exception as e:
         logger.error(get_exception_message(e))
         messages.append(f"JSON body error: {get_exception_message(e, should_escape_markdown=True)}")
@@ -44,7 +49,7 @@ async def tradingview_daily_stocks_data(request: Request):
         messages.append(
             '*Ignored TradingView test_mode request in prod.*\n'
             f'*Request ip:* {escape_markdown(request.client.host)}\n'
-            f'*Body:* {escape_markdown(str(filtered_body))}'
+            f'{format_tradingview_alert_context(filtered_body)}'
         )
         async_ee.emit(
             'send_to_telegram',
@@ -56,7 +61,7 @@ async def tradingview_daily_stocks_data(request: Request):
 
     if not request_test_mode and body.get('secret', None) != config.get_tradingview_webhook_secret():
         messages.append(
-            f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(body))}\n*Request ip:* {escape_markdown(request.client.host)}")
+            f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Request ip:* {escape_markdown(request.client.host)}\n{format_tradingview_alert_context(filtered_body)}")
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
@@ -65,7 +70,7 @@ async def tradingview_daily_stocks_data(request: Request):
     whitelist_ips = config.get_whitelist_ips()
     if not config.get_simulate_tradingview_traffic() and request.client.host not in trading_view_ips and request.client.host not in whitelist_ips:
         messages.append(
-            f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from trading view*: {escape_markdown(str(trading_view_ips))} or whitelist: {escape_markdown(str(whitelist_ips))}\n*Headers:* {escape_markdown(str(request.headers))}\n*Body:* {escape_markdown(str(filtered_body))}\n")
+            f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from a configured TradingView source or whitelist{escape_markdown('.')}*\n{format_tradingview_alert_context(filtered_body)}")
         message = format_messages_to_telegram(messages)
         async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
@@ -159,6 +164,100 @@ def parse_tradingview_body_text(raw_text: str):
 
 def filter_tradingview_request_body(body: dict) -> dict:
     return {k: v for k, v in body.items() if k != 'secret'}
+
+
+def format_tradingview_alert_context(body: dict) -> str:
+    payload = body.get('data') if isinstance(body, dict) else None
+    data = payload if isinstance(payload, list) else []
+    samples = []
+    for item in data[:MAX_ALERT_SAMPLE_COUNT]:
+        if not isinstance(item, dict):
+            continue
+        symbol = truncate_alert_value(item.get('symbol'), MAX_ALERT_FIELD_LENGTH)
+        timeframe = truncate_alert_value(
+            item.get('timeframe'),
+            MAX_ALERT_FIELD_LENGTH,
+        )
+        if symbol is None:
+            continue
+        sample = symbol
+        if timeframe is not None:
+            sample = f'{sample} {timeframe}'
+        samples.append(truncate_alert_value(sample, MAX_ALERT_SAMPLE_LENGTH))
+
+    context = [
+        f"*Payload type:* {format_alert_value(body.get('type'))}",
+        f"*Test mode:* {format_alert_value(body.get('test_mode'))}",
+        f"*Unix ms:* {format_alert_value(body.get('unix_ms'))}",
+        f"*Data item count:* {len(data)}",
+    ]
+    if samples:
+        context.append(f"*Sample symbols:* {escape_markdown(', '.join(samples))}")
+    preview = build_tradingview_payload_preview(body)
+    if preview:
+        context.append(f"*Payload preview:* `{escape_markdown(preview)}`")
+    return '\n'.join(context)
+
+
+def build_tradingview_payload_preview(body: dict) -> str:
+    payload = body.get('data') if isinstance(body, dict) else None
+    data = payload if isinstance(payload, list) else []
+    preview = {
+        'type': truncate_alert_value(body.get('type')),
+        'test_mode': truncate_alert_value(body.get('test_mode')),
+        'unix_ms': truncate_alert_value(body.get('unix_ms')),
+        'data': [
+            build_tradingview_item_preview(item)
+            for item in data[:MAX_ALERT_SAMPLE_COUNT]
+            if isinstance(item, dict)
+        ],
+    }
+    return json.dumps(preview, separators=(',', ':'))
+
+
+def build_tradingview_item_preview(item: dict) -> dict[str, Any]:
+    return {
+        'symbol': truncate_alert_value(item.get('symbol')),
+        'timeframe': truncate_alert_value(item.get('timeframe')),
+        'close_prices': truncate_alert_sequence(item.get('close_prices')),
+        'ema20s': truncate_alert_sequence(item.get('ema20s')),
+        'volumes': truncate_alert_sequence(item.get('volumes')),
+    }
+
+
+def log_tradingview_request_metadata(body: dict, client_host: str):
+    payload = body.get('data') if isinstance(body, dict) else None
+    data_count = len(payload) if isinstance(payload, list) else 0
+    logger.info(
+        'TradingView webhook payload metadata: client=%s type=%s test_mode=%s unix_ms=%s data_count=%s',
+        truncate_alert_value(client_host),
+        truncate_alert_value(body.get('type')),
+        truncate_alert_value(body.get('test_mode')),
+        truncate_alert_value(body.get('unix_ms')),
+        data_count,
+    )
+
+
+def format_alert_value(value) -> str:
+    return escape_markdown(str(truncate_alert_value(value)))
+
+
+def truncate_alert_value(value, max_length: int = MAX_ALERT_FIELD_LENGTH):
+    if value is None:
+        return None
+    text = str(value).replace('\n', ' ').replace('\r', ' ')
+    if len(text) <= max_length:
+        return text
+    return f'{text[: max_length - 3]}...'
+
+
+def truncate_alert_sequence(value):
+    if not isinstance(value, list):
+        return []
+    return [
+        truncate_alert_value(item)
+        for item in value[:MAX_ALERT_SERIES_LENGTH]
+    ]
 
 
 def get_tradingview_score(

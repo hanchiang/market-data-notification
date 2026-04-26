@@ -24,6 +24,7 @@ FastAPI backend and scheduled job runner for stock and crypto Telegram notificat
 
 - Scheduled Telegram digest with sentiment, sector breadth, and standout-coin context
 - Aggregation across multiple external providers in one notification flow
+- Phase-1 crypto signal history, scoring, and operator-only reporting from stored snapshots
 - Backend-specific orchestration over provider adapters, with unofficial or privacy-sensitive provider contracts expected to come from `market-data-library`
 
 ## What It Does
@@ -65,6 +66,7 @@ flowchart LR
 1. The crypto job fetches data from external providers
 2. The job formats a digest-oriented crypto summary
 3. The backend sends the result to the crypto Telegram channel
+4. The phase-1 signal path persists normalized snapshots and sends a separate private/admin operator digest when enabled
 
 ## Key Paths
 
@@ -76,6 +78,8 @@ src/job/stocks/stocks.py                 Stock notification entry point
 src/job/crypto/crypto.py                 Crypto notification entry point
 src/job/crypto/crypto_digest_message_sender.py
 src/job/crypto/crypto_digest_formatter.py
+src/job/crypto/crypto_signal_report.py   Local crypto signal report entry point
+src/service/crypto_signal/               Crypto signal persistence and scoring
 src/notification_destination/telegram_notification.py
 src/config/config.py                     Environment contract
 tests/unit/                              Main unit test surface
@@ -135,6 +139,16 @@ CRYPTO_TELEGRAM_DEV_BOT_TOKEN=...
 CRYPTO_TELEGRAM_DEV_ID=...
 # Used by the optional manual CryptoQuant `price-ohlcv` route.
 CRYPTOQUANT_API_TOKEN=...
+
+CRYPTO_SIGNAL_DB_PATH=var/crypto_signal/crypto_signal.sqlite3
+# Optional test-mode override. Defaults to var/crypto_signal/crypto_signal.test.sqlite3.
+CRYPTO_SIGNAL_TEST_DB_PATH=var/crypto_signal/crypto_signal.test.sqlite3
+# Optional private/operator signal recipient. Defaults to CRYPTO_TELEGRAM_ADMIN_ID.
+CRYPTO_SIGNAL_RECIPIENT_ID=...
+CRYPTO_SIGNAL_TRACKED_UNIVERSE=BTC,ETH,SOL
+CRYPTO_SIGNAL_WATCHLIST=
+CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_PRICE_USD=0
+CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_VOLUME_24H=50000000
 
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
@@ -205,6 +219,29 @@ If you invoke the job files directly instead of using `python -m`, add the repo 
 PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/stocks/stocks.py --force_run=1 --test_mode=1
 PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
 ```
+
+### Crypto Signal Phase 1
+
+The crypto signal feature keeps the public crypto digest unchanged while adding
+SQLite-backed history, deterministic scoring, and a separate operator-only
+signal digest. Phase 1 must stay on private/admin routing; the signal path
+rejects `CRYPTO_TELEGRAM_CHANNEL_ID` as a destination.
+
+Render the latest stored signal report without sending Telegram:
+
+```bash
+ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=0 --test_mode=1
+```
+
+Send the rendered report only after confirming the configured signal recipient
+is private:
+
+```bash
+ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto_signal_report.py --window 7d --limit 3 --send_telegram=1 --test_mode=1
+```
+
+For the full operator procedure, see the workspace runbook:
+https://github.com/hanchiang/market-data-workspace/blob/master/docs/runbooks/crypto-signal-phase-1.md
 
 ### Option 2: Docker
 
@@ -298,6 +335,10 @@ When the server is running:
 - Swagger UI: http://localhost:8080/docs
 - ReDoc: http://localhost:8080/redoc
 - Health check: `GET /healthz`
+
+In production, only `GET /healthz` and `POST /tradingview/daily-stocks` are
+public. Swagger UI, ReDoc, OpenAPI, and all other routes stay behind
+`X-Api-Auth`.
 
 Important endpoints:
 

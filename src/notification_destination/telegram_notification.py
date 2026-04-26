@@ -168,6 +168,50 @@ async def send_message_to_admin(message: str, market_data_type: MarketDataType):
     print_telegram_message(res)
     return res
 
+
+async def send_crypto_signal_message(
+    message: str,
+    chat_id: str | None = None,
+    runtime_mode: RuntimeMode | None = None,
+):
+    if config.get_disable_telegram():
+        logger.info('Telegram is disabled')
+        return
+
+    active_runtime_mode = (
+        DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+    )
+    telegram_client, resolved_chat_id = _resolve_crypto_signal_target(
+        requested_chat_id=chat_id,
+        runtime_mode=active_runtime_mode,
+    )
+
+    try:
+        if len(message) > MAX_TELEGRAM_MESSAGE_LENGTH:
+            res = await _send_split_message_to_channel(
+                telegram_client=telegram_client,
+                chat_id=resolved_chat_id,
+                message=message,
+            )
+        else:
+            res = await telegram_client.send_message(
+                chat_id=resolved_chat_id,
+                text=message,
+                parse_mode='MarkdownV2',
+            )
+        return res
+    except Exception as error:
+        logger.error(get_exception_message(error))
+        fallback_message = _build_telegram_error_alert(
+            context='send_crypto_signal_message',
+            error_text=get_exception_message(error),
+        )
+        return await telegram_client.send_message(
+            chat_id=resolved_chat_id,
+            text=fallback_message,
+            parse_mode='MarkdownV2',
+        )
+
 def get_admin_channel_id_from_market_data_type(market_data_type: MarketDataType):
     if market_data_type == MarketDataType.CRYPTO:
         return config.get_telegram_crypto_admin_id()
@@ -180,6 +224,24 @@ def get_dev_channel_id_from_market_data_type(market_data_type: MarketDataType):
 
 def print_telegram_message(res: telegram.Message):
     logging.info(f"Sent to {res.chat.title} {res.chat.type} at {res.date}. Message id {res.id}")
+
+
+def _resolve_crypto_signal_target(
+    requested_chat_id: str | None,
+    runtime_mode: RuntimeMode,
+):
+    # Phase 1 signal review stays on the admin/operator path even in test mode;
+    # unlike the public digest, it should not inherit generic dev-channel routing.
+    resolved_chat_id = (
+        config.get_crypto_signal_recipient_id()
+        if requested_chat_id is None
+        else requested_chat_id
+    )
+    if resolved_chat_id == config.get_telegram_crypto_channel_id():
+        raise RuntimeError(
+            'Crypto signal delivery to the public crypto channel is disabled in phase 1'
+        )
+    return crypto_admin_bot, resolved_chat_id
 
 
 def _build_telegram_error_alert(context: str, error_text: str) -> str:

@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 from typing import Tuple, List
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 
 load_dotenv()
 
@@ -128,7 +129,11 @@ def get_whitelist_ips():
     return os.getenv('WHITELIST_IPS', '').split(',')
 
 def get_auth_exclude_endpoints() -> List[str]:
-    return os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
+    return [
+        endpoint.strip()
+        for endpoint in os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
+        if endpoint.strip()
+    ]
 
 def get_api_auth_token():
     if not os.getenv('API_AUTH_TOKEN', None):
@@ -332,6 +337,140 @@ def get_cryptoquant_api_token() -> str:
 
 def has_cryptoquant_api_token() -> bool:
     return bool(get_cryptoquant_api_token().strip())
+
+_DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS = {
+    'BTC': 1,
+    'ETH': 1027,
+    'SOL': 5426,
+}
+
+
+def get_crypto_signal_db_path(
+    runtime_mode: RuntimeMode | None = None,
+) -> str:
+    prod_db_path = os.getenv(
+        'CRYPTO_SIGNAL_DB_PATH',
+        'var/crypto_signal/crypto_signal.sqlite3',
+    )
+    active_runtime_mode = (
+        DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+    )
+    # Keep test-mode history isolated so local replay does not contaminate the
+    # operator-facing store used by normal runs.
+    if not active_runtime_mode.is_test_mode:
+        return prod_db_path
+    return os.getenv(
+        'CRYPTO_SIGNAL_TEST_DB_PATH',
+        _build_test_crypto_signal_db_path(prod_db_path),
+    )
+
+
+def get_crypto_signal_recipient_id() -> str:
+    return os.getenv(
+        'CRYPTO_SIGNAL_RECIPIENT_ID',
+        get_telegram_crypto_admin_id(),
+    )
+
+
+def get_crypto_signal_tracked_universe() -> list[tuple[str, int]]:
+    return _parse_crypto_signal_coin_entries(
+        env_name='CRYPTO_SIGNAL_TRACKED_UNIVERSE',
+        default_raw_value='BTC,ETH,SOL',
+    )
+
+
+def get_crypto_signal_watchlist() -> list[tuple[str, int]]:
+    return _parse_crypto_signal_coin_entries(
+        env_name='CRYPTO_SIGNAL_WATCHLIST',
+        default_raw_value='',
+    )
+
+
+def get_crypto_signal_dynamic_candidate_min_price_usd() -> float:
+    # Token price is a weak proxy for tradability because supply design can
+    # make legitimate projects look artificially "cheap". Keep the default at
+    # zero and rely on the separate volume floor unless an operator explicitly
+    # wants a stricter price-based presentation filter.
+    return _get_positive_float_env(
+        env_name='CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_PRICE_USD',
+        default_raw_value='0',
+        allow_zero=True,
+    )
+
+
+def get_crypto_signal_dynamic_candidate_min_volume_24h() -> float:
+    # This floor only affects operator ranking for dynamic candidates. Stored
+    # history remains broader so later analysis is not forced through the same
+    # presentation threshold.
+    return _get_positive_float_env(
+        env_name='CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_VOLUME_24H',
+        default_raw_value='50000000',
+        allow_zero=True,
+    )
+
+
+def _parse_crypto_signal_coin_entries(
+    env_name: str,
+    default_raw_value: str,
+) -> list[tuple[str, int]]:
+    raw_value = os.getenv(env_name, default_raw_value)
+    entries = []
+    for raw_entry in raw_value.split(','):
+        entry = raw_entry.strip()
+        if entry == '':
+            continue
+
+        if ':' in entry:
+            symbol, raw_coin_id = entry.split(':', 1)
+            symbol = symbol.strip().upper()
+            raw_coin_id = raw_coin_id.strip()
+            if symbol == '' or raw_coin_id == '':
+                raise RuntimeError(
+                    f'{env_name} entries must look like SYMBOL or SYMBOL:ID'
+                )
+            try:
+                coin_id = int(raw_coin_id)
+            except ValueError as error:
+                raise RuntimeError(
+                    f'{env_name} coin ids must be integers'
+                ) from error
+        else:
+            symbol = entry.upper()
+            if symbol not in _DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS:
+                raise RuntimeError(
+                    f'{env_name} unqualified symbols must use a '
+                    'known default id or the SYMBOL:ID form'
+                )
+            coin_id = _DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS[symbol]
+
+        entries.append((symbol, coin_id))
+    return entries
+
+
+def _build_test_crypto_signal_db_path(prod_db_path: str) -> str:
+    path = Path(prod_db_path)
+    if path.suffix == '':
+        return f'{prod_db_path}.test'
+    return str(path.with_name(f'{path.stem}.test{path.suffix}'))
+
+
+def _get_positive_float_env(
+    env_name: str,
+    default_raw_value: str,
+    allow_zero: bool = False,
+) -> float:
+    raw_value = os.getenv(env_name, default_raw_value)
+    try:
+        parsed_value = float(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f'{env_name} must be a positive number') from error
+
+    if allow_zero:
+        if parsed_value < 0:
+            raise RuntimeError(f'{env_name} must be a positive number')
+    elif parsed_value <= 0:
+        raise RuntimeError(f'{env_name} must be a positive number')
+    return parsed_value
 
 def get_should_send_stocks_sentiment_message():
     return os.getenv('SHOULD_SEND_STOCKS_SENTIMENT_MESSAGE', 'true') == 'true'

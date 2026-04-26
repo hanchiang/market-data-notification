@@ -34,6 +34,12 @@ app.include_router(crypto_stats.router)
 env = os.getenv('ENV')
 
 logger = logging.getLogger('Server')
+PUBLIC_ROUTES = {
+    ('GET', '/healthz'),
+    ('POST', '/tradingview/daily-stocks'),
+}
+
+
 def start_server():
     logger.info('starting server...')
     reload = False
@@ -57,24 +63,32 @@ async def shutdown_event():
 @app.middleware("http")
 async def log_request_and_time_taken(request: Request, call_next):
     start_time = time.time()
-    logger.info(f"{request.method} {request.url}, headers: {request.headers} client: {request.client}")
+    logger.info(
+        "Request: method=%s path=%s client=%s",
+        request.method,
+        request.url.path,
+        request.client,
+    )
     response = await call_next(request)
     time_elapsed = time.time() - start_time
     response.headers["X-Process-Time"] = str(time_elapsed)
-    logger.info(f"Response: {response.headers}")
+    logger.info(
+        "Response: method=%s path=%s status=%s elapsed_seconds=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        time_elapsed,
+    )
     return response
 
 @app.middleware("http")
 async def auth_check(request: Request, call_next):
-    if config.get_env() != 'prod' or 'localhost' in request.url.hostname:
-        logger.info('env is not prod or hostname is localhost. Skipping auth')
+    if config.get_env() != 'prod':
+        logger.info('env is not prod. Skipping auth')
         return await call_next(request)
 
-    excluded_endpoints = config.get_auth_exclude_endpoints()
-    if excluded_endpoints is not None:
-        for excluded_endpoint in excluded_endpoints:
-            if excluded_endpoint in request.url.path:
-                return await call_next(request)
+    if (request.method, request.url.path) in PUBLIC_ROUTES:
+        return await call_next(request)
 
     auth_token = request.headers.get('X-Api-Auth')
     if not auth_token or auth_token != config.get_api_auth_token():

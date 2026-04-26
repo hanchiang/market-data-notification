@@ -129,7 +129,11 @@ def get_whitelist_ips():
     return os.getenv('WHITELIST_IPS', '').split(',')
 
 def get_auth_exclude_endpoints() -> List[str]:
-    return os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
+    return [
+        endpoint.strip()
+        for endpoint in os.getenv('AUTH_EXCLUDE_ENDPOINTS', '').split(',')
+        if endpoint.strip()
+    ]
 
 def get_api_auth_token():
     if not os.getenv('API_AUTH_TOKEN', None):

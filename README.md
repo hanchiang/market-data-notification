@@ -336,6 +336,10 @@ When the server is running:
 - ReDoc: http://localhost:8080/redoc
 - Health check: `GET /healthz`
 
+In production, only `GET /healthz` and `POST /tradingview/daily-stocks` are
+public. Swagger UI, ReDoc, OpenAPI, and all other routes stay behind
+`X-Api-Auth`.
+
 Important endpoints:
 
 - `POST /tradingview/daily-stocks`

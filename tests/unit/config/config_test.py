@@ -53,6 +53,21 @@ def test_get_selenium_server_host_allows_docker_only_chrome_host_in_container(
     assert config.get_selenium_server_host() == 'http://chrome:4444'
 
 
+def test_get_auth_exclude_endpoints_strips_blank_entries(monkeypatch):
+    monkeypatch.setenv('AUTH_EXCLUDE_ENDPOINTS', ' /healthz, ,/tradingview/daily-stocks,')
+
+    assert config.get_auth_exclude_endpoints() == [
+        '/healthz',
+        '/tradingview/daily-stocks',
+    ]
+
+
+def test_get_auth_exclude_endpoints_defaults_to_empty_list(monkeypatch):
+    monkeypatch.delenv('AUTH_EXCLUDE_ENDPOINTS', raising=False)
+
+    assert config.get_auth_exclude_endpoints() == []
+
+
 def test_get_cnn_page_load_timeout_seconds_defaults_to_45(monkeypatch):
     monkeypatch.delenv('CNN_PAGE_LOAD_TIMEOUT_SECONDS', raising=False)
 

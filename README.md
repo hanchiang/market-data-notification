@@ -166,6 +166,20 @@ deploy mounts that directory to persistent host storage under
 `market_data_notification_jobs/crypto_signal` so signal history survives
 container replacement.
 
+To review production crypto-signal history locally, create and download a
+consistent SQLite backup from the production host, then restore it into the
+separate local review DB path:
+
+```bash
+./scripts/backup_crypto_signal_sqlite_from_production.sh --ssh-target production
+./scripts/restore_crypto_signal_sqlite_backup_local.sh --backup /tmp/crypto_signal_backups/<backup-file>.sqlite3.gz
+```
+
+The restore helper writes to `var/crypto_signal/prod-review/crypto_signal.sqlite3`
+by default and prints the `CRYPTO_SIGNAL_DB_PATH=... crypto_signal_report.py`
+command for rendering a local report without Telegram sends or live provider
+calls.
+
 ## Local Development
 
 ### Option 1: Local Python

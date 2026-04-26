@@ -33,7 +33,7 @@ FastAPI backend and scheduled job runner for stock and crypto Telegram notificat
 - Runs scheduled stock and crypto jobs that fetch market data, format messages, and send them to Telegram
 - Uses Redis for transient state and local replay workflows
 - Installs a cron-backed Redis backup email flow that sends the archive through Resend using a hosted transactional template
-- Supports local test-mode routing to dev Telegram channels
+- Supports local test-mode routing to dev Telegram channels for the normal notification flows; crypto-signal output remains private/admin-routed in test mode
 
 ## Flow Overview
 

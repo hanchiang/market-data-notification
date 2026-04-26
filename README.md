@@ -171,14 +171,15 @@ consistent SQLite backup from the production host, then restore it into the
 separate local review DB path:
 
 ```bash
-./scripts/backup_crypto_signal_sqlite_from_production.sh --ssh-target production
+./scripts/backup_crypto_signal_sqlite_from_production.sh --ssh-target market_data_notification
 ./scripts/restore_crypto_signal_sqlite_backup_local.sh --backup /tmp/crypto_signal_backups/<backup-file>.sqlite3.gz
 ```
 
 The restore helper writes to `var/crypto_signal/prod-review/crypto_signal.sqlite3`
 by default and prints the `CRYPTO_SIGNAL_DB_PATH=... crypto_signal_report.py`
 command for rendering a local report without Telegram sends or live provider
-calls.
+calls. If local SSH does not define the `market_data_notification` host alias,
+pass `--ssh-target user@host`.
 
 ## Local Development
 

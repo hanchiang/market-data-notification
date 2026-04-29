@@ -3,8 +3,14 @@ import sqlite3
 
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
+    CryptoSignalMarketRegimeMetric,
+    CryptoSignalMarketRegimeSnapshot,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
+)
+from src.service.crypto_signal.market_regime import (
+    FUNDING_RATE_METRIC,
+    OPEN_INTEREST_METRIC,
 )
 from src.service.crypto_signal.repository import CryptoSignalRepository
 from src.runtime.runtime_mode import RuntimeMode
@@ -409,3 +415,187 @@ def test_get_coin_observation_counts_since_returns_zero_for_missing_coin(tmp_pat
         1: 0,
         5426: 1,
     }
+
+
+def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'crypto_signal.sqlite3')
+    )
+    observed_at_utc = datetime.datetime(
+        2026,
+        4,
+        27,
+        8,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    source_timestamp_utc = datetime.datetime(
+        2026,
+        4,
+        27,
+        0,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    first_snapshot = CryptoSignalMarketRegimeSnapshot(
+        observed_at_utc=observed_at_utc,
+        runtime_mode='prod',
+        provider='coinalyze',
+        asset_symbol='BTC',
+        venue_scope='aggregate',
+        instrument_scope='btc_perpetual_basket',
+        cadence='1hour',
+        source_payload_version=1,
+        metrics=[
+            CryptoSignalMarketRegimeMetric(
+                metric_name=OPEN_INTEREST_METRIC,
+                metric_value=35_000_000_000,
+                unit='usd',
+                source_timestamp_utc=source_timestamp_utc,
+            ),
+        ],
+    )
+    updated_snapshot = CryptoSignalMarketRegimeSnapshot(
+        observed_at_utc=observed_at_utc,
+        runtime_mode='prod',
+        provider='coinalyze',
+        asset_symbol='BTC',
+        venue_scope='aggregate',
+        instrument_scope='btc_perpetual_basket',
+        cadence='1hour',
+        source_payload_version=1,
+        metrics=[
+            CryptoSignalMarketRegimeMetric(
+                metric_name=OPEN_INTEREST_METRIC,
+                metric_value=36_000_000_000,
+                unit='usd',
+                source_timestamp_utc=source_timestamp_utc,
+            ),
+            CryptoSignalMarketRegimeMetric(
+                metric_name=FUNDING_RATE_METRIC,
+                metric_value=0.0125,
+                unit='percent',
+                source_timestamp_utc=source_timestamp_utc,
+            ),
+        ],
+    )
+    binance_snapshot = CryptoSignalMarketRegimeSnapshot(
+        observed_at_utc=observed_at_utc,
+        runtime_mode='prod',
+        provider='binance',
+        asset_symbol='BTC',
+        venue_scope='binance',
+        instrument_scope='BTCUSDT',
+        cadence='1hour',
+        source_payload_version=1,
+        metrics=[
+            CryptoSignalMarketRegimeMetric(
+                metric_name=OPEN_INTEREST_METRIC,
+                metric_value=40_000_000_000,
+                unit='usd',
+                source_timestamp_utc=source_timestamp_utc,
+            ),
+        ],
+    )
+    later_coinalyze_snapshot = CryptoSignalMarketRegimeSnapshot(
+        observed_at_utc=observed_at_utc + datetime.timedelta(hours=1),
+        runtime_mode='prod',
+        provider='coinalyze',
+        asset_symbol='BTC',
+        venue_scope='aggregate',
+        instrument_scope='btc_perpetual_basket',
+        cadence='1hour',
+        source_payload_version=1,
+        metrics=[
+            CryptoSignalMarketRegimeMetric(
+                metric_name=OPEN_INTEREST_METRIC,
+                metric_value=37_000_000_000,
+                unit='usd',
+                source_timestamp_utc=source_timestamp_utc,
+            ),
+        ],
+    )
+
+    first_saved = repository.save_market_regime_snapshot(first_snapshot)
+    second_saved = repository.save_market_regime_snapshot(updated_snapshot)
+    repository.save_market_regime_snapshot(binance_snapshot)
+    repository.save_market_regime_snapshot(later_coinalyze_snapshot)
+    metrics = repository.get_market_regime_metrics(
+        runtime_mode='prod',
+        start_timestamp_utc=datetime.datetime(
+            2026,
+            4,
+            26,
+            0,
+            0,
+            tzinfo=datetime.timezone.utc,
+        ),
+        end_timestamp_utc=datetime.datetime(
+            2026,
+            4,
+            28,
+            0,
+            0,
+            tzinfo=datetime.timezone.utc,
+        ),
+        metric_names=[OPEN_INTEREST_METRIC, FUNDING_RATE_METRIC],
+        provider='coinalyze',
+        venue_scope='aggregate',
+        instrument_scope='btc_perpetual_basket',
+        cadence='1hour',
+    )
+
+    assert first_saved.snapshot_id == second_saved.snapshot_id
+    assert [(metric.metric_name, metric.metric_value) for metric in metrics] == [
+        (FUNDING_RATE_METRIC, 0.0125),
+        (OPEN_INTEREST_METRIC, 37_000_000_000),
+    ]
+    assert {
+        (
+            metric.provider,
+            metric.asset_symbol,
+            metric.venue_scope,
+            metric.instrument_scope,
+            metric.cadence,
+        )
+        for metric in metrics
+    } == {('coinalyze', 'BTC', 'aggregate', 'btc_perpetual_basket', '1hour')}
+
+    connection = sqlite3.connect(tmp_path / 'crypto_signal.sqlite3')
+    snapshot_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_market_regime_snapshots'
+    ).fetchone()[0]
+    metric_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_market_regime_metrics'
+    ).fetchone()[0]
+    connection.close()
+
+    assert snapshot_count == 3
+    assert metric_count == 4
+
+
+def test_get_market_regime_metrics_returns_empty_for_missing_db(tmp_path):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'missing_crypto_signal.sqlite3')
+    )
+
+    assert repository.get_market_regime_metrics(
+        runtime_mode='prod',
+        start_timestamp_utc=datetime.datetime(
+            2026,
+            4,
+            26,
+            0,
+            0,
+            tzinfo=datetime.timezone.utc,
+        ),
+        end_timestamp_utc=datetime.datetime(
+            2026,
+            4,
+            28,
+            0,
+            0,
+            tzinfo=datetime.timezone.utc,
+        ),
+        metric_names=[OPEN_INTEREST_METRIC],
+    ) == []

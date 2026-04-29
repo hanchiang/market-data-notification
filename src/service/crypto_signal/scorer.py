@@ -6,6 +6,7 @@ from src.service.crypto_signal.models import (
     CryptoSignalCandidate,
     CryptoSignalCoinSnapshot,
     CryptoSignalDigestView,
+    CryptoSignalMarketRegimeSummary,
     CryptoSignalSnapshot,
 )
 
@@ -58,6 +59,7 @@ def build_digest_view(
     limit: int = 3,
     min_dynamic_price_usd: float = 1.0,
     min_dynamic_volume_24h: float = 50_000_000.0,
+    market_regime_summary: CryptoSignalMarketRegimeSummary | None = None,
 ) -> CryptoSignalDigestView:
     tracked_universe_coin_ids = (
         set() if tracked_universe_coin_ids is None else tracked_universe_coin_ids
@@ -135,7 +137,13 @@ def build_digest_view(
         key=lambda candidate: (-abs(candidate.score), candidate.symbol)
     )
 
-    market_regime_label, market_regime_reason = _classify_market_regime(latest_snapshot)
+    if market_regime_summary is None:
+        market_regime_label, market_regime_reason = _classify_market_regime(
+            latest_snapshot
+        )
+    else:
+        market_regime_label = market_regime_summary.label
+        market_regime_reason = market_regime_summary.reason
 
     return CryptoSignalDigestView(
         latest_snapshot=latest_snapshot,

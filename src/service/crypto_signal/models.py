@@ -54,6 +54,42 @@ class CryptoSignalSnapshot:
 
 
 @dataclass(slots=True)
+class CryptoSignalMarketRegimeMetric:
+    metric_name: str
+    metric_value: float | None
+    unit: str
+    source_timestamp_utc: datetime.datetime
+    provider: str | None = None
+    asset_symbol: str | None = None
+    venue_scope: str | None = None
+    instrument_scope: str | None = None
+    cadence: str | None = None
+    snapshot_id: int | None = None
+    created_at_utc: datetime.datetime | None = None
+
+
+@dataclass(slots=True)
+class CryptoSignalMarketRegimeSnapshot:
+    observed_at_utc: datetime.datetime
+    runtime_mode: str
+    provider: str
+    asset_symbol: str
+    venue_scope: str
+    instrument_scope: str
+    cadence: str
+    source_payload_version: int
+    metrics: list[CryptoSignalMarketRegimeMetric] = field(default_factory=list)
+    snapshot_id: int | None = None
+    created_at_utc: datetime.datetime | None = None
+
+
+@dataclass(slots=True)
+class CryptoSignalMarketRegimeSummary:
+    label: str
+    reason: str
+
+
+@dataclass(slots=True)
 class CryptoSignalCandidate:
     coin_id: int
     symbol: str

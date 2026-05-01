@@ -16,6 +16,10 @@ from src.type.sentiment import FearGreedAverage, FearGreedData, FearGreedResult
 
 
 class TestCryptoDigestMessageSender:
+    @pytest.fixture(autouse=True)
+    def disable_market_regime_collection(self, monkeypatch):
+        monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', raising=False)
+
     @staticmethod
     def remove_unknown_fields(my_value, fields: list[dataclasses.Field]):
         field_by_name = {field.name: field for field in fields}
@@ -175,6 +179,11 @@ class TestCryptoDigestMessageSender:
         signal_repository.save_or_merge_snapshot = Mock()
         signal_backfill_service = AsyncMock()
         signal_backfill_service.build_snapshots = AsyncMock(return_value=[])
+        if market_regime_collector is None:
+            market_regime_collector = AsyncMock()
+            market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
+                return_value=[]
+            )
         message_sender = CryptoDigestMessageSender(
             runtime_mode=DEFAULT_RUNTIME_MODE,
             cmc_service=cmc_service,

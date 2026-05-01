@@ -2,6 +2,7 @@ import datetime
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Protocol
 
 from market_data_library.core.crypto.coinalyze.type import (
     CoinalyzeFutureMarket,
@@ -9,7 +10,7 @@ from market_data_library.core.crypto.coinalyze.type import (
     CoinalyzeHistorySeries,
 )
 
-from src.data_source.market_data_library import get_crypto_api
+from src.service.crypto.coinalyze import CoinalyzeService
 from src.service.crypto_signal.market_regime import (
     FUNDING_RATE_METRIC,
     OPEN_INTEREST_METRIC,
@@ -34,8 +35,34 @@ class _MetricSeries:
     funding_by_symbol: dict[str, CoinalyzeHistorySeries]
 
 
+class _CoinalyzeMarketRegimeService(Protocol):
+    async def get_future_markets(self) -> list[CoinalyzeFutureMarket]:
+        ...
+
+    async def get_open_interest_history(
+        self,
+        symbols: list[str],
+        interval: str,
+        from_timestamp_seconds: int,
+        to_timestamp_seconds: int,
+        convert_to_usd: bool = True,
+    ) -> list[CoinalyzeHistorySeries]:
+        ...
+
+    async def get_funding_rate_history(
+        self,
+        symbols: list[str],
+        interval: str,
+        from_timestamp_seconds: int,
+        to_timestamp_seconds: int,
+    ) -> list[CoinalyzeHistorySeries]:
+        ...
+
+
 class CryptoSignalMarketRegimeCollector:
-    def __init__(self, coinalyze_service=None) -> None:
+    def __init__(
+        self, coinalyze_service: _CoinalyzeMarketRegimeService | None = None
+    ) -> None:
         self.coinalyze_service = coinalyze_service
 
     async def collect_coinalyze_btc_snapshots(
@@ -98,8 +125,8 @@ class CryptoSignalMarketRegimeCollector:
         raw_snapshots = [
             snapshot for snapshot in raw_snapshots if len(snapshot.metrics) > 0
         ]
-        # Persist raw venue facts for auditability, then summarize only the
-        # aggregate basket so operator output is not biased toward one venue.
+        # Raw venue facts preserve provenance for audits and later provider
+        # comparisons; operator output reads only the aggregate basket.
         aggregate_snapshot = self._build_aggregate_snapshot(
             observed_at_utc=observed_at_utc,
             runtime_mode=runtime_mode,
@@ -110,15 +137,18 @@ class CryptoSignalMarketRegimeCollector:
             return raw_snapshots
         return [*raw_snapshots, aggregate_snapshot]
 
-    def _get_coinalyze_service(self):
+    def _get_coinalyze_service(self) -> _CoinalyzeMarketRegimeService | None:
         if self.coinalyze_service is not None:
             return self.coinalyze_service
-        return get_crypto_api().coinalyze.coinalyze_service
+        coinalyze_service = CoinalyzeService()
+        if not coinalyze_service.is_configured():
+            return None
+        return coinalyze_service
 
     async def _load_market_metadata(
         self,
         *,
-        coinalyze_service,
+        coinalyze_service: _CoinalyzeMarketRegimeService,
         symbols: list[str],
     ) -> dict[str, CoinalyzeFutureMarket]:
         try:
@@ -168,7 +198,7 @@ class CryptoSignalMarketRegimeCollector:
     async def _load_metric_series(
         self,
         *,
-        coinalyze_service,
+        coinalyze_service: _CoinalyzeMarketRegimeService,
         symbols: list[str],
         interval: str,
         from_timestamp_seconds: int,
@@ -294,11 +324,15 @@ class CryptoSignalMarketRegimeCollector:
         values_by_timestamp = defaultdict(list)
         for series in series_by_symbol.values():
             for point in series.history:
+                # Aggregate only facts observed for the same provider timestamp;
+                # carrying forward stale venue values would invent precision.
                 values_by_timestamp[point.t].append(point.c)
 
         metrics = []
         for timestamp in sorted(values_by_timestamp):
             values = values_by_timestamp[timestamp]
+            # OI is a notional exposure pool and can be summed across venues.
+            # Funding is a rate, so basket context uses an equal-weight mean.
             metric_value = (
                 sum(values)
                 if aggregation == 'sum'

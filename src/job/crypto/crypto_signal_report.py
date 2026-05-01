@@ -36,6 +36,8 @@ def _load_market_regime_summary(
         provider = config.get_crypto_signal_market_regime_provider()
         if provider != COINALYZE_PROVIDER:
             return None
+        # Match the scheduled operator digest: report output should describe
+        # the BTC perpetual basket, not whichever raw venue rows are present.
         metrics = repository.get_market_regime_metrics(
             runtime_mode=latest_snapshot.run.runtime_mode,
             start_timestamp_utc=get_window_start(

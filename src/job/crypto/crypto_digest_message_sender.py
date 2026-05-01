@@ -15,7 +15,6 @@ from src.job.crypto.crypto_digest_formatter import (
 )
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.notification_destination.telegram_notification import send_message_to_admin
-from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 from src.service.crypto_signal.market_regime_collector import (
     CryptoSignalMarketRegimeCollector,
 )
@@ -44,16 +43,25 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         market_regime_repository=None,
     ):
         super().__init__(runtime_mode=runtime_mode)
-        self.cmc_service = cmc_service or Dependencies.get_crypto_stats_service()
-        self.sentiment_service = (
-            sentiment_service or Dependencies.get_crypto_sentiment_service()
+        self.cmc_service = (
+            Dependencies.get_crypto_stats_service()
+            if cmc_service is None
+            else cmc_service
         )
-        self.signal_repository = signal_repository or CryptoSignalRepository(
-            runtime_mode=self.runtime_mode
+        self.sentiment_service = (
+            Dependencies.get_crypto_sentiment_service()
+            if sentiment_service is None
+            else sentiment_service
+        )
+        self.signal_repository = (
+            CryptoSignalRepository(runtime_mode=self.runtime_mode)
+            if signal_repository is None
+            else signal_repository
         )
         self.signal_backfill_service = (
-            signal_backfill_service
-            or CryptoSignalBackfillService(cmc_service=self.cmc_service)
+            CryptoSignalBackfillService(cmc_service=self.cmc_service)
+            if signal_backfill_service is None
+            else signal_backfill_service
         )
         self.market_regime_collector = market_regime_collector
         self.market_regime_repository = market_regime_repository
@@ -92,7 +100,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
 
         snapshot = self._build_signal_snapshot(
             current=current,
-            runtime_mode=getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE),
+            runtime_mode=self.runtime_mode,
             sentiment=sentiment,
             strongest_sector=strongest_sector,
             weakest_sector=weakest_sector,
@@ -285,8 +293,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             )
 
     def _runtime_mode_label(self) -> str:
-        runtime_mode = getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE)
-        return 'test' if runtime_mode.is_test_mode else 'prod'
+        return 'test' if self.runtime_mode.is_test_mode else 'prod'
 
     def _build_backfill_entries(
         self,

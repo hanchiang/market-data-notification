@@ -9,7 +9,6 @@ from src.notification_destination.telegram_notification import (
     send_crypto_signal_message,
     send_message_to_admin,
 )
-from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 from src.service.crypto_signal.market_regime import (
     FUNDING_RATE_METRIC,
     OPEN_INTEREST_METRIC,
@@ -41,8 +40,10 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
         tracked_universe_entries=None,
     ):
         super().__init__(runtime_mode=runtime_mode)
-        self.signal_repository = signal_repository or CryptoSignalRepository(
-            runtime_mode=self.runtime_mode
+        self.signal_repository = (
+            CryptoSignalRepository(runtime_mode=self.runtime_mode)
+            if signal_repository is None
+            else signal_repository
         )
         self.watchlist_entries = (
             config.get_crypto_signal_watchlist()
@@ -128,8 +129,7 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
         return [build_crypto_signal_message(view)]
 
     def _is_fresh_enough(self, run_timestamp_utc: datetime.datetime) -> bool:
-        runtime_mode = getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE)
-        if runtime_mode.bypass_schedule:
+        if self.runtime_mode.bypass_schedule:
             return True
 
         now_utc = get_current_datetime().astimezone(datetime.timezone.utc)

@@ -33,13 +33,27 @@ _SNAPSHOT_FRESHNESS_THRESHOLD = datetime.timedelta(minutes=90)
 
 
 class CryptoSignalDigestMessageSender(MessageSenderWrapper):
-    def __init__(self, runtime_mode=None):
+    def __init__(
+        self,
+        runtime_mode=None,
+        signal_repository=None,
+        watchlist_entries=None,
+        tracked_universe_entries=None,
+    ):
         super().__init__(runtime_mode=runtime_mode)
-        self.signal_repository = CryptoSignalRepository(
+        self.signal_repository = signal_repository or CryptoSignalRepository(
             runtime_mode=self.runtime_mode
         )
-        self.watchlist_entries = config.get_crypto_signal_watchlist()
-        self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
+        self.watchlist_entries = (
+            config.get_crypto_signal_watchlist()
+            if watchlist_entries is None
+            else watchlist_entries
+        )
+        self.tracked_universe_entries = (
+            config.get_crypto_signal_tracked_universe()
+            if tracked_universe_entries is None
+            else tracked_universe_entries
+        )
 
     @property
     def data_source(self):
@@ -79,11 +93,7 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
             return None
 
     async def format_message(self) -> List[str]:
-        repository = getattr(
-            self,
-            'signal_repository',
-            CryptoSignalRepository(runtime_mode=self.runtime_mode),
-        )
+        repository = self.signal_repository
         latest_snapshot = repository.get_latest_snapshot()
         if latest_snapshot is None:
             return []
@@ -103,12 +113,7 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
             history=history,
             watchlist_coin_ids={coin_id for _symbol, coin_id in self.watchlist_entries},
             tracked_universe_coin_ids={
-                coin_id
-                for _symbol, coin_id in getattr(
-                    self,
-                    'tracked_universe_entries',
-                    config.get_crypto_signal_tracked_universe(),
-                )
+                coin_id for _symbol, coin_id in self.tracked_universe_entries
             },
             window_label=window_label,
             limit=3,

@@ -97,6 +97,28 @@ class _FakeRepository:
         return []
 
 
+def _build_sender(
+    repository,
+    *,
+    watchlist_entries=None,
+    tracked_universe_entries=None,
+) -> CryptoSignalDigestMessageSender:
+    return CryptoSignalDigestMessageSender(
+        runtime_mode=DEFAULT_RUNTIME_MODE,
+        signal_repository=repository,
+        watchlist_entries=(
+            [('BTC', 1), ('SOL', 5426)]
+            if watchlist_entries is None
+            else watchlist_entries
+        ),
+        tracked_universe_entries=(
+            [('BTC', 1), ('SOL', 5426)]
+            if tracked_universe_entries is None
+            else tracked_universe_entries
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_format_message_builds_operator_digest(monkeypatch):
     earlier_snapshot = _build_snapshot(
@@ -107,13 +129,12 @@ async def test_format_message_builds_operator_digest(monkeypatch):
         datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc)
     )
 
-    sender = object.__new__(CryptoSignalDigestMessageSender)
-    sender.signal_repository = _FakeRepository(
-        latest_snapshot,
-        history=[earlier_snapshot, latest_snapshot],
+    sender = _build_sender(
+        _FakeRepository(
+            latest_snapshot,
+            history=[earlier_snapshot, latest_snapshot],
+        ),
     )
-    sender.watchlist_entries = [('BTC', 1), ('SOL', 5426)]
-    sender.runtime_mode = DEFAULT_RUNTIME_MODE
 
     monkeypatch.setattr(
         'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
@@ -182,11 +203,7 @@ async def test_format_message_uses_stored_coinalyze_market_regime_summary(
                 ),
             ]
 
-    sender = object.__new__(CryptoSignalDigestMessageSender)
-    sender.signal_repository = _RepositoryWithRegime(latest_snapshot)
-    sender.watchlist_entries = [('BTC', 1), ('SOL', 5426)]
-    sender.tracked_universe_entries = [('BTC', 1), ('SOL', 5426)]
-    sender.runtime_mode = DEFAULT_RUNTIME_MODE
+    sender = _build_sender(_RepositoryWithRegime(latest_snapshot))
 
     monkeypatch.setattr(
         'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
@@ -205,10 +222,7 @@ async def test_format_message_skips_stale_snapshot(monkeypatch):
         datetime.datetime(2026, 4, 20, 8, 45, tzinfo=datetime.timezone.utc)
     )
 
-    sender = object.__new__(CryptoSignalDigestMessageSender)
-    sender.signal_repository = _FakeRepository(latest_snapshot)
-    sender.watchlist_entries = [('BTC', 1), ('SOL', 5426)]
-    sender.runtime_mode = DEFAULT_RUNTIME_MODE
+    sender = _build_sender(_FakeRepository(latest_snapshot))
 
     monkeypatch.setattr(
         'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',

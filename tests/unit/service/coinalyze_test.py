@@ -12,7 +12,7 @@ from src.service.crypto.coinalyze import CoinalyzeService
 
 class TestCoinalyzeService:
     def test_is_configured_returns_false_when_api_key_absent(self) -> None:
-        service = CoinalyzeService(coinalyze_service=None)
+        service = CoinalyzeService(use_configured_service=False)
 
         assert service.is_configured() is False
 
@@ -20,7 +20,7 @@ class TestCoinalyzeService:
     async def test_get_future_markets_requires_configured_library_service(
         self,
     ) -> None:
-        service = CoinalyzeService(coinalyze_service=None)
+        service = CoinalyzeService(use_configured_service=False)
 
         with pytest.raises(RuntimeError, match='COINALYZE_API_KEY is not configured'):
             await service.get_future_markets()

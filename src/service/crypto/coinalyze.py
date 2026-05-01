@@ -1,5 +1,3 @@
-from typing import Final, cast
-
 from market_data_library.core.crypto.coinalyze.coinalyze import (
     CoinalyzeService as MarketDataCoinalyzeService,
 )
@@ -11,23 +9,19 @@ from market_data_library.core.crypto.coinalyze.type import (
 from src.data_source.market_data_library import get_crypto_api
 
 
-_DEFAULT_COINALYZE_SERVICE: Final = object()
-
-
 class CoinalyzeService:
     def __init__(
         self,
-        coinalyze_service: MarketDataCoinalyzeService
-        | None
-        | object = _DEFAULT_COINALYZE_SERVICE,
+        coinalyze_service: MarketDataCoinalyzeService | None = None,
+        *,
+        use_configured_service: bool = True,
     ) -> None:
-        if coinalyze_service is _DEFAULT_COINALYZE_SERVICE:
+        if coinalyze_service is not None:
+            self.coinalyze_service = coinalyze_service
+        elif use_configured_service:
             self.coinalyze_service = get_crypto_api().coinalyze.coinalyze_service
         else:
-            self.coinalyze_service = cast(
-                MarketDataCoinalyzeService | None,
-                coinalyze_service,
-            )
+            self.coinalyze_service = None
 
     def is_configured(self) -> bool:
         return self.coinalyze_service is not None

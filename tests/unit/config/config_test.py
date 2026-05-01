@@ -270,6 +270,94 @@ def test_crypto_signal_dynamic_candidate_min_volume_24h_defaults(monkeypatch):
     assert config.get_crypto_signal_dynamic_candidate_min_volume_24h() == 50_000_000.0
 
 
+def test_crypto_signal_market_regime_collection_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', raising=False)
+
+    assert config.is_crypto_signal_market_regime_enabled() is False
+
+
+def test_crypto_signal_market_regime_coinalyze_symbols_are_explicit(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS', raising=False)
+
+    assert config.get_crypto_signal_market_regime_coinalyze_symbols() == []
+
+    monkeypatch.setenv(
+        'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS',
+        ' BTCUSDT_PERP.A, BTCUSD_PERP.0 ',
+    )
+
+    assert config.get_crypto_signal_market_regime_coinalyze_symbols() == [
+        'BTCUSDT_PERP.A',
+        'BTCUSD_PERP.0',
+    ]
+
+
+def test_crypto_signal_market_regime_coinalyze_symbols_rejects_large_basket(
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS',
+        ','.join(f'BTC-{index}' for index in range(11)),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match='CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS supports at most 10 symbols',
+    ):
+        config.get_crypto_signal_market_regime_coinalyze_symbols()
+
+
+def test_crypto_signal_market_regime_provider_defaults_to_coinalyze(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', raising=False)
+
+    assert config.get_crypto_signal_market_regime_provider() == 'coinalyze'
+
+
+def test_crypto_signal_market_regime_provider_rejects_unknown(monkeypatch):
+    monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'cryptoquant')
+
+    with pytest.raises(
+        RuntimeError,
+        match='CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER must be coinalyze or binance',
+    ):
+        config.get_crypto_signal_market_regime_provider()
+
+
+def test_crypto_signal_market_regime_interval_defaults_to_one_hour(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL', raising=False)
+
+    assert config.get_crypto_signal_market_regime_interval() == '1hour'
+
+
+def test_crypto_signal_market_regime_backfill_days_defaults_to_30(monkeypatch):
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS', raising=False)
+    monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL', raising=False)
+
+    assert config.get_crypto_signal_market_regime_backfill_days() == 30
+
+
+def test_crypto_signal_market_regime_backfill_days_enforces_intraday_retention(
+    monkeypatch,
+):
+    monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL', '15min')
+    monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS', '30')
+
+    with pytest.raises(
+        RuntimeError,
+        match='exceeds Coinalyze intraday retention for 15min',
+    ):
+        config.get_crypto_signal_market_regime_backfill_days()
+
+
+def test_crypto_signal_market_regime_backfill_days_allows_daily_history(
+    monkeypatch,
+):
+    monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL', 'daily')
+    monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS', '365')
+
+    assert config.get_crypto_signal_market_regime_backfill_days() == 365
+
+
 @pytest.mark.parametrize(
     ('getter_name', 'env_name'),
     [

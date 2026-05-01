@@ -9,11 +9,55 @@ from src.notification_destination.telegram_notification import (
     send_crypto_signal_message,
 )
 from src.runtime.runtime_mode import RuntimeMode
+from src.service.crypto_signal.market_regime import (
+    FUNDING_RATE_METRIC,
+    OPEN_INTEREST_METRIC,
+    build_market_regime_summary,
+)
+from src.service.crypto_signal.market_regime_collector import (
+    AGGREGATE_INSTRUMENT_SCOPE,
+    AGGREGATE_VENUE_SCOPE,
+    COINALYZE_PROVIDER,
+)
 from src.service.crypto_signal.repository import CryptoSignalRepository
 from src.service.crypto_signal.scorer import build_digest_view, get_window_start
 
 
 logger = logging.getLogger('Crypto signal report')
+
+
+def _load_market_regime_summary(
+    *,
+    repository: CryptoSignalRepository,
+    latest_snapshot,
+    window_label: str,
+):
+    try:
+        provider = config.get_crypto_signal_market_regime_provider()
+        if provider != COINALYZE_PROVIDER:
+            return None
+        metrics = repository.get_market_regime_metrics(
+            runtime_mode=latest_snapshot.run.runtime_mode,
+            start_timestamp_utc=get_window_start(
+                latest_snapshot,
+                window_label=window_label,
+            ),
+            end_timestamp_utc=latest_snapshot.run.run_timestamp_utc,
+            metric_names=[OPEN_INTEREST_METRIC, FUNDING_RATE_METRIC],
+            provider=COINALYZE_PROVIDER,
+            venue_scope=AGGREGATE_VENUE_SCOPE,
+            instrument_scope=AGGREGATE_INSTRUMENT_SCOPE,
+            interval=config.get_crypto_signal_market_regime_interval(),
+        )
+    except Exception:
+        logger.warning(
+            'Failed to load crypto signal market-regime summary',
+            exc_info=True,
+        )
+        return None
+    if len(metrics) == 0:
+        return None
+    return build_market_regime_summary(metrics)
 
 
 async def main() -> None:
@@ -62,6 +106,11 @@ Phase-1 safety:
         limit=args.limit,
         min_dynamic_price_usd=config.get_crypto_signal_dynamic_candidate_min_price_usd(),
         min_dynamic_volume_24h=config.get_crypto_signal_dynamic_candidate_min_volume_24h(),
+        market_regime_summary=_load_market_regime_summary(
+            repository=repository,
+            latest_snapshot=latest_snapshot,
+            window_label=args.window,
+        ),
     )
     message = build_crypto_signal_message(view)
     print(message)

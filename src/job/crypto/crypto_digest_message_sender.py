@@ -16,6 +16,9 @@ from src.job.crypto.crypto_digest_formatter import (
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.notification_destination.telegram_notification import send_message_to_admin
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.service.crypto_signal.market_regime_collector import (
+    CryptoSignalMarketRegimeCollector,
+)
 from src.service.crypto_signal.backfill import CryptoSignalBackfillService
 from src.service.crypto_signal.repository import CryptoSignalRepository
 from src.service.crypto_signal.snapshot_builder import build_snapshot
@@ -94,6 +97,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 ),
                 market_data_type=MarketDataType.CRYPTO,
             )
+        await self._persist_market_regime_snapshots(current=current)
 
         digest_message = build_digest_message(
             current=current,
@@ -238,6 +242,48 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 should_escape_markdown=True,
             )
         return None
+
+    async def _persist_market_regime_snapshots(
+        self,
+        current,
+    ) -> None:
+        if not config.is_crypto_signal_market_regime_enabled():
+            return
+
+        try:
+            # Regime collection is optional operator context; failures must not
+            # suppress the public digest or the phase-1 signal snapshot.
+            provider = config.get_crypto_signal_market_regime_provider()
+            if provider != 'coinalyze':
+                logger.warning(
+                    'Skipping crypto signal market-regime collection for unsupported provider %s',
+                    provider,
+                )
+                return
+            collector = getattr(self, 'market_regime_collector', None)
+            if collector is None:
+                collector = CryptoSignalMarketRegimeCollector()
+            repository = getattr(self, 'signal_repository', None)
+            if repository is None:
+                repository = CryptoSignalRepository(runtime_mode=self.runtime_mode)
+            snapshots = await collector.collect_coinalyze_btc_snapshots(
+                observed_at_utc=current,
+                runtime_mode=self._runtime_mode_label(),
+                symbols=config.get_crypto_signal_market_regime_coinalyze_symbols(),
+                interval=config.get_crypto_signal_market_regime_interval(),
+                backfill_days=config.get_crypto_signal_market_regime_backfill_days(),
+            )
+            for snapshot in snapshots:
+                repository.save_market_regime_snapshot(snapshot)
+        except Exception:
+            logger.warning(
+                'Crypto signal market-regime collection failed; continuing digest',
+                exc_info=True,
+            )
+
+    def _runtime_mode_label(self) -> str:
+        runtime_mode = getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE)
+        return 'test' if runtime_mode.is_test_mode else 'prod'
 
     def _build_backfill_entries(
         self,

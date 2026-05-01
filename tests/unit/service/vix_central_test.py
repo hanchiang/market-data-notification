@@ -519,7 +519,13 @@ class TestVixCentralService:
         )
 
     @pytest.mark.asyncio
-    async def test_get_recent_values_test_mode_includes_unchanged_day_without_losing_alerts(self):
+    @patch("src.service.vix_central.date_util.get_most_recent_non_weekend_or_today")
+    @patch("src.service.vix_central.date_util.get_current_datetime")
+    async def test_get_recent_values_test_mode_includes_unchanged_day_without_losing_alerts(
+        self,
+        get_current_datetime: Mock,
+        get_most_recent_non_weekend_or_today: Mock,
+    ):
         class StubThirdPartyService:
             async def get_current(self):
                 return [['Apr'], None, [47, 50]]
@@ -534,6 +540,9 @@ class TestVixCentralService:
             third_party_service=StubThirdPartyService(),
             number_of_days_to_store=7,
         )
+        current_date = datetime.datetime(2024, 4, 16)
+        get_current_datetime.return_value = current_date
+        get_most_recent_non_weekend_or_today.side_effect = lambda date: date
 
         test_values = await vix_central_service.get_recent_values(
             runtime_mode=RuntimeMode.from_test_mode(True)

@@ -444,7 +444,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
         asset_symbol='BTC',
         venue_scope='aggregate',
         instrument_scope='btc_perpetual_basket',
-        cadence='1hour',
+        interval='1hour',
         source_payload_version=1,
         metrics=[
             CryptoSignalMarketRegimeMetric(
@@ -462,7 +462,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
         asset_symbol='BTC',
         venue_scope='aggregate',
         instrument_scope='btc_perpetual_basket',
-        cadence='1hour',
+        interval='1hour',
         source_payload_version=1,
         metrics=[
             CryptoSignalMarketRegimeMetric(
@@ -486,7 +486,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
         asset_symbol='BTC',
         venue_scope='binance',
         instrument_scope='BTCUSDT',
-        cadence='1hour',
+        interval='1hour',
         source_payload_version=1,
         metrics=[
             CryptoSignalMarketRegimeMetric(
@@ -504,7 +504,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
         asset_symbol='BTC',
         venue_scope='aggregate',
         instrument_scope='btc_perpetual_basket',
-        cadence='1hour',
+        interval='1hour',
         source_payload_version=1,
         metrics=[
             CryptoSignalMarketRegimeMetric(
@@ -542,7 +542,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
         provider='coinalyze',
         venue_scope='aggregate',
         instrument_scope='btc_perpetual_basket',
-        cadence='1hour',
+        interval='1hour',
     )
 
     assert first_saved.snapshot_id == second_saved.snapshot_id
@@ -556,7 +556,7 @@ def test_save_market_regime_snapshot_upserts_metrics(tmp_path):
             metric.asset_symbol,
             metric.venue_scope,
             metric.instrument_scope,
-            metric.cadence,
+            metric.interval,
         )
         for metric in metrics
     } == {('coinalyze', 'BTC', 'aggregate', 'btc_perpetual_basket', '1hour')}

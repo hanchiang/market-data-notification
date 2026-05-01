@@ -71,7 +71,7 @@ SCHEMA_DOCS = {
         'asset_symbol': 'Benchmark asset symbol, initially BTC.',
         'venue_scope': 'Exchange or aggregate venue scope.',
         'instrument_scope': 'Provider instrument scope or symbol.',
-        'cadence': 'Sampling cadence for the stored metrics.',
+        'interval': 'Sampling interval for the stored metrics.',
         'source_payload_version': 'Provider payload mapping version.',
         'created_at_utc': 'UTC write timestamp for the persisted regime row.',
     },
@@ -185,7 +185,7 @@ class CryptoSignalRepository:
                     asset_symbol TEXT NOT NULL,
                     venue_scope TEXT NOT NULL,
                     instrument_scope TEXT NOT NULL,
-                    cadence TEXT NOT NULL,
+                    interval TEXT NOT NULL,
                     source_payload_version INTEGER NOT NULL,
                     created_at_utc TEXT NOT NULL,
                     UNIQUE (
@@ -195,7 +195,7 @@ class CryptoSignalRepository:
                         asset_symbol,
                         venue_scope,
                         instrument_scope,
-                        cadence
+                        interval
                     )
                 )
                 """
@@ -350,7 +350,7 @@ class CryptoSignalRepository:
                     asset_symbol,
                     venue_scope,
                     instrument_scope,
-                    cadence,
+                    interval,
                     source_payload_version,
                     created_at_utc
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -361,7 +361,7 @@ class CryptoSignalRepository:
                     asset_symbol,
                     venue_scope,
                     instrument_scope,
-                    cadence
+                    interval
                 ) DO UPDATE SET
                     source_payload_version=excluded.source_payload_version,
                     created_at_utc=excluded.created_at_utc
@@ -373,7 +373,7 @@ class CryptoSignalRepository:
                     snapshot.asset_symbol,
                     snapshot.venue_scope,
                     snapshot.instrument_scope,
-                    snapshot.cadence,
+                    snapshot.interval,
                     snapshot.source_payload_version,
                     self._format_timestamp(created_at_utc),
                 ),
@@ -388,7 +388,7 @@ class CryptoSignalRepository:
                   AND asset_symbol = ?
                   AND venue_scope = ?
                   AND instrument_scope = ?
-                  AND cadence = ?
+                  AND interval = ?
                 """,
                 (
                     self._format_timestamp(snapshot.observed_at_utc),
@@ -397,7 +397,7 @@ class CryptoSignalRepository:
                     snapshot.asset_symbol,
                     snapshot.venue_scope,
                     snapshot.instrument_scope,
-                    snapshot.cadence,
+                    snapshot.interval,
                 ),
             ).fetchone()
             snapshot_id = int(snapshot_row['snapshot_id'])
@@ -445,7 +445,7 @@ class CryptoSignalRepository:
         provider: str | None = None,
         venue_scope: str | None = None,
         instrument_scope: str | None = None,
-        cadence: str | None = None,
+        interval: str | None = None,
     ) -> list[CryptoSignalMarketRegimeMetric]:
         if not metric_names or not Path(self.db_path).exists():
             return []
@@ -466,9 +466,9 @@ class CryptoSignalRepository:
         if instrument_scope is not None:
             scope_filters.append('snapshot.instrument_scope = ?')
             params.append(instrument_scope)
-        if cadence is not None:
-            scope_filters.append('snapshot.cadence = ?')
-            params.append(cadence)
+        if interval is not None:
+            scope_filters.append('snapshot.interval = ?')
+            params.append(interval)
         params.extend(metric_names)
         scope_filter_sql = (
             ''
@@ -486,7 +486,7 @@ class CryptoSignalRepository:
                         snapshot.asset_symbol,
                         snapshot.venue_scope,
                         snapshot.instrument_scope,
-                        snapshot.cadence
+                        snapshot.interval
                     FROM crypto_signal_market_regime_metrics AS metric
                     INNER JOIN crypto_signal_market_regime_snapshots AS snapshot
                       ON snapshot.snapshot_id = metric.snapshot_id
@@ -784,7 +784,7 @@ class CryptoSignalRepository:
             instrument_scope=(
                 row['instrument_scope'] if 'instrument_scope' in row.keys() else None
             ),
-            cadence=row['cadence'] if 'cadence' in row.keys() else None,
+            interval=row['interval'] if 'interval' in row.keys() else None,
             created_at_utc=self._parse_timestamp(row['created_at_utc']),
         )
 
@@ -799,7 +799,7 @@ class CryptoSignalRepository:
                 row['asset_symbol'],
                 row['venue_scope'],
                 row['instrument_scope'],
-                row['cadence'],
+                row['interval'],
                 row['metric_name'],
                 row['source_timestamp_utc'],
             )

@@ -8,6 +8,7 @@ from src.job.crypto.crypto_signal_digest_message_sender import (
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
+    CryptoSignalMarketRegimeMetric,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
 )
@@ -92,6 +93,9 @@ class _FakeRepository:
     def get_snapshots_since(self, _start):
         return self.history
 
+    def get_market_regime_metrics(self, **_kwargs):
+        return []
+
 
 @pytest.mark.asyncio
 async def test_format_message_builds_operator_digest(monkeypatch):
@@ -124,6 +128,75 @@ async def test_format_message_builds_operator_digest(monkeypatch):
     assert '7d \\+22\\.82%' in messages[0]
     assert '*Watchlist*' in messages[0]
     assert 'Solana' in messages[0]
+
+
+@pytest.mark.asyncio
+async def test_format_message_uses_stored_coinalyze_market_regime_summary(
+    monkeypatch,
+):
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc)
+    )
+
+    class _RepositoryWithRegime(_FakeRepository):
+        def get_market_regime_metrics(self, **_kwargs):
+            return [
+                CryptoSignalMarketRegimeMetric(
+                    metric_name='open_interest_usd',
+                    metric_value=100.0,
+                    unit='usd',
+                    source_timestamp_utc=datetime.datetime(
+                        2026,
+                        4,
+                        20,
+                        8,
+                        45,
+                        tzinfo=datetime.timezone.utc,
+                    ),
+                ),
+                CryptoSignalMarketRegimeMetric(
+                    metric_name='open_interest_usd',
+                    metric_value=108.0,
+                    unit='usd',
+                    source_timestamp_utc=datetime.datetime(
+                        2026,
+                        4,
+                        21,
+                        8,
+                        45,
+                        tzinfo=datetime.timezone.utc,
+                    ),
+                ),
+                CryptoSignalMarketRegimeMetric(
+                    metric_name='funding_rate',
+                    metric_value=0.01,
+                    unit='percent',
+                    source_timestamp_utc=datetime.datetime(
+                        2026,
+                        4,
+                        21,
+                        8,
+                        45,
+                        tzinfo=datetime.timezone.utc,
+                    ),
+                ),
+            ]
+
+    sender = object.__new__(CryptoSignalDigestMessageSender)
+    sender.signal_repository = _RepositoryWithRegime(latest_snapshot)
+    sender.watchlist_entries = [('BTC', 1), ('SOL', 5426)]
+    sender.tracked_universe_entries = [('BTC', 1), ('SOL', 5426)]
+    sender.runtime_mode = DEFAULT_RUNTIME_MODE
+
+    monkeypatch.setattr(
+        'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
+        lambda: datetime.datetime(2026, 4, 21, 9, 0, tzinfo=datetime.timezone.utc),
+    )
+
+    messages = await sender.format_message()
+
+    assert 'Leverage building' in messages[0]
+    assert 'OI \\+8\\.0%' in messages[0]
 
 
 @pytest.mark.asyncio

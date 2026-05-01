@@ -63,7 +63,7 @@ class CryptoSignalMarketRegimeMetric:
     asset_symbol: str | None = None
     venue_scope: str | None = None
     instrument_scope: str | None = None
-    cadence: str | None = None
+    interval: str | None = None
     snapshot_id: int | None = None
     created_at_utc: datetime.datetime | None = None
 
@@ -76,7 +76,7 @@ class CryptoSignalMarketRegimeSnapshot:
     asset_symbol: str
     venue_scope: str
     instrument_scope: str
-    cadence: str
+    interval: str
     source_payload_version: int
     metrics: list[CryptoSignalMarketRegimeMetric] = field(default_factory=list)
     snapshot_id: int | None = None

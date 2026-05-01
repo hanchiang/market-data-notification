@@ -338,6 +338,102 @@ def get_cryptoquant_api_token() -> str:
 def has_cryptoquant_api_token() -> bool:
     return bool(get_cryptoquant_api_token().strip())
 
+def get_coinalyze_api_key() -> str:
+    return os.getenv('COINALYZE_API_KEY', '')
+
+def has_coinalyze_api_key() -> bool:
+    return bool(get_coinalyze_api_key().strip())
+
+def is_crypto_signal_market_regime_enabled() -> bool:
+    return os.getenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'false') == 'true'
+
+def get_crypto_signal_market_regime_provider() -> str:
+    provider = os.getenv(
+        'CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER',
+        'coinalyze',
+    ).strip().lower()
+    if provider not in {'coinalyze', 'binance'}:
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER must be coinalyze or binance'
+        )
+    return provider
+
+def get_crypto_signal_market_regime_interval() -> str:
+    interval = os.getenv(
+        'CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL',
+        '1hour',
+    ).strip()
+    allowed_intervals = {
+        '1min',
+        '5min',
+        '15min',
+        '30min',
+        '1hour',
+        '2hour',
+        '4hour',
+        '6hour',
+        '12hour',
+        'daily',
+    }
+    if interval not in allowed_intervals:
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL must be a Coinalyze interval'
+        )
+    return interval
+
+def get_crypto_signal_market_regime_backfill_days() -> int:
+    raw_value = os.getenv('CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS', '30')
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS must be a positive integer'
+        ) from error
+    if value <= 0:
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS must be a positive integer'
+        )
+    interval = get_crypto_signal_market_regime_interval()
+    max_intraday_days = _get_market_regime_max_intraday_backfill_days(interval)
+    if max_intraday_days is not None and value > max_intraday_days:
+        # Coinalyze intraday history is datapoint-limited; rejecting oversized
+        # windows is safer than silently summarizing a partial lookback.
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS exceeds Coinalyze '
+            f'intraday retention for {interval}; maximum is {max_intraday_days} days'
+        )
+    return value
+
+def _get_market_regime_max_intraday_backfill_days(interval: str) -> int | None:
+    interval_minutes = {
+        '1min': 1,
+        '5min': 5,
+        '15min': 15,
+        '30min': 30,
+        '1hour': 60,
+        '2hour': 120,
+        '4hour': 240,
+        '6hour': 360,
+        '12hour': 720,
+    }
+    minutes = interval_minutes.get(interval)
+    if minutes is None:
+        return None
+    return max(1, (1500 * minutes) // (60 * 24))
+
+def get_crypto_signal_market_regime_coinalyze_symbols() -> list[str]:
+    raw_value = os.getenv('CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS', '')
+    symbols = [
+        symbol.strip()
+        for symbol in raw_value.split(',')
+        if symbol.strip() != ''
+    ]
+    if len(symbols) > 10:
+        raise RuntimeError(
+            'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS supports at most 10 symbols'
+        )
+    return symbols
+
 _DEFAULT_CRYPTO_SIGNAL_WATCHLIST_IDS = {
     'BTC': 1,
     'ETH': 1027,

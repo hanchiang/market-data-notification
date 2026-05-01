@@ -361,6 +361,64 @@ class TestCryptoDigestMessageSender:
         message_sender.signal_backfill_service.build_snapshots.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_market_regime_collection_is_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', raising=False)
+
+        message_sender = self.build_message_sender()
+        message_sender.market_regime_collector = AsyncMock()
+
+        await message_sender._persist_market_regime_snapshots(
+            current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
+        )
+
+        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_market_regime_collection_persists_configured_coinalyze_snapshots(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'true')
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'coinalyze')
+        monkeypatch.setenv(
+            'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS',
+            'BTCUSDT_PERP.A',
+        )
+
+        snapshot = Mock()
+        message_sender = self.build_message_sender()
+        message_sender.market_regime_collector = AsyncMock()
+        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
+            return_value=[snapshot]
+        )
+
+        await message_sender._persist_market_regime_snapshots(
+            current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
+        )
+
+        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_awaited_once()
+        message_sender.signal_repository.save_market_regime_snapshot.assert_called_once_with(
+            snapshot
+        )
+
+    @pytest.mark.asyncio
+    async def test_market_regime_collection_fails_open_for_invalid_provider(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'true')
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'cryptoquant')
+
+        message_sender = self.build_message_sender()
+        message_sender.market_regime_collector = AsyncMock()
+
+        await message_sender._persist_market_regime_snapshots(
+            current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
+        )
+
+        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_format_message_adds_threshold_gated_sector_detail(self):
         strongest_sector = copy.deepcopy(self.sector_24h_change[0])
         strongest_sector.sectorId = 'video'

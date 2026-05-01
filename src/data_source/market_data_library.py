@@ -24,9 +24,12 @@ def init_market_data_api() -> None:
     global crypto_api
     global tradfi_api
     if crypto_api is None:
-        crypto_api = CryptoAPI(
-            cryptoquant_api_token=config.get_cryptoquant_api_token(),
-        )
+        crypto_api_kwargs = {
+            'cryptoquant_api_token': config.get_cryptoquant_api_token(),
+        }
+        if config.has_coinalyze_api_key():
+            crypto_api_kwargs['coinalyze_api_key'] = config.get_coinalyze_api_key()
+        crypto_api = CryptoAPI(**crypto_api_kwargs)
     if tradfi_api is None:
         tradfi_api_kwargs: dict[str, Any] = {
             'is_stealth': config.get_selenium_stealth(),
@@ -50,6 +53,9 @@ async def cleanup_market_data_api() -> None:
         cryptoquant_service = crypto_api.cryptoquant.cryptoquant_service
         if cryptoquant_service is not None:
             await cryptoquant_service.cleanup()
+        coinalyze_service = crypto_api.coinalyze.coinalyze_service
+        if coinalyze_service is not None:
+            await coinalyze_service.cleanup()
 
     if tradfi_api is not None:
         await tradfi_api.barchart.barchart_stocks.cleanup()

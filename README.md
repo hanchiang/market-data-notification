@@ -149,6 +149,18 @@ CRYPTO_SIGNAL_TRACKED_UNIVERSE=BTC,ETH,SOL
 CRYPTO_SIGNAL_WATCHLIST=
 CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_PRICE_USD=0
 CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_VOLUME_24H=50000000
+# Optional phase-2 market-regime collection. Disabled unless explicitly enabled.
+CRYPTO_SIGNAL_MARKET_REGIME_ENABLED=false
+# Selected regime provider. Current implemented provider is Coinalyze.
+CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER=coinalyze
+# Required only when market-regime collection is enabled with Coinalyze.
+COINALYZE_API_KEY=...
+# Comma-separated Coinalyze symbols; each must resolve as a BTC perpetual market.
+CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS=BTCUSDT_PERP.A,BTCUSD_PERP.0
+# Coinalyze history interval used for OI/funding facts and summaries.
+CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL=1hour
+# Historical window to request; intraday intervals are capped by retained datapoints.
+CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS=30
 
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
@@ -158,6 +170,11 @@ TELEGRAM_READ_TIMEOUT_SECONDS=20
 TELEGRAM_WRITE_TIMEOUT_SECONDS=20
 TELEGRAM_POOL_TIMEOUT_SECONDS=5
 ```
+
+For Coinalyze, configured symbols must resolve through futures metadata as BTC
+perpetual markets before they are stored as BTC regime facts. Intraday
+backfill windows are capped against Coinalyze's documented retained datapoint
+range; use `daily` interval for longer history.
 
 `CRYPTO_SIGNAL_DB_PATH` is relative to the backend process working directory
 when left as the default. In production that default resolves inside the app

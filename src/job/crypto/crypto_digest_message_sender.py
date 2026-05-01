@@ -33,13 +33,30 @@ _SIGNAL_BACKFILL_DAYS = 30
 
 
 class CryptoDigestMessageSender(MessageSenderWrapper):
-    def __init__(self, runtime_mode=None):
+    def __init__(
+        self,
+        runtime_mode=None,
+        cmc_service=None,
+        sentiment_service=None,
+        signal_repository=None,
+        signal_backfill_service=None,
+        market_regime_collector=None,
+        market_regime_repository=None,
+    ):
         super().__init__(runtime_mode=runtime_mode)
-        self.cmc_service = Dependencies.get_crypto_stats_service()
-        self.sentiment_service = Dependencies.get_crypto_sentiment_service()
-        self.signal_repository = CryptoSignalRepository(
+        self.cmc_service = cmc_service or Dependencies.get_crypto_stats_service()
+        self.sentiment_service = (
+            sentiment_service or Dependencies.get_crypto_sentiment_service()
+        )
+        self.signal_repository = signal_repository or CryptoSignalRepository(
             runtime_mode=self.runtime_mode
         )
+        self.signal_backfill_service = (
+            signal_backfill_service
+            or CryptoSignalBackfillService(cmc_service=self.cmc_service)
+        )
+        self.market_regime_collector = market_regime_collector
+        self.market_regime_repository = market_regime_repository
         self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
         self.watchlist_entries = config.get_crypto_signal_watchlist()
 
@@ -158,16 +175,8 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         current,
         snapshot,
     ) -> None:
-        repository = getattr(
-            self,
-            'signal_repository',
-            CryptoSignalRepository(runtime_mode=self.runtime_mode),
-        )
-        backfill_service = getattr(
-            self,
-            'signal_backfill_service',
-            CryptoSignalBackfillService(cmc_service=self.cmc_service),
-        )
+        repository = self.signal_repository
+        backfill_service = self.signal_backfill_service
         tracked_universe_entries = getattr(
             self,
             'tracked_universe_entries',
@@ -227,11 +236,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         self,
         snapshot,
     ) -> str | None:
-        repository = getattr(
-            self,
-            'signal_repository',
-            CryptoSignalRepository(runtime_mode=self.runtime_mode),
-        )
+        repository = self.signal_repository
         try:
             repository.save_snapshot(snapshot)
         except Exception as error:
@@ -260,12 +265,10 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                     provider,
                 )
                 return
-            collector = getattr(self, 'market_regime_collector', None)
+            collector = self.market_regime_collector
             if collector is None:
                 collector = CryptoSignalMarketRegimeCollector()
-            repository = getattr(self, 'signal_repository', None)
-            if repository is None:
-                repository = CryptoSignalRepository(runtime_mode=self.runtime_mode)
+            repository = self.market_regime_repository or self.signal_repository
             snapshots = await collector.collect_coinalyze_btc_snapshots(
                 observed_at_utc=current,
                 runtime_mode=self._runtime_mode_label(),

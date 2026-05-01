@@ -163,22 +163,29 @@ class TestCryptoDigestMessageSender:
             coins=coins,
         )
 
-    def build_message_sender(self):
-        message_sender = object.__new__(CryptoDigestMessageSender)
-        message_sender.cmc_service = AsyncMock()
-        message_sender.sentiment_service = AsyncMock()
-        message_sender.signal_repository = Mock()
-        message_sender.signal_repository.get_coin_observation_counts_since = Mock(
-            return_value={}
-        )
-        message_sender.signal_repository.save_or_merge_snapshot = Mock()
-        message_sender.signal_backfill_service = AsyncMock()
-        message_sender.signal_backfill_service.build_snapshots = AsyncMock(
-            return_value=[]
+    def build_message_sender(
+        self,
+        market_regime_collector=None,
+        market_regime_repository=None,
+    ):
+        cmc_service = AsyncMock()
+        sentiment_service = AsyncMock()
+        signal_repository = Mock()
+        signal_repository.get_coin_observation_counts_since = Mock(return_value={})
+        signal_repository.save_or_merge_snapshot = Mock()
+        signal_backfill_service = AsyncMock()
+        signal_backfill_service.build_snapshots = AsyncMock(return_value=[])
+        message_sender = CryptoDigestMessageSender(
+            runtime_mode=DEFAULT_RUNTIME_MODE,
+            cmc_service=cmc_service,
+            sentiment_service=sentiment_service,
+            signal_repository=signal_repository,
+            signal_backfill_service=signal_backfill_service,
+            market_regime_collector=market_regime_collector,
+            market_regime_repository=market_regime_repository,
         )
         message_sender.tracked_universe_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
         message_sender.watchlist_entries = [('BTC', 1), ('ETH', 1027), ('SOL', 5426)]
-        message_sender.runtime_mode = DEFAULT_RUNTIME_MODE
         return message_sender
 
     @pytest.mark.asyncio
@@ -364,14 +371,16 @@ class TestCryptoDigestMessageSender:
     async def test_market_regime_collection_is_disabled_by_default(self, monkeypatch):
         monkeypatch.delenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', raising=False)
 
-        message_sender = self.build_message_sender()
-        message_sender.market_regime_collector = AsyncMock()
+        market_regime_collector = AsyncMock()
+        message_sender = self.build_message_sender(
+            market_regime_collector=market_regime_collector
+        )
 
         await message_sender._persist_market_regime_snapshots(
             current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
         )
 
-        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
+        market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_market_regime_collection_persists_configured_coinalyze_snapshots(
@@ -386,17 +395,24 @@ class TestCryptoDigestMessageSender:
         )
 
         snapshot = Mock()
-        message_sender = self.build_message_sender()
-        message_sender.market_regime_collector = AsyncMock()
-        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
+        market_regime_collector = AsyncMock()
+        market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
             return_value=[snapshot]
+        )
+        message_sender = CryptoDigestMessageSender(
+            runtime_mode=DEFAULT_RUNTIME_MODE,
+            cmc_service=AsyncMock(),
+            sentiment_service=AsyncMock(),
+            signal_repository=Mock(),
+            signal_backfill_service=AsyncMock(),
+            market_regime_collector=market_regime_collector,
         )
 
         await message_sender._persist_market_regime_snapshots(
             current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
         )
 
-        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_awaited_once()
+        market_regime_collector.collect_coinalyze_btc_snapshots.assert_awaited_once()
         message_sender.signal_repository.save_market_regime_snapshot.assert_called_once_with(
             snapshot
         )
@@ -409,14 +425,16 @@ class TestCryptoDigestMessageSender:
         monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'true')
         monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'cryptoquant')
 
-        message_sender = self.build_message_sender()
-        message_sender.market_regime_collector = AsyncMock()
+        market_regime_collector = AsyncMock()
+        message_sender = self.build_message_sender(
+            market_regime_collector=market_regime_collector
+        )
 
         await message_sender._persist_market_regime_snapshots(
             current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
         )
 
-        message_sender.market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
+        market_regime_collector.collect_coinalyze_btc_snapshots.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_format_message_adds_threshold_gated_sector_detail(self):

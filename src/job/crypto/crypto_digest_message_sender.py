@@ -43,26 +43,14 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         market_regime_repository=None,
     ):
         super().__init__(runtime_mode=runtime_mode)
-        self.cmc_service = (
-            Dependencies.get_crypto_stats_service()
-            if cmc_service is None
-            else cmc_service
-        )
-        self.sentiment_service = (
-            Dependencies.get_crypto_sentiment_service()
-            if sentiment_service is None
-            else sentiment_service
-        )
+        self.cmc_service = cmc_service
+        self.sentiment_service = sentiment_service
         self.signal_repository = (
             CryptoSignalRepository(runtime_mode=self.runtime_mode)
             if signal_repository is None
             else signal_repository
         )
-        self.signal_backfill_service = (
-            CryptoSignalBackfillService(cmc_service=self.cmc_service)
-            if signal_backfill_service is None
-            else signal_backfill_service
-        )
+        self.signal_backfill_service = signal_backfill_service
         self.market_regime_collector = market_regime_collector
         self.market_regime_repository = market_regime_repository
         self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
@@ -77,6 +65,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         return MarketDataType.CRYPTO
 
     async def format_message(self) -> List[str]:
+        self._ensure_runtime_dependencies()
         current = get_current_datetime()
         sentiment = await self.sentiment_service.get_crypto_fear_greed_index()
         strongest_sector, weakest_sector = await self._load_sector_snapshots()
@@ -135,6 +124,16 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             sector_detail_coin_details=sector_detail_coin_details,
         )
         return [digest_message]
+
+    def _ensure_runtime_dependencies(self) -> None:
+        if self.cmc_service is None:
+            self.cmc_service = Dependencies.get_crypto_stats_service()
+        if self.sentiment_service is None:
+            self.sentiment_service = Dependencies.get_crypto_sentiment_service()
+        if self.signal_backfill_service is None:
+            self.signal_backfill_service = CryptoSignalBackfillService(
+                cmc_service=self.cmc_service
+            )
 
     def _build_signal_snapshot(
         self,

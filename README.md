@@ -266,6 +266,14 @@ SQLite-backed history, deterministic scoring, and a separate operator-only
 signal digest. Phase 1 must stay on private/admin routing; the signal path
 rejects `CRYPTO_TELEGRAM_CHANNEL_ID` as a destination.
 
+Data-provider split:
+- `src/job/crypto/crypto.py` fetches live CoinMarketCap, Alternative.me, and
+  optionally Coinalyze BTC market-regime data, then writes SQLite history.
+- `CryptoSignalDigestMessageSender` and `crypto_signal_report.py` read existing
+  SQLite history; they do not fetch fresh coin or regime provider data.
+- Run `crypto.py` first when you need fresh test-mode signal rows before
+  rendering `crypto_signal_report.py`.
+
 Render the latest stored signal report without sending Telegram:
 
 ```bash

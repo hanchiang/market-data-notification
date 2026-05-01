@@ -794,6 +794,9 @@ class CryptoSignalRepository:
     ) -> list[sqlite3.Row]:
         latest_by_fact_key: dict[tuple, sqlite3.Row] = {}
         for row in rows:
+            # Scheduled collections can re-fetch overlapping historical points
+            # under later snapshots. Read-side summaries use the latest stored
+            # fact for each provider/scope/metric/source timestamp.
             fact_key = (
                 row['provider'],
                 row['asset_symbol'],

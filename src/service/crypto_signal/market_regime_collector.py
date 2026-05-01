@@ -236,6 +236,8 @@ class CryptoSignalMarketRegimeCollector:
         series: _MetricSeries,
     ) -> CryptoSignalMarketRegimeSnapshot:
         metrics = [
+            # OI is additive across venues once converted to USD; funding is a
+            # rate, so the first slice averages it rather than summing.
             *self._build_aggregate_metrics(
                 metric_name=OPEN_INTEREST_METRIC,
                 unit='usd',

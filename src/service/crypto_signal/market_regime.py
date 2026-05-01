@@ -40,11 +40,15 @@ def build_market_regime_summary(
     )
     reason = f'OI {oi_change_pct:+.1f}%, {funding_reason}'
 
+    # Funding crowding takes precedence over OI direction because expensive
+    # longs can make an otherwise constructive OI build fragile.
     if avg_funding is not None and avg_funding >= 0.03:
         return CryptoSignalMarketRegimeSummary(
             label='Crowded long pressure',
             reason=reason,
         )
+    # Phase 2A uses conservative OI thresholds so the label changes only when
+    # positioning clearly moves, leaving mild or conflicting context as Mixed.
     if oi_change_pct >= 5:
         return CryptoSignalMarketRegimeSummary(
             label='Leverage building',

@@ -149,6 +149,8 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
                 return None
             # Operator summaries consume the aggregate basket only; raw venue
             # rows are retained for provenance and later provider comparisons.
+            # Keep this read scope aligned with collector aggregation semantics
+            # so a single raw venue row cannot masquerade as cross-venue context.
             metrics = repository.get_market_regime_metrics(
                 runtime_mode=latest_snapshot.run.runtime_mode,
                 start_timestamp_utc=get_window_start(

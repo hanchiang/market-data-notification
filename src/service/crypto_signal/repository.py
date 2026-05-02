@@ -8,6 +8,8 @@ from src.config import config
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
+    CryptoSignalMarketRegimeMetric,
+    CryptoSignalMarketRegimeSnapshot,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
 )
@@ -60,6 +62,26 @@ SCHEMA_DOCS = {
         'is_watchlist': '1 when the configured watchlist included this coin for the run.',
         'context_tags_json': 'Stable JSON array describing how the coin entered the snapshot.',
         'created_at_utc': 'UTC write timestamp for the persisted coin row.',
+    },
+    'crypto_signal_market_regime_snapshots': {
+        'snapshot_id': 'Synthetic market-regime snapshot identifier.',
+        'observed_at_utc': 'UTC observation timestamp for the regime collector run.',
+        'runtime_mode': 'Runtime mode label used when the regime snapshot was captured.',
+        'provider': 'Provider name, such as coinalyze or binance.',
+        'asset_symbol': 'Benchmark asset symbol, initially BTC.',
+        'venue_scope': 'Exchange or aggregate venue scope.',
+        'instrument_scope': 'Provider instrument scope or symbol.',
+        'interval': 'Sampling interval for the stored metrics.',
+        'source_payload_version': 'Provider payload mapping version.',
+        'created_at_utc': 'UTC write timestamp for the persisted regime row.',
+    },
+    'crypto_signal_market_regime_metrics': {
+        'snapshot_id': 'Foreign key to crypto_signal_market_regime_snapshots.',
+        'metric_name': 'Stable metric name, such as open_interest_usd or funding_rate.',
+        'metric_value': 'Numeric metric value when provider data is available.',
+        'unit': 'Metric unit, such as usd or percent.',
+        'source_timestamp_utc': 'Provider source timestamp for the metric value.',
+        'created_at_utc': 'UTC write timestamp for the persisted metric row.',
     },
 }
 
@@ -151,6 +173,52 @@ class CryptoSignalRepository:
                 """
                 CREATE INDEX IF NOT EXISTS idx_crypto_signal_coin_snapshots_symbol_run_id
                 ON crypto_signal_coin_snapshots (symbol, run_id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crypto_signal_market_regime_snapshots (
+                    snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    observed_at_utc TEXT NOT NULL,
+                    runtime_mode TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    asset_symbol TEXT NOT NULL,
+                    venue_scope TEXT NOT NULL,
+                    instrument_scope TEXT NOT NULL,
+                    interval TEXT NOT NULL,
+                    source_payload_version INTEGER NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    UNIQUE (
+                        observed_at_utc,
+                        runtime_mode,
+                        provider,
+                        asset_symbol,
+                        venue_scope,
+                        instrument_scope,
+                        interval
+                    )
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crypto_signal_market_regime_metrics (
+                    snapshot_id INTEGER NOT NULL,
+                    metric_name TEXT NOT NULL,
+                    metric_value REAL NULL,
+                    unit TEXT NOT NULL,
+                    source_timestamp_utc TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    PRIMARY KEY (snapshot_id, metric_name, source_timestamp_utc),
+                    FOREIGN KEY (snapshot_id)
+                        REFERENCES crypto_signal_market_regime_snapshots(snapshot_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_crypto_signal_market_regime_metrics_name_time
+                ON crypto_signal_market_regime_metrics (metric_name, source_timestamp_utc)
                 """
             )
             # Current phase-1 reads filter one run via the (run_id, coin_id)
@@ -264,6 +332,182 @@ class CryptoSignalRepository:
             coin.run_id = run_id
             coin.created_at_utc = created_at_utc
         return snapshot
+
+    def save_market_regime_snapshot(
+        self,
+        snapshot: CryptoSignalMarketRegimeSnapshot,
+    ) -> CryptoSignalMarketRegimeSnapshot:
+        self.init_schema()
+        created_at_utc = self._utcnow()
+
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO crypto_signal_market_regime_snapshots (
+                    observed_at_utc,
+                    runtime_mode,
+                    provider,
+                    asset_symbol,
+                    venue_scope,
+                    instrument_scope,
+                    interval,
+                    source_payload_version,
+                    created_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (
+                    observed_at_utc,
+                    runtime_mode,
+                    provider,
+                    asset_symbol,
+                    venue_scope,
+                    instrument_scope,
+                    interval
+                ) DO UPDATE SET
+                    source_payload_version=excluded.source_payload_version,
+                    created_at_utc=excluded.created_at_utc
+                """,
+                (
+                    self._format_timestamp(snapshot.observed_at_utc),
+                    snapshot.runtime_mode,
+                    snapshot.provider,
+                    snapshot.asset_symbol,
+                    snapshot.venue_scope,
+                    snapshot.instrument_scope,
+                    snapshot.interval,
+                    snapshot.source_payload_version,
+                    self._format_timestamp(created_at_utc),
+                ),
+            )
+            snapshot_row = connection.execute(
+                """
+                SELECT snapshot_id
+                FROM crypto_signal_market_regime_snapshots
+                WHERE observed_at_utc = ?
+                  AND runtime_mode = ?
+                  AND provider = ?
+                  AND asset_symbol = ?
+                  AND venue_scope = ?
+                  AND instrument_scope = ?
+                  AND interval = ?
+                """,
+                (
+                    self._format_timestamp(snapshot.observed_at_utc),
+                    snapshot.runtime_mode,
+                    snapshot.provider,
+                    snapshot.asset_symbol,
+                    snapshot.venue_scope,
+                    snapshot.instrument_scope,
+                    snapshot.interval,
+                ),
+            ).fetchone()
+            snapshot_id = int(snapshot_row['snapshot_id'])
+            connection.executemany(
+                """
+                INSERT INTO crypto_signal_market_regime_metrics (
+                    snapshot_id,
+                    metric_name,
+                    metric_value,
+                    unit,
+                    source_timestamp_utc,
+                    created_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (snapshot_id, metric_name, source_timestamp_utc)
+                DO UPDATE SET
+                    metric_value=excluded.metric_value,
+                    unit=excluded.unit,
+                    created_at_utc=excluded.created_at_utc
+                """,
+                [
+                    self._serialize_market_regime_metric(
+                        metric=metric,
+                        snapshot_id=snapshot_id,
+                        created_at_utc=created_at_utc,
+                    )
+                    for metric in snapshot.metrics
+                ],
+            )
+            connection.commit()
+
+        snapshot.snapshot_id = snapshot_id
+        snapshot.created_at_utc = created_at_utc
+        for metric in snapshot.metrics:
+            metric.snapshot_id = snapshot_id
+            metric.created_at_utc = created_at_utc
+        return snapshot
+
+    def get_market_regime_metrics(
+        self,
+        runtime_mode: str,
+        start_timestamp_utc: datetime.datetime,
+        end_timestamp_utc: datetime.datetime,
+        metric_names: list[str],
+        asset_symbol: str = 'BTC',
+        provider: str | None = None,
+        venue_scope: str | None = None,
+        instrument_scope: str | None = None,
+        interval: str | None = None,
+    ) -> list[CryptoSignalMarketRegimeMetric]:
+        if not metric_names or not Path(self.db_path).exists():
+            return []
+        placeholders = ','.join('?' for _ in metric_names)
+        scope_filters = []
+        params = [
+            runtime_mode,
+            asset_symbol,
+            self._format_timestamp(start_timestamp_utc),
+            self._format_timestamp(end_timestamp_utc),
+        ]
+        if provider is not None:
+            scope_filters.append('snapshot.provider = ?')
+            params.append(provider)
+        if venue_scope is not None:
+            scope_filters.append('snapshot.venue_scope = ?')
+            params.append(venue_scope)
+        if instrument_scope is not None:
+            scope_filters.append('snapshot.instrument_scope = ?')
+            params.append(instrument_scope)
+        if interval is not None:
+            scope_filters.append('snapshot.interval = ?')
+            params.append(interval)
+        params.extend(metric_names)
+        scope_filter_sql = (
+            ''
+            if not scope_filters
+            else ' AND ' + ' AND '.join(scope_filters)
+        )
+        with self._connect() as connection:
+            try:
+                rows = connection.execute(
+                    f"""
+                    SELECT
+                        metric.*,
+                        snapshot.observed_at_utc AS snapshot_observed_at_utc,
+                        snapshot.provider,
+                        snapshot.asset_symbol,
+                        snapshot.venue_scope,
+                        snapshot.instrument_scope,
+                        snapshot.interval
+                    FROM crypto_signal_market_regime_metrics AS metric
+                    INNER JOIN crypto_signal_market_regime_snapshots AS snapshot
+                      ON snapshot.snapshot_id = metric.snapshot_id
+                    WHERE snapshot.runtime_mode = ?
+                      AND snapshot.asset_symbol = ?
+                      AND metric.source_timestamp_utc >= ?
+                      AND metric.source_timestamp_utc <= ?
+                      {scope_filter_sql}
+                      AND metric.metric_name IN ({placeholders})
+                    ORDER BY metric.source_timestamp_utc ASC, metric.metric_name ASC
+                    """,
+                    params,
+                ).fetchall()
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error):
+                    return []
+                raise
+        return [
+            self._build_market_regime_metric(row)
+            for row in self._dedupe_market_regime_metric_rows(rows)
+        ]
 
     def save_or_merge_snapshot(
         self,
@@ -509,6 +753,70 @@ class CryptoSignalRepository:
             self._format_timestamp(created_at_utc),
         )
 
+    def _serialize_market_regime_metric(
+        self,
+        metric: CryptoSignalMarketRegimeMetric,
+        snapshot_id: int,
+        created_at_utc: datetime.datetime,
+    ) -> tuple:
+        return (
+            snapshot_id,
+            metric.metric_name,
+            metric.metric_value,
+            metric.unit,
+            self._format_timestamp(metric.source_timestamp_utc),
+            self._format_timestamp(created_at_utc),
+        )
+
+    def _build_market_regime_metric(
+        self,
+        row: sqlite3.Row,
+    ) -> CryptoSignalMarketRegimeMetric:
+        return CryptoSignalMarketRegimeMetric(
+            snapshot_id=row['snapshot_id'],
+            metric_name=row['metric_name'],
+            metric_value=row['metric_value'],
+            unit=row['unit'],
+            source_timestamp_utc=self._parse_timestamp(row['source_timestamp_utc']),
+            provider=row['provider'] if 'provider' in row.keys() else None,
+            asset_symbol=row['asset_symbol'] if 'asset_symbol' in row.keys() else None,
+            venue_scope=row['venue_scope'] if 'venue_scope' in row.keys() else None,
+            instrument_scope=(
+                row['instrument_scope'] if 'instrument_scope' in row.keys() else None
+            ),
+            interval=row['interval'] if 'interval' in row.keys() else None,
+            created_at_utc=self._parse_timestamp(row['created_at_utc']),
+        )
+
+    @staticmethod
+    def _dedupe_market_regime_metric_rows(
+        rows: list[sqlite3.Row],
+    ) -> list[sqlite3.Row]:
+        latest_by_fact_key: dict[tuple, sqlite3.Row] = {}
+        for row in rows:
+            # Scheduled collections can re-fetch overlapping historical points
+            # under later snapshots. Read-side summaries use the latest stored
+            # fact for each provider/scope/metric/source timestamp.
+            fact_key = (
+                row['provider'],
+                row['asset_symbol'],
+                row['venue_scope'],
+                row['instrument_scope'],
+                row['interval'],
+                row['metric_name'],
+                row['source_timestamp_utc'],
+            )
+            existing = latest_by_fact_key.get(fact_key)
+            if existing is None or (
+                _market_regime_row_version_key(row)
+                > _market_regime_row_version_key(existing)
+            ):
+                latest_by_fact_key[fact_key] = row
+        return sorted(
+            latest_by_fact_key.values(),
+            key=lambda row: (row['source_timestamp_utc'], row['metric_name']),
+        )
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
@@ -532,6 +840,14 @@ class CryptoSignalRepository:
     @staticmethod
     def _parse_timestamp(value: str) -> datetime.datetime:
         return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
+def _market_regime_row_version_key(row: sqlite3.Row) -> tuple[str, str, int]:
+    return (
+        row['snapshot_observed_at_utc'],
+        row['created_at_utc'],
+        int(row['snapshot_id']),
+    )
 
 
 def iter_snapshot_coin_ids(

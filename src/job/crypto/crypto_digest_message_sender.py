@@ -15,7 +15,9 @@ from src.job.crypto.crypto_digest_formatter import (
 )
 from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.notification_destination.telegram_notification import send_message_to_admin
-from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.service.crypto_signal.market_regime_collector import (
+    CryptoSignalMarketRegimeCollector,
+)
 from src.service.crypto_signal.backfill import CryptoSignalBackfillService
 from src.service.crypto_signal.repository import CryptoSignalRepository
 from src.service.crypto_signal.snapshot_builder import build_snapshot
@@ -30,13 +32,27 @@ _SIGNAL_BACKFILL_DAYS = 30
 
 
 class CryptoDigestMessageSender(MessageSenderWrapper):
-    def __init__(self, runtime_mode=None):
+    def __init__(
+        self,
+        runtime_mode=None,
+        cmc_service=None,
+        sentiment_service=None,
+        signal_repository=None,
+        signal_backfill_service=None,
+        market_regime_collector=None,
+        market_regime_repository=None,
+    ):
         super().__init__(runtime_mode=runtime_mode)
-        self.cmc_service = Dependencies.get_crypto_stats_service()
-        self.sentiment_service = Dependencies.get_crypto_sentiment_service()
-        self.signal_repository = CryptoSignalRepository(
-            runtime_mode=self.runtime_mode
+        self.cmc_service = cmc_service
+        self.sentiment_service = sentiment_service
+        self.signal_repository = (
+            CryptoSignalRepository(runtime_mode=self.runtime_mode)
+            if signal_repository is None
+            else signal_repository
         )
+        self.signal_backfill_service = signal_backfill_service
+        self.market_regime_collector = market_regime_collector
+        self.market_regime_repository = market_regime_repository
         self.tracked_universe_entries = config.get_crypto_signal_tracked_universe()
         self.watchlist_entries = config.get_crypto_signal_watchlist()
 
@@ -49,6 +65,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         return MarketDataType.CRYPTO
 
     async def format_message(self) -> List[str]:
+        self._ensure_runtime_dependencies()
         current = get_current_datetime()
         sentiment = await self.sentiment_service.get_crypto_fear_greed_index()
         strongest_sector, weakest_sector = await self._load_sector_snapshots()
@@ -72,7 +89,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
 
         snapshot = self._build_signal_snapshot(
             current=current,
-            runtime_mode=getattr(self, 'runtime_mode', DEFAULT_RUNTIME_MODE),
+            runtime_mode=self.runtime_mode,
             sentiment=sentiment,
             strongest_sector=strongest_sector,
             weakest_sector=weakest_sector,
@@ -94,6 +111,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 ),
                 market_data_type=MarketDataType.CRYPTO,
             )
+        await self._persist_market_regime_snapshots(current=current)
 
         digest_message = build_digest_message(
             current=current,
@@ -106,6 +124,16 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             sector_detail_coin_details=sector_detail_coin_details,
         )
         return [digest_message]
+
+    def _ensure_runtime_dependencies(self) -> None:
+        if self.cmc_service is None:
+            self.cmc_service = Dependencies.get_crypto_stats_service()
+        if self.sentiment_service is None:
+            self.sentiment_service = Dependencies.get_crypto_sentiment_service()
+        if self.signal_backfill_service is None:
+            self.signal_backfill_service = CryptoSignalBackfillService(
+                cmc_service=self.cmc_service
+            )
 
     def _build_signal_snapshot(
         self,
@@ -154,16 +182,8 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         current,
         snapshot,
     ) -> None:
-        repository = getattr(
-            self,
-            'signal_repository',
-            CryptoSignalRepository(runtime_mode=self.runtime_mode),
-        )
-        backfill_service = getattr(
-            self,
-            'signal_backfill_service',
-            CryptoSignalBackfillService(cmc_service=self.cmc_service),
-        )
+        repository = self.signal_repository
+        backfill_service = self.signal_backfill_service
         tracked_universe_entries = getattr(
             self,
             'tracked_universe_entries',
@@ -223,11 +243,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         self,
         snapshot,
     ) -> str | None:
-        repository = getattr(
-            self,
-            'signal_repository',
-            CryptoSignalRepository(runtime_mode=self.runtime_mode),
-        )
+        repository = self.signal_repository
         try:
             repository.save_snapshot(snapshot)
         except Exception as error:
@@ -238,6 +254,45 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 should_escape_markdown=True,
             )
         return None
+
+    async def _persist_market_regime_snapshots(
+        self,
+        current,
+    ) -> None:
+        if not config.is_crypto_signal_market_regime_enabled():
+            return
+
+        try:
+            # Regime collection is optional operator context; failures must not
+            # suppress the public digest or the phase-1 signal snapshot.
+            provider = config.get_crypto_signal_market_regime_provider()
+            if provider != 'coinalyze':
+                logger.warning(
+                    'Skipping crypto signal market-regime collection for unsupported provider %s',
+                    provider,
+                )
+                return
+            collector = self.market_regime_collector
+            if collector is None:
+                collector = CryptoSignalMarketRegimeCollector()
+            repository = self.market_regime_repository or self.signal_repository
+            snapshots = await collector.collect_coinalyze_btc_snapshots(
+                observed_at_utc=current,
+                runtime_mode=self._runtime_mode_label(),
+                symbols=config.get_crypto_signal_market_regime_coinalyze_symbols(),
+                interval=config.get_crypto_signal_market_regime_interval(),
+                backfill_days=config.get_crypto_signal_market_regime_backfill_days(),
+            )
+            for snapshot in snapshots:
+                repository.save_market_regime_snapshot(snapshot)
+        except Exception:
+            logger.warning(
+                'Crypto signal market-regime collection failed; continuing digest',
+                exc_info=True,
+            )
+
+    def _runtime_mode_label(self) -> str:
+        return 'test' if self.runtime_mode.is_test_mode else 'prod'
 
     def _build_backfill_entries(
         self,

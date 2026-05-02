@@ -6,6 +6,11 @@ from src.job.crypto.crypto_signal_digest_message_sender import (
     CryptoSignalDigestMessageSender,
 )
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.service.crypto_signal.market_regime_collector import (
+    AGGREGATE_INSTRUMENT_SCOPE,
+    AGGREGATE_VENUE_SCOPE,
+    COINALYZE_PROVIDER,
+)
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
     CryptoSignalMarketRegimeMetric,
@@ -160,7 +165,12 @@ async def test_format_message_uses_stored_coinalyze_market_regime_summary(
     )
 
     class _RepositoryWithRegime(_FakeRepository):
-        def get_market_regime_metrics(self, **_kwargs):
+        def __init__(self, latest_snapshot):
+            super().__init__(latest_snapshot)
+            self.market_regime_kwargs = None
+
+        def get_market_regime_metrics(self, **kwargs):
+            self.market_regime_kwargs = kwargs
             return [
                 CryptoSignalMarketRegimeMetric(
                     metric_name='open_interest_usd',
@@ -203,7 +213,8 @@ async def test_format_message_uses_stored_coinalyze_market_regime_summary(
                 ),
             ]
 
-    sender = _build_sender(_RepositoryWithRegime(latest_snapshot))
+    repository = _RepositoryWithRegime(latest_snapshot)
+    sender = _build_sender(repository)
 
     monkeypatch.setattr(
         'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
@@ -214,6 +225,14 @@ async def test_format_message_uses_stored_coinalyze_market_regime_summary(
 
     assert 'Leverage building' in messages[0]
     assert 'OI \\+8\\.0%' in messages[0]
+    assert repository.market_regime_kwargs is not None
+    assert repository.market_regime_kwargs['provider'] == COINALYZE_PROVIDER
+    assert repository.market_regime_kwargs['venue_scope'] == AGGREGATE_VENUE_SCOPE
+    assert (
+        repository.market_regime_kwargs['instrument_scope']
+        == AGGREGATE_INSTRUMENT_SCOPE
+    )
+    assert repository.market_regime_kwargs['interval'] == '1hour'
 
 
 @pytest.mark.asyncio

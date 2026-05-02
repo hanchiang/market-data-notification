@@ -5,8 +5,14 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.job.crypto import crypto_signal_report
+from src.service.crypto_signal.market_regime_collector import (
+    AGGREGATE_INSTRUMENT_SCOPE,
+    AGGREGATE_VENUE_SCOPE,
+    COINALYZE_PROVIDER,
+)
 from src.service.crypto_signal.models import (
     CryptoSignalCoinSnapshot,
+    CryptoSignalMarketRegimeMetric,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
 )
@@ -59,12 +65,57 @@ def _build_snapshot() -> CryptoSignalSnapshot:
 class _FakeRepository:
     def __init__(self, latest_snapshot: CryptoSignalSnapshot):
         self.latest_snapshot = latest_snapshot
+        self.market_regime_kwargs = None
 
     def get_latest_snapshot(self):
         return self.latest_snapshot
 
     def get_snapshots_since(self, _start):
         return [self.latest_snapshot]
+
+    def get_market_regime_metrics(self, **kwargs):
+        self.market_regime_kwargs = kwargs
+        return [
+            CryptoSignalMarketRegimeMetric(
+                metric_name='open_interest_usd',
+                metric_value=100.0,
+                unit='usd',
+                source_timestamp_utc=datetime.datetime(
+                    2026,
+                    4,
+                    21,
+                    8,
+                    45,
+                    tzinfo=datetime.timezone.utc,
+                ),
+            ),
+            CryptoSignalMarketRegimeMetric(
+                metric_name='open_interest_usd',
+                metric_value=108.0,
+                unit='usd',
+                source_timestamp_utc=datetime.datetime(
+                    2026,
+                    4,
+                    22,
+                    8,
+                    45,
+                    tzinfo=datetime.timezone.utc,
+                ),
+            ),
+            CryptoSignalMarketRegimeMetric(
+                metric_name='funding_rate',
+                metric_value=0.01,
+                unit='percent',
+                source_timestamp_utc=datetime.datetime(
+                    2026,
+                    4,
+                    22,
+                    8,
+                    45,
+                    tzinfo=datetime.timezone.utc,
+                ),
+            ),
+        ]
 
 
 @pytest.mark.asyncio
@@ -89,7 +140,7 @@ async def test_main_prints_report_to_stdout_when_send_telegram_disabled(
     monkeypatch.setattr(
         crypto_signal_report,
         'build_crypto_signal_message',
-        lambda _view: '*Crypto trend signal*',
+        lambda view: f'*Crypto trend signal* {view.market_regime_label}',
     )
     monkeypatch.setattr(
         crypto_signal_report.config,
@@ -105,5 +156,13 @@ async def test_main_prints_report_to_stdout_when_send_telegram_disabled(
     await crypto_signal_report.main()
 
     captured = capsys.readouterr()
-    assert captured.out == '*Crypto trend signal*\n'
+    assert captured.out == '*Crypto trend signal* Leverage building\n'
     send_crypto_signal_message.assert_not_awaited()
+    assert fake_repository.market_regime_kwargs is not None
+    assert fake_repository.market_regime_kwargs['provider'] == COINALYZE_PROVIDER
+    assert fake_repository.market_regime_kwargs['venue_scope'] == AGGREGATE_VENUE_SCOPE
+    assert (
+        fake_repository.market_regime_kwargs['instrument_scope']
+        == AGGREGATE_INSTRUMENT_SCOPE
+    )
+    assert fake_repository.market_regime_kwargs['interval'] == '1hour'

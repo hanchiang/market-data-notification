@@ -53,6 +53,32 @@ def test_build_market_regime_summary_handles_insufficient_history():
     assert summary.reason == 'open interest history unavailable'
 
 
+def test_build_market_regime_summary_handles_zero_open_interest_baseline():
+    summary = build_market_regime_summary(
+        [
+            _metric('open_interest_usd', 0.0, '2026-04-20T00:00:00Z'),
+            _metric('open_interest_usd', 100.0, '2026-04-27T00:00:00Z'),
+        ]
+    )
+
+    assert summary.label == 'Insufficient regime history'
+    assert summary.reason == 'open interest baseline unavailable'
+
+
+def test_build_market_regime_summary_detects_mixed_regime():
+    summary = build_market_regime_summary(
+        [
+            _metric('open_interest_usd', 100.0, '2026-04-20T00:00:00Z'),
+            _metric('funding_rate', -0.004, '2026-04-20T00:00:00Z'),
+            _metric('open_interest_usd', 102.0, '2026-04-27T00:00:00Z'),
+            _metric('funding_rate', 0.002, '2026-04-27T00:00:00Z'),
+        ]
+    )
+
+    assert summary.label == 'Mixed'
+    assert summary.reason == 'OI +2.0%, avg funding -0.0010%'
+
+
 def _metric(
     metric_name: str,
     metric_value: float,

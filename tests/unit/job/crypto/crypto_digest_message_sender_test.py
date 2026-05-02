@@ -427,6 +427,66 @@ class TestCryptoDigestMessageSender:
         )
 
     @pytest.mark.asyncio
+    async def test_market_regime_collection_fails_open_when_collector_fails(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'true')
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'coinalyze')
+        monkeypatch.setenv(
+            'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS',
+            'BTCUSDT_PERP.A',
+        )
+
+        market_regime_collector = AsyncMock()
+        market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
+            side_effect=RuntimeError('coinalyze unavailable')
+        )
+        message_sender = self.build_message_sender(
+            market_regime_collector=market_regime_collector
+        )
+
+        await message_sender._persist_market_regime_snapshots(
+            current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
+        )
+
+        market_regime_collector.collect_coinalyze_btc_snapshots.assert_awaited_once()
+        message_sender.signal_repository.save_market_regime_snapshot.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_market_regime_collection_fails_open_when_snapshot_save_fails(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_ENABLED', 'true')
+        monkeypatch.setenv('CRYPTO_SIGNAL_MARKET_REGIME_PROVIDER', 'coinalyze')
+        monkeypatch.setenv(
+            'CRYPTO_SIGNAL_MARKET_REGIME_COINALYZE_SYMBOLS',
+            'BTCUSDT_PERP.A',
+        )
+
+        snapshot = Mock()
+        market_regime_collector = AsyncMock()
+        market_regime_collector.collect_coinalyze_btc_snapshots = AsyncMock(
+            return_value=[snapshot]
+        )
+        message_sender = self.build_message_sender(
+            market_regime_collector=market_regime_collector
+        )
+        message_sender.signal_repository.save_market_regime_snapshot.side_effect = (
+            RuntimeError('sqlite unavailable')
+        )
+
+        await message_sender._persist_market_regime_snapshots(
+            current=datetime.datetime(2026, 4, 29, tzinfo=datetime.timezone.utc)
+        )
+
+        market_regime_collector.collect_coinalyze_btc_snapshots.assert_awaited_once()
+        message_sender.signal_repository.save_market_regime_snapshot.assert_called_once_with(
+            snapshot
+        )
+
+    @pytest.mark.asyncio
     async def test_market_regime_collection_fails_open_for_invalid_provider(
         self,
         monkeypatch,

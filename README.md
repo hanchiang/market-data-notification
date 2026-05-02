@@ -145,8 +145,9 @@ CRYPTO_SIGNAL_DB_PATH=var/crypto_signal/crypto_signal.sqlite3
 CRYPTO_SIGNAL_TEST_DB_PATH=var/crypto_signal/crypto_signal.test.sqlite3
 # Optional private/operator signal recipient. Defaults to CRYPTO_TELEGRAM_ADMIN_ID.
 CRYPTO_SIGNAL_RECIPIENT_ID=...
-CRYPTO_SIGNAL_TRACKED_UNIVERSE=BTC,ETH,SOL
-CRYPTO_SIGNAL_WATCHLIST=
+# Built-in symbols BTC/ETH/SOL can omit CoinMarketCap ids; other symbols use SYMBOL:CMC_ID.
+CRYPTO_SIGNAL_TRACKED_UNIVERSE=BTC,ETH,SOL,TAO:22974
+CRYPTO_SIGNAL_WATCHLIST=BTC,ETH,SOL
 CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_PRICE_USD=0
 CRYPTO_SIGNAL_DYNAMIC_CANDIDATE_MIN_VOLUME_24H=50000000
 # Optional phase-2 market-regime collection. Disabled unless explicitly enabled.

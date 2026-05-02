@@ -275,6 +275,31 @@ Data-provider split:
 - Run `crypto.py` first when you need fresh test-mode signal rows before
   rendering `crypto_signal_report.py`.
 
+```mermaid
+flowchart LR
+    cmc["CoinMarketCap"]
+    alt["Alternative.me<br/>Fear & Greed"]
+    cq["CryptoQuant<br/>manual price-ohlcv"]
+    coinalyze["Coinalyze<br/>BTC perp OI/funding"]
+
+    crypto_job["src/job/crypto/crypto.py<br/>public digest + snapshot writer"]
+    sqlite[("SQLite<br/>crypto signal history")]
+    signal_sender["CryptoSignalDigestMessageSender<br/>private/operator digest"]
+    report["crypto_signal_report.py<br/>local report"]
+    telegram["Telegram"]
+
+    cmc --> crypto_job
+    alt --> crypto_job
+    coinalyze -. optional market-regime .-> crypto_job
+    cq -. manual route only .-> crypto_job
+    crypto_job --> sqlite
+    crypto_job --> telegram
+    sqlite --> signal_sender
+    sqlite --> report
+    signal_sender --> telegram
+    report -. optional private send .-> telegram
+```
+
 Render the latest stored signal report without sending Telegram:
 
 ```bash

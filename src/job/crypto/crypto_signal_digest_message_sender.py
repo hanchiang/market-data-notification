@@ -126,7 +126,22 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
                 window_label=window_label,
             ),
         )
+        self._persist_candidate_cohorts(repository=repository, view=view)
         return [build_crypto_signal_message(view)]
+
+    def _persist_candidate_cohorts(
+        self,
+        *,
+        repository: CryptoSignalRepository,
+        view,
+    ) -> None:
+        try:
+            repository.save_candidate_cohorts_from_view(view)
+        except Exception:
+            logger.warning(
+                'Failed to persist crypto signal candidate cohorts; continuing digest',
+                exc_info=True,
+            )
 
     def _is_fresh_enough(self, run_timestamp_utc: datetime.datetime) -> bool:
         if self.runtime_mode.bypass_schedule:

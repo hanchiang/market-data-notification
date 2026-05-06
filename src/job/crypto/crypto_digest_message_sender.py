@@ -19,7 +19,12 @@ from src.service.crypto_signal.market_regime_collector import (
     CryptoSignalMarketRegimeCollector,
 )
 from src.service.crypto_signal.backfill import CryptoSignalBackfillService
-from src.service.crypto_signal.repository import CryptoSignalRepository
+from src.service.crypto_signal.models import CALIBRATION_FOLLOW_UP_CONTEXT_TAG
+from src.service.crypto_signal.repository import (
+    BTC_COIN_ID,
+    ETH_COIN_ID,
+    CryptoSignalRepository,
+)
 from src.service.crypto_signal.snapshot_builder import build_snapshot
 from src.type.market_data_type import MarketDataType
 from src.util.date_util import get_current_datetime
@@ -85,7 +90,12 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             weakest_sector=weakest_sector,
             sector_details=sector_details,
         )
-        tracked_universe_coin_details = await self._load_tracked_universe_coin_details()
+        candidate_follow_up_entries = self._load_candidate_follow_up_entries(
+            current=current
+        )
+        tracked_universe_coin_details = await self._load_tracked_universe_coin_details(
+            extra_entries=candidate_follow_up_entries
+        )
 
         snapshot = self._build_signal_snapshot(
             current=current,
@@ -98,6 +108,11 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             sector_details=sector_details,
             sector_detail_coin_details=sector_detail_coin_details,
             tracked_universe_coin_details=tracked_universe_coin_details,
+            candidate_follow_up_entries=candidate_follow_up_entries,
+        )
+        self._mark_calibration_follow_up_only_coins(
+            snapshot=snapshot,
+            candidate_follow_up_entries=candidate_follow_up_entries,
         )
         await self._backfill_signal_history(
             current=current,
@@ -111,6 +126,8 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 ),
                 market_data_type=MarketDataType.CRYPTO,
             )
+        else:
+            self._resolve_due_candidate_outcomes(current=current)
         await self._persist_market_regime_snapshots(current=current)
 
         digest_message = build_digest_message(
@@ -147,6 +164,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         sector_details,
         sector_detail_coin_details,
         tracked_universe_coin_details,
+        candidate_follow_up_entries,
     ):
         tracked_universe_entries = getattr(
             self,
@@ -172,6 +190,7 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             tracked_universe_entries=self._get_persisted_universe_entries(
                 tracked_universe_entries=tracked_universe_entries,
                 watchlist_entries=watchlist_entries,
+                extra_entries=candidate_follow_up_entries,
             ),
             tracked_universe_coin_details=tracked_universe_coin_details,
             watchlist_entries=watchlist_entries,
@@ -254,6 +273,51 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 should_escape_markdown=True,
             )
         return None
+
+    def _resolve_due_candidate_outcomes(
+        self,
+        current,
+    ) -> None:
+        try:
+            self.signal_repository.resolve_due_candidate_outcomes(
+                runtime_mode=self._runtime_mode_label(),
+                current_timestamp_utc=current.astimezone(datetime.timezone.utc),
+            )
+        except Exception:
+            logger.warning(
+                'Crypto signal candidate outcome resolution failed; continuing digest',
+                exc_info=True,
+            )
+
+    def _mark_calibration_follow_up_only_coins(
+        self,
+        snapshot,
+        candidate_follow_up_entries: List[tuple[str, int]],
+    ) -> None:
+        if len(candidate_follow_up_entries) == 0:
+            return
+        normal_entries = self._get_persisted_universe_entries(
+            tracked_universe_entries=self.tracked_universe_entries,
+            watchlist_entries=self.watchlist_entries,
+        )
+        normal_coin_ids = {coin_id for _symbol, coin_id in normal_entries}
+        follow_up_only_coin_ids = {
+            coin_id
+            for _symbol, coin_id in candidate_follow_up_entries
+            if coin_id not in normal_coin_ids
+        }
+        for coin in snapshot.coins:
+            if coin.coin_id not in follow_up_only_coin_ids:
+                continue
+            if len(coin.context_tags) > 0:
+                continue
+            # Follow-up-only rows are retained for calibration outcome coverage,
+            # but this tag keeps them out of operator ranking unless they become
+            # normally tracked/watchlisted again.
+            coin.context_tags = (
+                *coin.context_tags,
+                CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
+            )
 
     async def _persist_market_regime_snapshots(
         self,
@@ -421,7 +485,10 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
             coin_details[coin_id] = detail
         return coin_details
 
-    async def _load_tracked_universe_coin_details(self) -> Dict[int, cmc_type.CoinDetail]:
+    async def _load_tracked_universe_coin_details(
+        self,
+        extra_entries: List[tuple[str, int]] | None = None,
+    ) -> Dict[int, cmc_type.CoinDetail]:
         tracked_universe_entries = getattr(
             self,
             'tracked_universe_entries',
@@ -438,20 +505,61 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
                 for _symbol, coin_id in self._get_persisted_universe_entries(
                     tracked_universe_entries=tracked_universe_entries,
                     watchlist_entries=watchlist_entries,
+                    extra_entries=extra_entries,
                 )
             ],
             log_context='tracked universe coin enrichment',
+        )
+
+    def _load_candidate_follow_up_entries(
+        self,
+        current,
+    ) -> List[tuple[str, int]]:
+        try:
+            due_entries = (
+                self.signal_repository.get_unresolved_candidate_follow_up_entries(
+                    runtime_mode=self._runtime_mode_label(),
+                    current_timestamp_utc=current.astimezone(datetime.timezone.utc),
+                )
+            )
+        except Exception:
+            logger.warning(
+                'Failed to load crypto signal candidate follow-up entries; continuing digest',
+                exc_info=True,
+            )
+            return []
+        if len(due_entries) == 0:
+            return []
+        # Outcome calibration compares candidates against BTC and ETH, so keep
+        # benchmark prices present even if an operator removes them from the
+        # normal tracked-universe env.
+        return self._merge_coin_entries(
+            [
+                *due_entries,
+                ('BTC', BTC_COIN_ID),
+                ('ETH', ETH_COIN_ID),
+            ]
         )
 
     @staticmethod
     def _get_persisted_universe_entries(
         tracked_universe_entries: List[tuple[str, int]],
         watchlist_entries: List[tuple[str, int]],
+        extra_entries: List[tuple[str, int]] | None = None,
     ) -> List[tuple[str, int]]:
-        merged_entries = {
-            coin_id: (symbol, coin_id)
-            for symbol, coin_id in tracked_universe_entries
-        }
-        for symbol, coin_id in watchlist_entries:
+        return CryptoDigestMessageSender._merge_coin_entries(
+            [
+                *tracked_universe_entries,
+                *watchlist_entries,
+                *(extra_entries or []),
+            ]
+        )
+
+    @staticmethod
+    def _merge_coin_entries(
+        entries: List[tuple[str, int]],
+    ) -> List[tuple[str, int]]:
+        merged_entries = {}
+        for symbol, coin_id in entries:
             merged_entries.setdefault(coin_id, (symbol, coin_id))
         return list(merged_entries.values())

@@ -1,6 +1,7 @@
 import datetime
 
 from src.service.crypto_signal.models import (
+    CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
     CryptoSignalCoinSnapshot,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
@@ -288,3 +289,92 @@ def test_build_digest_view_filters_dynamic_candidates_below_operator_tradability
     )
 
     assert view.strong_candidates == []
+
+
+def test_build_digest_view_excludes_calibration_follow_up_only_candidate_from_ranking():
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=12.0,
+        volume_change_pct_24h=35.0,
+        context_tags=('spotlight_trending', 'spotlight_gainer'),
+        coin_id=5690,
+        symbol='RENDER',
+        name='Render',
+        is_watchlist=False,
+        price_usd=8.12,
+        volume_24h=286_000_000,
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=18.0,
+        volume_change_pct_24h=45.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+            CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
+        ),
+        coin_id=5690,
+        symbol='RENDER',
+        name='Render',
+        is_watchlist=False,
+        price_usd=8.12,
+        volume_24h=286_000_000,
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids=set(),
+        window_label='7d',
+        tracked_universe_coin_ids=set(),
+        limit=3,
+        min_dynamic_price_usd=1.0,
+        min_dynamic_volume_24h=50_000_000.0,
+    )
+
+    assert view.strong_candidates == []
+
+
+def test_build_digest_view_keeps_current_dynamic_candidate_without_follow_up_tag():
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=12.0,
+        volume_change_pct_24h=35.0,
+        context_tags=('spotlight_trending', 'spotlight_gainer'),
+        coin_id=5690,
+        symbol='RENDER',
+        name='Render',
+        is_watchlist=False,
+        price_usd=7.8,
+        volume_24h=286_000_000,
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 22, 8, 45, tzinfo=datetime.timezone.utc),
+        price_change_24h=18.0,
+        volume_change_pct_24h=45.0,
+        context_tags=(
+            'spotlight_trending',
+            'spotlight_gainer',
+            'sector_leader_strongest',
+        ),
+        coin_id=5690,
+        symbol='RENDER',
+        name='Render',
+        is_watchlist=False,
+        price_usd=8.12,
+        volume_24h=286_000_000,
+    )
+
+    view = build_digest_view(
+        latest_snapshot=latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
+        watchlist_coin_ids=set(),
+        window_label='7d',
+        tracked_universe_coin_ids=set(),
+        limit=3,
+        min_dynamic_price_usd=1.0,
+        min_dynamic_volume_24h=50_000_000.0,
+    )
+
+    assert [candidate.symbol for candidate in view.strong_candidates] == ['RENDER']

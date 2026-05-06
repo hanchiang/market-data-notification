@@ -15,6 +15,7 @@ from src.job.crypto.crypto_digest_formatter import (
 )
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.crypto_signal.models import (
+    CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
     CryptoSignalCoinSnapshot,
     CryptoSignalRunRecord,
     CryptoSignalSnapshot,
@@ -32,6 +33,7 @@ CONTEXT_TAG_ORDER = (
     'sector_leader_weakest',
     'sector_loser_weakest',
     'watchlist',
+    CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
 )
 
 _SPOTLIGHT_REASON_TO_TAG = {

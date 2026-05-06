@@ -2,7 +2,9 @@ import datetime
 import sqlite3
 
 from src.service.crypto_signal.models import (
+    CryptoSignalCandidate,
     CryptoSignalCoinSnapshot,
+    CryptoSignalDigestView,
     CryptoSignalMarketRegimeMetric,
     CryptoSignalMarketRegimeSnapshot,
     CryptoSignalRunRecord,
@@ -14,6 +16,113 @@ from src.service.crypto_signal.market_regime import (
 )
 from src.service.crypto_signal.repository import CryptoSignalRepository
 from src.runtime.runtime_mode import RuntimeMode
+
+
+def _build_snapshot_at(
+    run_timestamp_utc: datetime.datetime,
+    *,
+    sol_price_usd: float | None = 100.0,
+    btc_price_usd: float | None = 100_000.0,
+    eth_price_usd: float | None = 4_000.0,
+) -> CryptoSignalSnapshot:
+    coins = [
+        CryptoSignalCoinSnapshot(
+            coin_id=1,
+            symbol='BTC',
+            name='Bitcoin',
+            price_usd=btc_price_usd,
+            price_change_24h=2.4,
+            volume_24h=31_000_000_000,
+            volume_change_pct_24h=7.5,
+            is_watchlist=True,
+            context_tags=('watchlist',),
+        ),
+        CryptoSignalCoinSnapshot(
+            coin_id=1027,
+            symbol='ETH',
+            name='Ethereum',
+            price_usd=eth_price_usd,
+            price_change_24h=1.7,
+            volume_24h=19_000_000_000,
+            volume_change_pct_24h=5.2,
+            is_watchlist=True,
+            context_tags=('watchlist',),
+        ),
+    ]
+    if sol_price_usd is not None:
+        coins.append(
+            CryptoSignalCoinSnapshot(
+                coin_id=5426,
+                symbol='SOL',
+                name='Solana',
+                price_usd=sol_price_usd,
+                price_change_24h=11.4,
+                volume_24h=4_820_000_000,
+                volume_change_pct_24h=27.1,
+                is_watchlist=True,
+                context_tags=('watchlist',),
+            )
+        )
+    return CryptoSignalSnapshot(
+        run=CryptoSignalRunRecord(
+            run_timestamp_utc=run_timestamp_utc,
+            runtime_mode='prod',
+            source_name='CMC + Alternative.me',
+            snapshot_version=1,
+            sentiment_now_value=63.0,
+            sentiment_now_label='Greed',
+            sentiment_yesterday_value=58.0,
+            sentiment_last_week_value=49.0,
+            sentiment_7d_avg=55.4,
+            sentiment_30d_avg=51.8,
+            strongest_sector_id='ai-big-data',
+            strongest_sector_name='AI & Big Data',
+            strongest_sector_avg_price_change_24h=8.4,
+            strongest_sector_market_change_24h=6.9,
+            strongest_sector_volume_change_24h=21.7,
+            strongest_sector_gainers_num=18,
+            strongest_sector_losers_num=5,
+            weakest_sector_id='gaming',
+            weakest_sector_name='Gaming',
+            weakest_sector_avg_price_change_24h=-6.1,
+            weakest_sector_market_change_24h=-4.8,
+            weakest_sector_volume_change_24h=-12.3,
+            weakest_sector_gainers_num=4,
+            weakest_sector_losers_num=19,
+        ),
+        coins=coins,
+    )
+
+
+def _build_digest_view(snapshot: CryptoSignalSnapshot) -> CryptoSignalDigestView:
+    return CryptoSignalDigestView(
+        latest_snapshot=snapshot,
+        window_label='7d',
+        market_regime_label='Mixed',
+        market_regime_reason='OI +2.4%, avg funding -0.0028%',
+        strong_candidates=[
+            CryptoSignalCandidate(
+                coin_id=5426,
+                symbol='SOL',
+                name='Solana',
+                latest_price_usd=100.0,
+                latest_volume_24h=4_820_000_000,
+                latest_price_change_24h=11.4,
+                window_price_change_pct=22.8,
+                latest_volume_change_pct_24h=27.1,
+                latest_context_tags=('watchlist',),
+                score=4,
+                price_persistence_score=2,
+                volume_confirmation_score=1,
+                attention_persistence_score=1,
+                breadth_alignment_score=0,
+                observation_count=7,
+                reason_tags=('price-persistence', 'volume-confirmation'),
+                flags=(),
+                is_watchlist=True,
+            )
+        ],
+    )
 
 
 def test_save_snapshot_and_load_latest_snapshot(tmp_path):
@@ -204,6 +313,198 @@ def test_get_latest_snapshot_returns_none_when_db_is_missing(tmp_path):
 
     assert repository.get_latest_snapshot() is None
     assert not (tmp_path / 'missing_crypto_signal.sqlite3').exists()
+
+
+def test_save_candidate_cohorts_from_view_is_idempotent(tmp_path):
+    db_path = tmp_path / 'crypto_signal.sqlite3'
+    repository = CryptoSignalRepository(db_path=str(db_path))
+    snapshot = _build_snapshot_at(
+        datetime.datetime(2026, 5, 1, 8, 0, tzinfo=datetime.timezone.utc)
+    )
+    view = _build_digest_view(snapshot)
+
+    first_save = repository.save_candidate_cohorts_from_view(view)
+    second_save = repository.save_candidate_cohorts_from_view(view)
+
+    connection = sqlite3.connect(db_path)
+    cohort_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_candidate_cohorts'
+    ).fetchone()[0]
+    outcome_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_candidate_outcomes'
+    ).fetchone()[0]
+    outcome_rows = connection.execute(
+        """
+        SELECT outcome_window, status
+        FROM crypto_signal_candidate_outcomes
+        ORDER BY outcome_window
+        """
+    ).fetchall()
+    connection.close()
+
+    assert first_save[0].cohort_id == second_save[0].cohort_id
+    assert cohort_count == 1
+    assert outcome_count == 3
+    assert outcome_rows == [
+        ('24h', 'pending'),
+        ('3d', 'pending'),
+        ('7d', 'pending'),
+    ]
+
+
+def test_get_unresolved_candidate_follow_up_entries_includes_due_but_not_future(
+    tmp_path,
+):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'crypto_signal.sqlite3')
+    )
+    signal_time = datetime.datetime(
+        2026,
+        5,
+        1,
+        8,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    repository.save_candidate_cohorts_from_view(
+        _build_digest_view(_build_snapshot_at(signal_time))
+    )
+
+    before_due = repository.get_unresolved_candidate_follow_up_entries(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(hours=12),
+    )
+    after_due = repository.get_unresolved_candidate_follow_up_entries(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(days=1),
+    )
+
+    assert before_due == []
+    assert after_due == [('SOL', 5426)]
+
+
+def test_resolve_due_candidate_outcomes_calculates_forward_and_relative_returns(
+    tmp_path,
+):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'crypto_signal.sqlite3')
+    )
+    signal_time = datetime.datetime(
+        2026,
+        5,
+        1,
+        8,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    repository.save_snapshot(
+        _build_snapshot_at(
+            signal_time,
+            sol_price_usd=100.0,
+            btc_price_usd=100_000.0,
+            eth_price_usd=4_000.0,
+        )
+    )
+    repository.save_candidate_cohorts_from_view(
+        _build_digest_view(repository.get_latest_snapshot())
+    )
+    repository.save_snapshot(
+        _build_snapshot_at(
+            signal_time + datetime.timedelta(days=1),
+            sol_price_usd=112.0,
+            btc_price_usd=104_000.0,
+            eth_price_usd=4_200.0,
+        )
+    )
+
+    outcomes = repository.resolve_due_candidate_outcomes(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(days=1),
+    )
+
+    assert len(outcomes) == 1
+    assert outcomes[0].outcome_window == '24h'
+    assert outcomes[0].status == 'resolved'
+    assert outcomes[0].absolute_return_pct == 12.0
+    assert outcomes[0].btc_relative_return_pct == 8.0
+    assert outcomes[0].eth_relative_return_pct == 7.0
+    assert repository.get_unresolved_candidate_follow_up_entries(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(days=1),
+    ) == []
+
+
+def test_resolve_due_candidate_outcomes_marks_missing_follow_up_data(tmp_path):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'crypto_signal.sqlite3')
+    )
+    signal_time = datetime.datetime(
+        2026,
+        5,
+        1,
+        8,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    repository.save_snapshot(_build_snapshot_at(signal_time))
+    repository.save_candidate_cohorts_from_view(
+        _build_digest_view(repository.get_latest_snapshot())
+    )
+    repository.save_snapshot(
+        _build_snapshot_at(
+            signal_time + datetime.timedelta(days=1),
+            sol_price_usd=None,
+            btc_price_usd=104_000.0,
+            eth_price_usd=4_200.0,
+        )
+    )
+
+    outcomes = repository.resolve_due_candidate_outcomes(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(days=1),
+    )
+
+    assert len(outcomes) == 1
+    assert outcomes[0].status == 'missing'
+    assert outcomes[0].missing_reason == 'missing_candidate_follow_up_price'
+
+
+def test_resolve_due_candidate_outcomes_marks_stale_follow_up_run_missing(tmp_path):
+    repository = CryptoSignalRepository(
+        db_path=str(tmp_path / 'crypto_signal.sqlite3')
+    )
+    signal_time = datetime.datetime(
+        2026,
+        5,
+        1,
+        8,
+        0,
+        tzinfo=datetime.timezone.utc,
+    )
+    repository.save_snapshot(_build_snapshot_at(signal_time))
+    repository.save_candidate_cohorts_from_view(
+        _build_digest_view(repository.get_latest_snapshot())
+    )
+    repository.save_snapshot(
+        _build_snapshot_at(
+            signal_time + datetime.timedelta(days=3),
+            sol_price_usd=112.0,
+            btc_price_usd=104_000.0,
+            eth_price_usd=4_200.0,
+        )
+    )
+
+    outcomes = repository.resolve_due_candidate_outcomes(
+        runtime_mode='prod',
+        current_timestamp_utc=signal_time + datetime.timedelta(days=3),
+    )
+
+    stale_24h_outcomes = [
+        outcome for outcome in outcomes if outcome.outcome_window == '24h'
+    ]
+    assert len(stale_24h_outcomes) == 1
+    assert stale_24h_outcomes[0].status == 'missing'
+    assert stale_24h_outcomes[0].missing_reason == 'stale_follow_up_run'
 
 
 def test_get_coin_observation_counts_since_does_not_create_missing_db(tmp_path):

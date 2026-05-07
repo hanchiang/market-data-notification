@@ -317,6 +317,23 @@ Phase 3A table relationships:
 - `crypto_signal_candidate_cohorts` ->
   `crypto_signal_candidate_outcomes` by `cohort_id`.
 
+Crypto signal table usage:
+
+| Table | Usage | Notable columns |
+| --- | --- | --- |
+| `crypto_signal_runs` | One row per scheduled crypto signal snapshot run. | `run_timestamp_utc`, `runtime_mode`, `source_name`, sentiment fields, strongest/weakest sector fields |
+| `crypto_signal_coin_snapshots` | Per-coin facts captured for a run; these rows are the input history for operator ranking. | `run_id`, `coin_id`, `symbol`, `price_usd`, `price_change_24h`, `volume_24h`, `volume_change_pct_24h`, `is_watchlist`, `context_tags_json` |
+| `crypto_signal_market_regime_snapshots` | One BTC derivatives regime collection for a provider, venue scope, instrument scope, and interval. | `observed_at_utc`, `runtime_mode`, `provider`, `asset_symbol`, `venue_scope`, `instrument_scope`, `interval` |
+| `crypto_signal_market_regime_metrics` | Metric facts under a regime snapshot, currently BTC perpetual open interest and funding-rate values. | `snapshot_id`, `metric_name`, `metric_value`, `unit`, `source_timestamp_utc` |
+| `crypto_signal_candidate_cohorts` | Frozen private/operator candidates exactly as emitted for calibration; retry renders keep the original row immutable. | `signal_run_timestamp_utc`, `runtime_mode`, `window_label`, `section`, `coin_id`, `baseline_price_usd`, `score`, `reason_tags_json`, `market_regime_label`, `market_regime_reason` |
+| `crypto_signal_candidate_outcomes` | Pending or resolved `24h`, `3d`, and `7d` forward outcomes for each cohort. | `cohort_id`, `outcome_window`, `target_timestamp_utc`, `status`, `candidate_price_usd`, `absolute_return_pct`, `btc_relative_return_pct`, `eth_relative_return_pct`, `missing_reason` |
+
+Candidate cohorts intentionally do not store a direct `run_id` or coin-snapshot
+foreign key. They correlate back to the emitted signal run by
+`signal_run_timestamp_utc + runtime_mode`, and to the emitted coin by `coin_id`.
+That keeps the frozen operator signal independent from later follow-up runs
+while still making the baseline run and coin snapshot joinable for diagnostics.
+
 Follow-up-only calibration rows are tagged `calibration_follow_up` so collecting
 old emitted candidates for outcome coverage does not create new operator-ranked
 signals. If the same coin reappears through current spotlight or sector context,

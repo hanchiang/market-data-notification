@@ -927,6 +927,9 @@ class CryptoSignalRepository:
         view: CryptoSignalDigestView,
     ) -> list[CryptoSignalCandidateCohort]:
         cohorts = []
+        latest_coin_ids = {
+            coin.coin_id for coin in view.latest_snapshot.coins
+        }
         candidates_by_section = [
             ('strong', view.strong_candidates),
             ('weak', view.weak_candidates),
@@ -934,6 +937,12 @@ class CryptoSignalRepository:
         ]
         for section, candidates in candidates_by_section:
             for candidate in candidates:
+                if candidate.coin_id not in latest_coin_ids:
+                    # Watchlist rows can be carried from recent history for
+                    # operator continuity. Calibration needs a fresh baseline at
+                    # the signal timestamp, so stale display-only rows are not
+                    # frozen into outcome cohorts.
+                    continue
                 cohorts.append(
                     CryptoSignalCandidateCohort(
                         signal_run_timestamp_utc=view.latest_snapshot.run.run_timestamp_utc,
@@ -997,22 +1006,7 @@ class CryptoSignalRepository:
                 window_label,
                 section,
                 coin_id
-            ) DO UPDATE SET
-                symbol=excluded.symbol,
-                name=excluded.name,
-                baseline_price_usd=excluded.baseline_price_usd,
-                latest_price_change_24h=excluded.latest_price_change_24h,
-                window_price_change_pct=excluded.window_price_change_pct,
-                score=excluded.score,
-                price_persistence_score=excluded.price_persistence_score,
-                volume_confirmation_score=excluded.volume_confirmation_score,
-                attention_persistence_score=excluded.attention_persistence_score,
-                breadth_alignment_score=excluded.breadth_alignment_score,
-                observation_count=excluded.observation_count,
-                reason_tags_json=excluded.reason_tags_json,
-                flags_json=excluded.flags_json,
-                market_regime_label=excluded.market_regime_label,
-                market_regime_reason=excluded.market_regime_reason
+            ) DO NOTHING
             """,
             (
                 self._format_timestamp(cohort.signal_run_timestamp_utc),
@@ -1082,8 +1076,7 @@ class CryptoSignalRepository:
                 created_at_utc,
                 updated_at_utc
             ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (cohort_id, outcome_window) DO UPDATE SET
-                target_timestamp_utc=excluded.target_timestamp_utc
+            ON CONFLICT (cohort_id, outcome_window) DO NOTHING
             """,
             [
                 (

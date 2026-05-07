@@ -1,5 +1,6 @@
 import datetime
 import sqlite3
+from dataclasses import replace
 
 from src.service.crypto_signal.models import (
     CryptoSignalCandidate,
@@ -350,6 +351,92 @@ def test_save_candidate_cohorts_from_view_is_idempotent(tmp_path):
         ('3d', 'pending'),
         ('7d', 'pending'),
     ]
+
+
+def test_save_candidate_cohorts_from_view_keeps_original_frozen_facts_on_retry(tmp_path):
+    db_path = tmp_path / 'crypto_signal.sqlite3'
+    repository = CryptoSignalRepository(db_path=str(db_path))
+    snapshot = _build_snapshot_at(
+        datetime.datetime(2026, 5, 1, 8, 0, tzinfo=datetime.timezone.utc)
+    )
+    view = _build_digest_view(snapshot)
+    changed_view = _build_digest_view(snapshot)
+    changed_view.strong_candidates = [
+        replace(
+            changed_view.strong_candidates[0],
+            latest_price_usd=250.0,
+            score=9,
+            reason_tags=('changed-after-retry',),
+        )
+    ]
+    changed_view.market_regime_reason = 'changed regime after retry'
+
+    repository.save_candidate_cohorts_from_view(view)
+    repository.save_candidate_cohorts_from_view(changed_view)
+
+    connection = sqlite3.connect(db_path)
+    row = connection.execute(
+        """
+        SELECT baseline_price_usd, score, reason_tags_json, market_regime_reason
+        FROM crypto_signal_candidate_cohorts
+        """
+    ).fetchone()
+    connection.close()
+
+    assert row == (
+        100.0,
+        4,
+        '["price-persistence","volume-confirmation"]',
+        'OI +2.4%, avg funding -0.0028%',
+    )
+
+
+def test_save_candidate_cohorts_from_view_skips_stale_watchlist_baseline(tmp_path):
+    db_path = tmp_path / 'crypto_signal.sqlite3'
+    repository = CryptoSignalRepository(db_path=str(db_path))
+    latest_snapshot = _build_snapshot_at(
+        datetime.datetime(2026, 5, 1, 8, 0, tzinfo=datetime.timezone.utc),
+        sol_price_usd=None,
+    )
+    view = _build_digest_view(latest_snapshot)
+    view.strong_candidates = []
+    view.watchlist_candidates = [
+        CryptoSignalCandidate(
+            coin_id=5426,
+            symbol='SOL',
+            name='Solana',
+            latest_price_usd=100.0,
+            latest_volume_24h=4_820_000_000,
+            latest_price_change_24h=11.4,
+            window_price_change_pct=22.8,
+            latest_volume_change_pct_24h=27.1,
+            latest_context_tags=('watchlist',),
+            score=4,
+            price_persistence_score=2,
+            volume_confirmation_score=1,
+            attention_persistence_score=1,
+            breadth_alignment_score=0,
+            observation_count=7,
+            reason_tags=('price-persistence', 'volume-confirmation'),
+            flags=(),
+            is_watchlist=True,
+        )
+    ]
+
+    saved = repository.save_candidate_cohorts_from_view(view)
+
+    connection = sqlite3.connect(db_path)
+    cohort_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_candidate_cohorts'
+    ).fetchone()[0]
+    outcome_count = connection.execute(
+        'SELECT COUNT(*) FROM crypto_signal_candidate_outcomes'
+    ).fetchone()[0]
+    connection.close()
+
+    assert saved == []
+    assert cohort_count == 0
+    assert outcome_count == 0
 
 
 def test_get_unresolved_candidate_follow_up_entries_includes_due_but_not_future(

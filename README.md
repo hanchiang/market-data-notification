@@ -260,12 +260,12 @@ PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/stocks/stocks.py --force_r
 PYTHONPATH="$(pwd)" ENV=dev poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
 ```
 
-### Crypto Signal Phase 1
+### Crypto Signal
 
 The crypto signal feature keeps the public crypto digest unchanged while adding
 SQLite-backed history, deterministic scoring, and a separate operator-only
-signal digest. Phase 1 must stay on private/admin routing; the signal path
-rejects `CRYPTO_TELEGRAM_CHANNEL_ID` as a destination.
+signal digest. Signal output must stay on private/admin routing; the signal
+path rejects `CRYPTO_TELEGRAM_CHANNEL_ID` as a destination.
 
 Data-provider split:
 - `src/job/crypto/crypto.py` fetches live CoinMarketCap, Alternative.me, and
@@ -274,6 +274,9 @@ Data-provider split:
   SQLite history; they do not fetch fresh coin or regime provider data.
 - Run `crypto.py` first when you need fresh test-mode signal rows before
   rendering `crypto_signal_report.py`.
+- Phase 3A calibration, currently branch-local until merge/deploy, also freezes
+  emitted private-signal candidates into cohort rows and lets later scheduled
+  crypto runs resolve `24h`, `3d`, and `7d` outcomes.
 
 ```mermaid
 flowchart LR
@@ -283,7 +286,9 @@ flowchart LR
     coinalyze["Coinalyze<br/>BTC perp OI/funding"]
 
     crypto_job["src/job/crypto/crypto.py<br/>public digest + snapshot writer"]
-    sqlite[("SQLite<br/>crypto signal history")]
+    snapshots[("SQLite<br/>runs + coin snapshots")]
+    regime[("SQLite<br/>market-regime snapshots + metrics")]
+    cohorts[("SQLite<br/>candidate cohorts + outcomes")]
     signal_sender["CryptoSignalDigestMessageSender<br/>private/operator digest"]
     report["crypto_signal_report.py<br/>local report"]
     telegram["Telegram"]
@@ -292,13 +297,30 @@ flowchart LR
     alt --> crypto_job
     coinalyze -. optional market-regime .-> crypto_job
     cq -. manual route only .-> crypto_job
-    crypto_job --> sqlite
+    crypto_job --> snapshots
+    crypto_job -. optional market-regime .-> regime
+    crypto_job -. phase-3A outcome resolution .-> cohorts
     crypto_job --> telegram
-    sqlite --> signal_sender
-    sqlite --> report
+    snapshots --> signal_sender
+    regime --> signal_sender
+    signal_sender -. phase-3A cohort freeze .-> cohorts
+    snapshots --> report
+    regime --> report
     signal_sender --> telegram
     report -. optional private send .-> telegram
 ```
+
+Phase 3A table relationships:
+- `crypto_signal_runs` -> `crypto_signal_coin_snapshots` by `run_id`.
+- `crypto_signal_market_regime_snapshots` ->
+  `crypto_signal_market_regime_metrics` by `snapshot_id`.
+- `crypto_signal_candidate_cohorts` ->
+  `crypto_signal_candidate_outcomes` by `cohort_id`.
+
+Follow-up-only calibration rows are tagged `calibration_follow_up` so collecting
+old emitted candidates for outcome coverage does not create new operator-ranked
+signals. If the same coin reappears through current spotlight or sector context,
+it remains normal dynamic signal evidence.
 
 Render the latest stored signal report without sending Telegram:
 

@@ -334,6 +334,16 @@ foreign key. They correlate back to the emitted signal run by
 That keeps the frozen operator signal independent from later follow-up runs
 while still making the baseline run and coin snapshot joinable for diagnostics.
 
+Calibration intuition:
+- Cohorts answer "what did the private signal emit?" They freeze each strong,
+  weak, and watchlist row as the operator saw it.
+- Outcomes answer "what happened afterward?" Each cohort gets `24h`, `3d`, and
+  `7d` rows so later reports can compare forward returns against BTC/ETH and
+  identify useful or noisy reason tags.
+- Missing or stale follow-up data stays in the denominator through explicit
+  outcome status and `missing_reason`, instead of silently disappearing from
+  calibration.
+
 Follow-up-only calibration rows are tagged `calibration_follow_up` so collecting
 old emitted candidates for outcome coverage does not create new operator-ranked
 signals. If the same coin reappears through current spotlight or sector context,

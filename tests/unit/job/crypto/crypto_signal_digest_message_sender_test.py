@@ -91,6 +91,7 @@ class _FakeRepository:
     ):
         self.latest_snapshot = latest_snapshot
         self.history = [latest_snapshot] if history is None else history
+        self.saved_cohort_view = None
 
     def get_latest_snapshot(self):
         return self.latest_snapshot
@@ -99,6 +100,10 @@ class _FakeRepository:
         return self.history
 
     def get_market_regime_metrics(self, **_kwargs):
+        return []
+
+    def save_candidate_cohorts_from_view(self, view):
+        self.saved_cohort_view = view
         return []
 
 
@@ -134,12 +139,11 @@ async def test_format_message_builds_operator_digest(monkeypatch):
         datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc)
     )
 
-    sender = _build_sender(
-        _FakeRepository(
-            latest_snapshot,
-            history=[earlier_snapshot, latest_snapshot],
-        ),
+    repository = _FakeRepository(
+        latest_snapshot,
+        history=[earlier_snapshot, latest_snapshot],
     )
+    sender = _build_sender(repository)
 
     monkeypatch.setattr(
         'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
@@ -153,6 +157,43 @@ async def test_format_message_builds_operator_digest(monkeypatch):
     assert '*Strong 7d momentum*' in messages[0]
     assert '7d \\+22\\.82%' in messages[0]
     assert '*Watchlist*' in messages[0]
+    assert 'Solana' in messages[0]
+    assert repository.saved_cohort_view is not None
+    assert repository.saved_cohort_view.latest_snapshot == latest_snapshot
+
+
+@pytest.mark.asyncio
+async def test_format_message_fails_open_when_candidate_cohort_save_fails(
+    monkeypatch,
+):
+    earlier_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 20, 8, 45, tzinfo=datetime.timezone.utc),
+        sol_price_usd=150.0,
+    )
+    latest_snapshot = _build_snapshot(
+        datetime.datetime(2026, 4, 21, 8, 45, tzinfo=datetime.timezone.utc)
+    )
+
+    class _FailingRepository(_FakeRepository):
+        def save_candidate_cohorts_from_view(self, view):
+            raise RuntimeError('sqlite unavailable')
+
+    sender = _build_sender(
+        _FailingRepository(
+            latest_snapshot,
+            history=[earlier_snapshot, latest_snapshot],
+        )
+    )
+
+    monkeypatch.setattr(
+        'src.job.crypto.crypto_signal_digest_message_sender.get_current_datetime',
+        lambda: datetime.datetime(2026, 4, 21, 9, 0, tzinfo=datetime.timezone.utc),
+    )
+
+    messages = await sender.format_message()
+
+    assert len(messages) == 1
+    assert '*Crypto trend signal*' in messages[0]
     assert 'Solana' in messages[0]
 
 

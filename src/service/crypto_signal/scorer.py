@@ -3,6 +3,7 @@ from collections import defaultdict
 from statistics import mean
 
 from src.service.crypto_signal.models import (
+    CALIBRATION_FOLLOW_UP_CONTEXT_TAG,
     CryptoSignalCandidate,
     CryptoSignalCoinSnapshot,
     CryptoSignalDigestView,
@@ -90,6 +91,11 @@ def build_digest_view(
         candidate
         for candidate in candidates
         if candidate.score >= 2
+        and _is_operator_rankable_scope(
+            candidate=candidate,
+            tracked_universe_coin_ids=tracked_universe_coin_ids,
+            watchlist_coin_ids=watchlist_coin_ids,
+        )
         and _is_rankable_candidate(
             candidate=candidate,
             tracked_universe_coin_ids=tracked_universe_coin_ids,
@@ -101,6 +107,11 @@ def build_digest_view(
         candidate
         for candidate in candidates
         if candidate.score <= -2
+        and _is_operator_rankable_scope(
+            candidate=candidate,
+            tracked_universe_coin_ids=tracked_universe_coin_ids,
+            watchlist_coin_ids=watchlist_coin_ids,
+        )
         and _is_rankable_candidate(
             candidate=candidate,
             tracked_universe_coin_ids=tracked_universe_coin_ids,
@@ -353,6 +364,19 @@ def _is_rankable_candidate(
     return (
         candidate.latest_price_usd >= min_dynamic_price_usd
         and candidate.latest_volume_24h >= min_dynamic_volume_24h
+    )
+
+
+def _is_operator_rankable_scope(
+    candidate: CryptoSignalCandidate,
+    tracked_universe_coin_ids: set[int],
+    watchlist_coin_ids: set[int],
+) -> bool:
+    if CALIBRATION_FOLLOW_UP_CONTEXT_TAG not in candidate.latest_context_tags:
+        return True
+    return (
+        candidate.coin_id in tracked_universe_coin_ids
+        or candidate.coin_id in watchlist_coin_ids
     )
 
 

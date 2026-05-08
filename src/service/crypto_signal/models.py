@@ -2,6 +2,9 @@ import datetime
 from dataclasses import dataclass, field
 
 
+CALIBRATION_FOLLOW_UP_CONTEXT_TAG = 'calibration_follow_up'
+
+
 @dataclass(slots=True)
 class CryptoSignalRunRecord:
     run_timestamp_utc: datetime.datetime
@@ -120,3 +123,47 @@ class CryptoSignalDigestView:
     strong_candidates: list[CryptoSignalCandidate] = field(default_factory=list)
     weak_candidates: list[CryptoSignalCandidate] = field(default_factory=list)
     watchlist_candidates: list[CryptoSignalCandidate] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class CryptoSignalCandidateCohort:
+    signal_run_timestamp_utc: datetime.datetime
+    runtime_mode: str
+    window_label: str
+    section: str
+    coin_id: int
+    symbol: str
+    name: str
+    baseline_price_usd: float | None
+    latest_price_change_24h: float | None
+    window_price_change_pct: float | None
+    score: int
+    price_persistence_score: int
+    volume_confirmation_score: int
+    attention_persistence_score: int
+    breadth_alignment_score: int
+    observation_count: int
+    reason_tags: tuple[str, ...]
+    flags: tuple[str, ...]
+    market_regime_label: str
+    market_regime_reason: str
+    cohort_id: int | None = None
+    created_at_utc: datetime.datetime | None = None
+
+
+@dataclass(slots=True)
+class CryptoSignalCandidateOutcome:
+    cohort_id: int
+    outcome_window: str
+    target_timestamp_utc: datetime.datetime
+    status: str
+    candidate_price_usd: float | None = None
+    btc_price_usd: float | None = None
+    eth_price_usd: float | None = None
+    absolute_return_pct: float | None = None
+    btc_relative_return_pct: float | None = None
+    eth_relative_return_pct: float | None = None
+    missing_reason: str | None = None
+    resolved_run_timestamp_utc: datetime.datetime | None = None
+    created_at_utc: datetime.datetime | None = None
+    updated_at_utc: datetime.datetime | None = None

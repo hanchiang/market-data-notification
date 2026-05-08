@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import typing
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -12,6 +13,7 @@ from market_data_library.types import cmc_type
 
 from src.job.crypto.crypto_digest_message_sender import CryptoDigestMessageSender
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE
+from src.service.crypto_signal.models import CALIBRATION_FOLLOW_UP_CONTEXT_TAG
 from src.type.sentiment import FearGreedAverage, FearGreedData, FearGreedResult
 
 
@@ -176,6 +178,10 @@ class TestCryptoDigestMessageSender:
         sentiment_service = AsyncMock()
         signal_repository = Mock()
         signal_repository.get_coin_observation_counts_since = Mock(return_value={})
+        signal_repository.get_unresolved_candidate_follow_up_entries = Mock(
+            return_value=[]
+        )
+        signal_repository.resolve_due_candidate_outcomes = Mock(return_value=[])
         signal_repository.save_or_merge_snapshot = Mock()
         signal_backfill_service = AsyncMock()
         signal_backfill_service.build_snapshots = AsyncMock(return_value=[])
@@ -375,6 +381,98 @@ class TestCryptoDigestMessageSender:
         message_sender.signal_repository.init_schema.assert_called_once()
         message_sender.signal_repository.save_snapshot.assert_called_once()
         message_sender.signal_backfill_service.build_snapshots.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_format_message_collects_due_candidate_follow_up_entries(self):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'defi'
+        weakest_sector.title = 'DeFi'
+        weakest_sector.avgPriceChange = -4.8
+
+        message_sender = self.build_message_sender()
+        message_sender.signal_repository.get_unresolved_candidate_follow_up_entries = Mock(
+            return_value=[('RENDER', 5690)]
+        )
+        message_sender.signal_repository.get_coin_observation_counts_since = Mock(
+            return_value={1: 5, 1027: 5, 5426: 5, 5690: 5}
+        )
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 1
+        message_sender.cmc_service.get_coin_detail.assert_any_await(id=5690)
+        message_sender.cmc_service.get_coin_detail.assert_any_await(id=1)
+        message_sender.cmc_service.get_coin_detail.assert_any_await(id=1027)
+        saved_snapshot = message_sender.signal_repository.save_snapshot.call_args.args[0]
+        follow_up_coin = next(coin for coin in saved_snapshot.coins if coin.coin_id == 5690)
+        assert CALIBRATION_FOLLOW_UP_CONTEXT_TAG in follow_up_coin.context_tags
+        message_sender.signal_repository.resolve_due_candidate_outcomes.assert_called_once()
+
+    def test_follow_up_tag_keeps_current_operator_discovery_context_rankable(self):
+        message_sender = self.build_message_sender()
+        snapshot = SimpleNamespace(
+            coins=[
+                SimpleNamespace(
+                    coin_id=5690,
+                    context_tags=('spotlight_trending', 'spotlight_gainer'),
+                )
+            ]
+        )
+
+        message_sender._mark_calibration_follow_up_only_coins(
+            snapshot=snapshot,
+            candidate_follow_up_entries=[('RENDER', 5690)],
+        )
+
+        assert CALIBRATION_FOLLOW_UP_CONTEXT_TAG not in snapshot.coins[0].context_tags
+
+    @pytest.mark.asyncio
+    async def test_format_message_continues_when_candidate_outcome_resolution_fails(
+        self,
+    ):
+        strongest_sector = copy.deepcopy(self.sector_24h_change[0])
+        strongest_sector.sectorId = 'video'
+
+        weakest_sector = copy.deepcopy(self.sector_24h_change[0])
+        weakest_sector.sectorId = 'defi'
+        weakest_sector.title = 'DeFi'
+        weakest_sector.avgPriceChange = -4.8
+
+        message_sender = self.build_message_sender()
+        message_sender.signal_repository.resolve_due_candidate_outcomes = Mock(
+            side_effect=RuntimeError('database is locked')
+        )
+        message_sender.sentiment_service.get_crypto_fear_greed_index = AsyncMock(
+            return_value=self.sentiment
+        )
+        message_sender.cmc_service.get_sectors_24h_change = AsyncMock(
+            side_effect=[[strongest_sector], [weakest_sector]]
+        )
+        message_sender.cmc_service.get_spotlight = AsyncMock(return_value=self.spotlight)
+        message_sender.cmc_service.get_coin_detail = AsyncMock(return_value=self.coin_detail)
+        message_sender.cmc_service.get_sector_detail = AsyncMock(
+            side_effect=RuntimeError('403 Forbidden')
+        )
+
+        messages = await message_sender.format_message()
+
+        assert len(messages) == 1
+        assert '*Crypto market digest*' in messages[0]
+        message_sender.signal_repository.save_snapshot.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_market_regime_collection_is_disabled_by_default(self, monkeypatch):

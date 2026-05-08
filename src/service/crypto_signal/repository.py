@@ -7,7 +7,10 @@ from typing import Iterable
 from src.config import config
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.service.crypto_signal.models import (
+    CryptoSignalCandidateCohort,
+    CryptoSignalCandidateOutcome,
     CryptoSignalCoinSnapshot,
+    CryptoSignalDigestView,
     CryptoSignalMarketRegimeMetric,
     CryptoSignalMarketRegimeSnapshot,
     CryptoSignalRunRecord,
@@ -16,6 +19,17 @@ from src.service.crypto_signal.models import (
 
 
 SNAPSHOT_VERSION = 1
+BTC_COIN_ID = 1
+ETH_COIN_ID = 1027
+OUTCOME_WINDOWS = {
+    '24h': datetime.timedelta(days=1),
+    '3d': datetime.timedelta(days=3),
+    '7d': datetime.timedelta(days=7),
+}
+OUTCOME_MAX_FOLLOW_UP_LAG = datetime.timedelta(hours=12)
+OUTCOME_STATUS_PENDING = 'pending'
+OUTCOME_STATUS_RESOLVED = 'resolved'
+OUTCOME_STATUS_MISSING = 'missing'
 
 SCHEMA_DOCS = {
     'crypto_signal_metadata': {
@@ -82,6 +96,35 @@ SCHEMA_DOCS = {
         'unit': 'Metric unit, such as usd or percent.',
         'source_timestamp_utc': 'Provider source timestamp for the metric value.',
         'created_at_utc': 'UTC write timestamp for the persisted metric row.',
+    },
+    'crypto_signal_candidate_cohorts': {
+        'cohort_id': 'Synthetic emitted-candidate cohort identifier.',
+        'signal_run_timestamp_utc': 'UTC timestamp for the operator signal run.',
+        'runtime_mode': 'Runtime mode label used when the signal rendered.',
+        'window_label': 'Primary signal window used for ranking, such as 7d.',
+        'section': 'Rendered section that emitted the candidate.',
+        'coin_id': 'CMC coin identifier for the emitted candidate.',
+        'symbol': 'Candidate ticker symbol at render time.',
+        'name': 'Candidate display name at render time.',
+        'baseline_price_usd': 'Candidate price at render time.',
+        'score': 'Rendered candidate score.',
+        'reason_tags_json': 'Stable JSON array of rendered reason tags.',
+        'market_regime_label': 'Market-regime label rendered with the message.',
+        'market_regime_reason': 'Market-regime reason rendered with the message.',
+        'created_at_utc': 'UTC write timestamp for the cohort row.',
+    },
+    'crypto_signal_candidate_outcomes': {
+        'cohort_id': 'Foreign key to crypto_signal_candidate_cohorts.',
+        'outcome_window': 'Forward window such as 24h, 3d, or 7d.',
+        'target_timestamp_utc': 'UTC target timestamp for the forward outcome.',
+        'status': 'resolved or missing.',
+        'candidate_price_usd': 'Candidate price used for outcome calculation.',
+        'btc_price_usd': 'BTC benchmark price at the outcome timestamp.',
+        'eth_price_usd': 'ETH benchmark price at the outcome timestamp.',
+        'absolute_return_pct': 'Candidate forward return from baseline price.',
+        'btc_relative_return_pct': 'Candidate return minus BTC return.',
+        'eth_relative_return_pct': 'Candidate return minus ETH return.',
+        'missing_reason': 'Reason an outcome could not be resolved.',
     },
 }
 
@@ -221,6 +264,83 @@ class CryptoSignalRepository:
                 ON crypto_signal_market_regime_metrics (metric_name, source_timestamp_utc)
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crypto_signal_candidate_cohorts (
+                    cohort_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signal_run_timestamp_utc TEXT NOT NULL,
+                    runtime_mode TEXT NOT NULL,
+                    window_label TEXT NOT NULL,
+                    section TEXT NOT NULL,
+                    coin_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    baseline_price_usd REAL NULL,
+                    latest_price_change_24h REAL NULL,
+                    window_price_change_pct REAL NULL,
+                    score INTEGER NOT NULL,
+                    price_persistence_score INTEGER NOT NULL,
+                    volume_confirmation_score INTEGER NOT NULL,
+                    attention_persistence_score INTEGER NOT NULL,
+                    breadth_alignment_score INTEGER NOT NULL,
+                    observation_count INTEGER NOT NULL,
+                    reason_tags_json TEXT NOT NULL,
+                    flags_json TEXT NOT NULL,
+                    market_regime_label TEXT NOT NULL,
+                    market_regime_reason TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    UNIQUE (
+                        signal_run_timestamp_utc,
+                        runtime_mode,
+                        window_label,
+                        section,
+                        coin_id
+                    )
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_crypto_signal_candidate_cohorts_unresolved
+                ON crypto_signal_candidate_cohorts (
+                    runtime_mode,
+                    signal_run_timestamp_utc,
+                    coin_id
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crypto_signal_candidate_outcomes (
+                    cohort_id INTEGER NOT NULL,
+                    outcome_window TEXT NOT NULL,
+                    target_timestamp_utc TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    candidate_price_usd REAL NULL,
+                    btc_price_usd REAL NULL,
+                    eth_price_usd REAL NULL,
+                    absolute_return_pct REAL NULL,
+                    btc_relative_return_pct REAL NULL,
+                    eth_relative_return_pct REAL NULL,
+                    missing_reason TEXT NULL,
+                    resolved_run_timestamp_utc TEXT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    PRIMARY KEY (cohort_id, outcome_window),
+                    FOREIGN KEY (cohort_id)
+                        REFERENCES crypto_signal_candidate_cohorts(cohort_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_crypto_signal_candidate_outcomes_due
+                ON crypto_signal_candidate_outcomes (
+                    status,
+                    target_timestamp_utc
+                )
+                """
+            )
             # Current phase-1 reads filter one run via the (run_id, coin_id)
             # primary key, then sort a small per-run coin set in memory. Add a
             # (run_id, symbol, coin_id) index only if that per-run sort becomes
@@ -332,6 +452,120 @@ class CryptoSignalRepository:
             coin.run_id = run_id
             coin.created_at_utc = created_at_utc
         return snapshot
+
+    def save_candidate_cohorts_from_view(
+        self,
+        view: CryptoSignalDigestView,
+    ) -> list[CryptoSignalCandidateCohort]:
+        self.init_schema()
+        created_at_utc = self._utcnow()
+        cohorts = self._build_candidate_cohorts(view=view)
+        if len(cohorts) == 0:
+            return []
+
+        with self._connect() as connection:
+            for cohort in cohorts:
+                self._upsert_candidate_cohort(
+                    connection=connection,
+                    cohort=cohort,
+                    created_at_utc=created_at_utc,
+                )
+                cohort_id = self._select_candidate_cohort_id(
+                    connection=connection,
+                    cohort=cohort,
+                )
+                cohort.cohort_id = cohort_id
+                cohort.created_at_utc = created_at_utc
+                self._upsert_candidate_outcome_placeholders(
+                    connection=connection,
+                    cohort=cohort,
+                    created_at_utc=created_at_utc,
+                )
+            connection.commit()
+        return cohorts
+
+    def get_unresolved_candidate_follow_up_entries(
+        self,
+        runtime_mode: str,
+        current_timestamp_utc: datetime.datetime,
+    ) -> list[tuple[str, int]]:
+        if not Path(self.db_path).exists():
+            return []
+        with self._connect() as connection:
+            try:
+                rows = connection.execute(
+                    """
+                    SELECT DISTINCT cohort.symbol, cohort.coin_id
+                    FROM crypto_signal_candidate_cohorts AS cohort
+                    INNER JOIN crypto_signal_candidate_outcomes AS outcome
+                      ON outcome.cohort_id = cohort.cohort_id
+                    WHERE cohort.runtime_mode = ?
+                      AND outcome.status NOT IN (?, ?)
+                      AND outcome.target_timestamp_utc <= ?
+                    ORDER BY cohort.symbol ASC, cohort.coin_id ASC
+                    """,
+                    (
+                        runtime_mode,
+                        OUTCOME_STATUS_RESOLVED,
+                        OUTCOME_STATUS_MISSING,
+                        self._format_timestamp(current_timestamp_utc),
+                    ),
+                ).fetchall()
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error):
+                    return []
+                raise
+        return [(row['symbol'], int(row['coin_id'])) for row in rows]
+
+    def resolve_due_candidate_outcomes(
+        self,
+        runtime_mode: str,
+        current_timestamp_utc: datetime.datetime,
+    ) -> list[CryptoSignalCandidateOutcome]:
+        if not Path(self.db_path).exists():
+            return []
+        self.init_schema()
+        updated_at_utc = self._utcnow()
+
+        with self._connect() as connection:
+            due_rows = connection.execute(
+                """
+                SELECT
+                    outcome.*,
+                    cohort.signal_run_timestamp_utc,
+                    cohort.runtime_mode,
+                    cohort.coin_id,
+                    cohort.baseline_price_usd
+                FROM crypto_signal_candidate_outcomes AS outcome
+                INNER JOIN crypto_signal_candidate_cohorts AS cohort
+                  ON cohort.cohort_id = outcome.cohort_id
+                WHERE cohort.runtime_mode = ?
+                  AND outcome.status NOT IN (?, ?)
+                  AND outcome.target_timestamp_utc <= ?
+                ORDER BY outcome.target_timestamp_utc ASC, cohort.coin_id ASC
+                """,
+                (
+                    runtime_mode,
+                    OUTCOME_STATUS_RESOLVED,
+                    OUTCOME_STATUS_MISSING,
+                    self._format_timestamp(current_timestamp_utc),
+                ),
+            ).fetchall()
+            resolved_outcomes = []
+            for row in due_rows:
+                outcome = self._resolve_candidate_outcome_row(
+                    connection=connection,
+                    row=row,
+                    updated_at_utc=updated_at_utc,
+                )
+                self._update_candidate_outcome(
+                    connection=connection,
+                    outcome=outcome,
+                    updated_at_utc=updated_at_utc,
+                )
+                resolved_outcomes.append(outcome)
+            connection.commit()
+        return resolved_outcomes
 
     def save_market_regime_snapshot(
         self,
@@ -688,6 +922,395 @@ class CryptoSignalRepository:
             coins=[self._build_coin_snapshot(row) for row in coin_rows],
         )
 
+    def _build_candidate_cohorts(
+        self,
+        view: CryptoSignalDigestView,
+    ) -> list[CryptoSignalCandidateCohort]:
+        cohorts = []
+        latest_coin_ids = {
+            coin.coin_id for coin in view.latest_snapshot.coins
+        }
+        candidates_by_section = [
+            ('strong', view.strong_candidates),
+            ('weak', view.weak_candidates),
+            ('watchlist', view.watchlist_candidates),
+        ]
+        for section, candidates in candidates_by_section:
+            for candidate in candidates:
+                if candidate.coin_id not in latest_coin_ids:
+                    # Watchlist rows can be carried from recent history for
+                    # operator continuity. Calibration needs a fresh baseline at
+                    # the signal timestamp, so stale display-only rows are not
+                    # frozen into outcome cohorts.
+                    continue
+                cohorts.append(
+                    CryptoSignalCandidateCohort(
+                        signal_run_timestamp_utc=view.latest_snapshot.run.run_timestamp_utc,
+                        runtime_mode=view.latest_snapshot.run.runtime_mode,
+                        window_label=view.window_label,
+                        section=section,
+                        coin_id=candidate.coin_id,
+                        symbol=candidate.symbol,
+                        name=candidate.name,
+                        baseline_price_usd=candidate.latest_price_usd,
+                        latest_price_change_24h=candidate.latest_price_change_24h,
+                        window_price_change_pct=candidate.window_price_change_pct,
+                        score=candidate.score,
+                        price_persistence_score=candidate.price_persistence_score,
+                        volume_confirmation_score=candidate.volume_confirmation_score,
+                        attention_persistence_score=candidate.attention_persistence_score,
+                        breadth_alignment_score=candidate.breadth_alignment_score,
+                        observation_count=candidate.observation_count,
+                        reason_tags=candidate.reason_tags,
+                        flags=candidate.flags,
+                        market_regime_label=view.market_regime_label,
+                        market_regime_reason=view.market_regime_reason,
+                    )
+                )
+        return cohorts
+
+    def _upsert_candidate_cohort(
+        self,
+        connection: sqlite3.Connection,
+        cohort: CryptoSignalCandidateCohort,
+        created_at_utc: datetime.datetime,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO crypto_signal_candidate_cohorts (
+                signal_run_timestamp_utc,
+                runtime_mode,
+                window_label,
+                section,
+                coin_id,
+                symbol,
+                name,
+                baseline_price_usd,
+                latest_price_change_24h,
+                window_price_change_pct,
+                score,
+                price_persistence_score,
+                volume_confirmation_score,
+                attention_persistence_score,
+                breadth_alignment_score,
+                observation_count,
+                reason_tags_json,
+                flags_json,
+                market_regime_label,
+                market_regime_reason,
+                created_at_utc
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (
+                signal_run_timestamp_utc,
+                runtime_mode,
+                window_label,
+                section,
+                coin_id
+            ) DO NOTHING
+            """,
+            (
+                self._format_timestamp(cohort.signal_run_timestamp_utc),
+                cohort.runtime_mode,
+                cohort.window_label,
+                cohort.section,
+                cohort.coin_id,
+                cohort.symbol,
+                cohort.name,
+                cohort.baseline_price_usd,
+                cohort.latest_price_change_24h,
+                cohort.window_price_change_pct,
+                cohort.score,
+                cohort.price_persistence_score,
+                cohort.volume_confirmation_score,
+                cohort.attention_persistence_score,
+                cohort.breadth_alignment_score,
+                cohort.observation_count,
+                json.dumps(list(cohort.reason_tags), separators=(',', ':')),
+                json.dumps(list(cohort.flags), separators=(',', ':')),
+                cohort.market_regime_label,
+                cohort.market_regime_reason,
+                self._format_timestamp(created_at_utc),
+            ),
+        )
+
+    def _select_candidate_cohort_id(
+        self,
+        connection: sqlite3.Connection,
+        cohort: CryptoSignalCandidateCohort,
+    ) -> int:
+        row = connection.execute(
+            """
+            SELECT cohort_id
+            FROM crypto_signal_candidate_cohorts
+            WHERE signal_run_timestamp_utc = ?
+              AND runtime_mode = ?
+              AND window_label = ?
+              AND section = ?
+              AND coin_id = ?
+            """,
+            (
+                self._format_timestamp(cohort.signal_run_timestamp_utc),
+                cohort.runtime_mode,
+                cohort.window_label,
+                cohort.section,
+                cohort.coin_id,
+            ),
+        ).fetchone()
+        return int(row['cohort_id'])
+
+    def _upsert_candidate_outcome_placeholders(
+        self,
+        connection: sqlite3.Connection,
+        cohort: CryptoSignalCandidateCohort,
+        created_at_utc: datetime.datetime,
+    ) -> None:
+        if cohort.cohort_id is None:
+            raise ValueError('candidate cohort must be persisted before outcomes')
+        connection.executemany(
+            """
+            INSERT INTO crypto_signal_candidate_outcomes (
+                cohort_id,
+                outcome_window,
+                target_timestamp_utc,
+                status,
+                created_at_utc,
+                updated_at_utc
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (cohort_id, outcome_window) DO NOTHING
+            """,
+            [
+                (
+                    cohort.cohort_id,
+                    outcome_window,
+                    self._format_timestamp(
+                        cohort.signal_run_timestamp_utc + outcome_delta
+                    ),
+                    OUTCOME_STATUS_PENDING,
+                    self._format_timestamp(created_at_utc),
+                    self._format_timestamp(created_at_utc),
+                )
+                for outcome_window, outcome_delta in OUTCOME_WINDOWS.items()
+            ],
+        )
+
+    def _resolve_candidate_outcome_row(
+        self,
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+        updated_at_utc: datetime.datetime,
+    ) -> CryptoSignalCandidateOutcome:
+        target_timestamp_utc = self._parse_timestamp(row['target_timestamp_utc'])
+        outcome_run = self._find_first_run_at_or_after(
+            connection=connection,
+            runtime_mode=row['runtime_mode'],
+            target_timestamp_utc=target_timestamp_utc,
+        )
+        if outcome_run is None:
+            return CryptoSignalCandidateOutcome(
+                cohort_id=row['cohort_id'],
+                outcome_window=row['outcome_window'],
+                target_timestamp_utc=target_timestamp_utc,
+                status=OUTCOME_STATUS_MISSING,
+                missing_reason='missing_follow_up_run',
+                updated_at_utc=updated_at_utc,
+            )
+        resolved_run_timestamp_utc = self._parse_timestamp(
+            outcome_run['run_timestamp_utc']
+        )
+        if resolved_run_timestamp_utc - target_timestamp_utc > OUTCOME_MAX_FOLLOW_UP_LAG:
+            return CryptoSignalCandidateOutcome(
+                cohort_id=row['cohort_id'],
+                outcome_window=row['outcome_window'],
+                target_timestamp_utc=target_timestamp_utc,
+                status=OUTCOME_STATUS_MISSING,
+                missing_reason='stale_follow_up_run',
+                resolved_run_timestamp_utc=resolved_run_timestamp_utc,
+                updated_at_utc=updated_at_utc,
+            )
+
+        prices = self._get_prices_for_run(
+            connection=connection,
+            run_id=int(outcome_run['run_id']),
+            coin_ids=[int(row['coin_id']), BTC_COIN_ID, ETH_COIN_ID],
+        )
+        baseline_price_usd = row['baseline_price_usd']
+        candidate_price_usd = prices.get(int(row['coin_id']))
+        btc_price_usd = prices.get(BTC_COIN_ID)
+        eth_price_usd = prices.get(ETH_COIN_ID)
+        baseline_run = self._find_run_by_timestamp(
+            connection=connection,
+            runtime_mode=row['runtime_mode'],
+            run_timestamp_utc=self._parse_timestamp(row['signal_run_timestamp_utc']),
+        )
+        baseline_prices = (
+            {}
+            if baseline_run is None
+            else self._get_prices_for_run(
+                connection=connection,
+                run_id=int(baseline_run['run_id']),
+                coin_ids=[BTC_COIN_ID, ETH_COIN_ID],
+            )
+        )
+        btc_baseline_price_usd = baseline_prices.get(BTC_COIN_ID)
+        eth_baseline_price_usd = baseline_prices.get(ETH_COIN_ID)
+
+        missing_reasons = []
+        if baseline_price_usd is None:
+            missing_reasons.append('missing_candidate_baseline_price')
+        if candidate_price_usd is None:
+            missing_reasons.append('missing_candidate_follow_up_price')
+        if btc_baseline_price_usd is None or btc_price_usd is None:
+            missing_reasons.append('missing_btc_benchmark_price')
+        if eth_baseline_price_usd is None or eth_price_usd is None:
+            missing_reasons.append('missing_eth_benchmark_price')
+        if missing_reasons:
+            return CryptoSignalCandidateOutcome(
+                cohort_id=row['cohort_id'],
+                outcome_window=row['outcome_window'],
+                target_timestamp_utc=target_timestamp_utc,
+                status=OUTCOME_STATUS_MISSING,
+                candidate_price_usd=candidate_price_usd,
+                btc_price_usd=btc_price_usd,
+                eth_price_usd=eth_price_usd,
+                missing_reason=','.join(missing_reasons),
+                resolved_run_timestamp_utc=resolved_run_timestamp_utc,
+                updated_at_utc=updated_at_utc,
+            )
+
+        absolute_return_pct = _calculate_return_pct(
+            baseline_price_usd,
+            candidate_price_usd,
+        )
+        btc_return_pct = _calculate_return_pct(
+            btc_baseline_price_usd,
+            btc_price_usd,
+        )
+        eth_return_pct = _calculate_return_pct(
+            eth_baseline_price_usd,
+            eth_price_usd,
+        )
+        return CryptoSignalCandidateOutcome(
+            cohort_id=row['cohort_id'],
+            outcome_window=row['outcome_window'],
+            target_timestamp_utc=target_timestamp_utc,
+            status=OUTCOME_STATUS_RESOLVED,
+            candidate_price_usd=candidate_price_usd,
+            btc_price_usd=btc_price_usd,
+            eth_price_usd=eth_price_usd,
+            absolute_return_pct=absolute_return_pct,
+            btc_relative_return_pct=(
+                None
+                if absolute_return_pct is None or btc_return_pct is None
+                else absolute_return_pct - btc_return_pct
+            ),
+            eth_relative_return_pct=(
+                None
+                if absolute_return_pct is None or eth_return_pct is None
+                else absolute_return_pct - eth_return_pct
+            ),
+            resolved_run_timestamp_utc=resolved_run_timestamp_utc,
+            updated_at_utc=updated_at_utc,
+        )
+
+    def _update_candidate_outcome(
+        self,
+        connection: sqlite3.Connection,
+        outcome: CryptoSignalCandidateOutcome,
+        updated_at_utc: datetime.datetime,
+    ) -> None:
+        connection.execute(
+            """
+            UPDATE crypto_signal_candidate_outcomes
+            SET status = ?,
+                candidate_price_usd = ?,
+                btc_price_usd = ?,
+                eth_price_usd = ?,
+                absolute_return_pct = ?,
+                btc_relative_return_pct = ?,
+                eth_relative_return_pct = ?,
+                missing_reason = ?,
+                resolved_run_timestamp_utc = ?,
+                updated_at_utc = ?
+            WHERE cohort_id = ?
+              AND outcome_window = ?
+            """,
+            (
+                outcome.status,
+                outcome.candidate_price_usd,
+                outcome.btc_price_usd,
+                outcome.eth_price_usd,
+                outcome.absolute_return_pct,
+                outcome.btc_relative_return_pct,
+                outcome.eth_relative_return_pct,
+                outcome.missing_reason,
+                (
+                    None
+                    if outcome.resolved_run_timestamp_utc is None
+                    else self._format_timestamp(outcome.resolved_run_timestamp_utc)
+                ),
+                self._format_timestamp(updated_at_utc),
+                outcome.cohort_id,
+                outcome.outcome_window,
+            ),
+        )
+
+    def _find_first_run_at_or_after(
+        self,
+        connection: sqlite3.Connection,
+        runtime_mode: str,
+        target_timestamp_utc: datetime.datetime,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT *
+            FROM crypto_signal_runs
+            WHERE runtime_mode = ?
+              AND run_timestamp_utc >= ?
+            ORDER BY run_timestamp_utc ASC
+            LIMIT 1
+            """,
+            (runtime_mode, self._format_timestamp(target_timestamp_utc)),
+        ).fetchone()
+
+    def _find_run_by_timestamp(
+        self,
+        connection: sqlite3.Connection,
+        runtime_mode: str,
+        run_timestamp_utc: datetime.datetime,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT *
+            FROM crypto_signal_runs
+            WHERE runtime_mode = ?
+              AND run_timestamp_utc = ?
+            LIMIT 1
+            """,
+            (runtime_mode, self._format_timestamp(run_timestamp_utc)),
+        ).fetchone()
+
+    def _get_prices_for_run(
+        self,
+        connection: sqlite3.Connection,
+        run_id: int,
+        coin_ids: list[int],
+    ) -> dict[int, float]:
+        placeholders = ','.join('?' for _ in coin_ids)
+        rows = connection.execute(
+            f"""
+            SELECT coin_id, price_usd
+            FROM crypto_signal_coin_snapshots
+            WHERE run_id = ?
+              AND coin_id IN ({placeholders})
+              AND price_usd IS NOT NULL
+            """,
+            [run_id, *coin_ids],
+        ).fetchall()
+        return {
+            int(row['coin_id']): float(row['price_usd'])
+            for row in rows
+        }
+
     def _build_run_record(self, row: sqlite3.Row) -> CryptoSignalRunRecord:
         return CryptoSignalRunRecord(
             run_id=row['run_id'],
@@ -848,6 +1471,17 @@ def _market_regime_row_version_key(row: sqlite3.Row) -> tuple[str, str, int]:
         row['created_at_utc'],
         int(row['snapshot_id']),
     )
+
+
+def _calculate_return_pct(
+    baseline_price_usd: float | None,
+    outcome_price_usd: float | None,
+) -> float | None:
+    if baseline_price_usd is None or outcome_price_usd is None:
+        return None
+    if baseline_price_usd == 0:
+        return None
+    return ((outcome_price_usd - baseline_price_usd) / baseline_price_usd) * 100
 
 
 def iter_snapshot_coin_ids(

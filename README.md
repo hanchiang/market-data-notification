@@ -495,7 +495,7 @@ docker logs redis
 
 - Contribution and implementation notes: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Example messages: [examples/MESSAGES.md](examples/MESSAGES.md)
-- Workspace design note on test-mode runtime state: [../docs/design/test-mode-runtime-state.md](../docs/design/test-mode-runtime-state.md)
+- Workspace design note on test-mode runtime state: [../docs/design/2026-04-03-test-mode-runtime-state.md](../docs/design/2026-04-03-test-mode-runtime-state.md)
 - Workspace trace for local TradingView replay: [../docs/traces/2026-03-26-local-backend-testing-dev-telegram.md](../docs/traces/2026-03-26-local-backend-testing-dev-telegram.md)
 
 ## CI And Deployment

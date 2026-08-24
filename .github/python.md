@@ -328,5 +328,5 @@ Is there a performance issue?
 
 **See also:**
 - [project.md](./project.md) for real-time performance budgets and optimization strategies
-- [copilot-instructions.md](./copilot-instructions.md) for universal best practices
+- `AGENTS.md` at the repo root for this repo's actual engineering rules
 - [README.md](./README.md) for guidance navigation

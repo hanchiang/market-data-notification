@@ -1,6 +1,6 @@
 # Market Data Notification Backend: Engineering Practices & Project Guide
 
-This document provides project-specific engineering practices, architecture notes, and useful information for Copilot and contributors. It supplements universal best practices in `copilot-instructions.md`.
+This document provides project-specific engineering practices, architecture notes, and useful information for Copilot and contributors. General engineering rules live in `AGENTS.md` at the repo root.
 
 ---
 
@@ -137,14 +137,14 @@ See `README.md` for a full directory tree and component breakdown.
 - Cache expensive operations in Redis
 - Follow message sender pattern for notifications
 - Use test mode for development and CI
-- Reference `copilot-instructions.md` for universal best practices
+- Reference `AGENTS.md` for this repo's engineering rules
 
 ---
 
 ## 🗂️ Useful References
 
 - [README.md](../README.md): Setup, architecture, workflows
-- [copilot-instructions.md](copilot-instructions.md): Universal engineering practices
+- [AGENTS.md](../AGENTS.md): this repo's engineering rules
 - [CONTRIBUTING.md](../CONTRIBUTING.md): Data source and feature contribution
 - [pyproject.toml](../pyproject.toml): Dependencies and tooling
 

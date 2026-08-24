@@ -1,6 +1,6 @@
 # market-data-notification-backend Agent Guide
 
-Last verified: 2026-04-02
+Last verified: 2026-08-24
 
 ## Scope
 - Applies to `market-data-notification-backend/` unless a deeper `AGENTS.md` overrides it.
@@ -19,6 +19,8 @@ Last verified: 2026-04-02
 - `src/router/`: API and webhook entry points.
 - `src/service/`: business logic and transformation layer.
 - `src/job/`: scheduled notification workflows.
+- `src/dependencies.py`: dependency-injection container; what `src/server.py` startup actually builds.
+- `src/event/event_emitter.py`: async event dispatch, so a job's effects are not always visible at its call site.
 - `src/notification_destination/telegram_notification.py`: Telegram delivery path.
 - `tests/unit/`: primary validation surface.
 
@@ -27,7 +29,7 @@ Last verified: 2026-04-02
 - Avoid live sends by default. Use fixtures, explicit `--test_mode=1` job paths, or runtime-mode-aware tests when validating message logic.
 - Check the shared library dependency before assuming local `market-data-library/` edits are in use. `pyproject.toml` currently pins the library from git.
 - `local-build-push-dockerfile.sh` is a local helper, not the canonical build contract. Keep tracked docs and workflows authoritative for container build and dependency-auth behavior.
-- Be careful with startup side effects in `src/server.py`; app startup initializes dependencies, Redis, Telegram bots, and the shared market data clients.
+- Be careful with startup side effects in `src/server.py`; app startup initializes dependencies, Redis, Telegram bots, and the shared market data clients. The wiring itself lives in `src/dependencies.py`.
 
 ## Validation
 - Use workspace `EVALS.md` as the default validation matrix for this repo.

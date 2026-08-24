@@ -82,6 +82,8 @@ src/job/crypto/crypto_signal_report.py   Local crypto signal report entry point
 src/service/crypto_signal/               Crypto signal persistence and scoring
 src/notification_destination/telegram_notification.py
 src/config/config.py                     Environment contract
+src/dependencies.py                      Dependency-injection container built at startup
+src/event/event_emitter.py               Async event dispatch between jobs and services
 tests/unit/                              Main unit test surface
 sample-data/                             TradingView replay payloads
 scripts/                                 Local helper scripts

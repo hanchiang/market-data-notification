@@ -485,14 +485,33 @@ def test_backfill_main_routes_every_step_to_the_archive_endpoint(
     # at zero at each step boundary, which is exactly where a burst above the
     # intended CU/s rate would slip through unaccounted for.
     assert len(_FakeEndpointClient.instances) == 1
+    # The endpoint alone isn't the whole routing decision: `EvmClient(archive,
+    # public_rpc_budget())` would carry the right endpoint and the wrong
+    # budget -- request-rate pacing against a compute-unit-billed account --
+    # and every assertion above would still pass. `EndpointBudget` carries its
+    # own `endpoint_kind`, so the pairing is checkable independently of what
+    # `.endpoint` says.
+    assert _FakeEndpointClient.instances[0].budget.endpoint_kind == 'alchemy'
 
 
 def test_backfill_main_returns_early_when_the_archive_endpoint_is_unconfigured(
-    monkeypatch,
+    monkeypatch, database_url,
 ):
     """The archive-endpoint check must still gate the run: since every step now
     depends on that endpoint, a missing key can no longer be a partial-failure
-    mode -- it has to stop before touching the database or any client."""
+    mode -- it has to stop before touching the database or any client.
+
+    `get_project_monitor_database_url` is monkeypatched to the test database
+    too (as the sibling routing test does): without it, a regression that
+    removed this gate would make `main()` fall through to the DEFAULT
+    (production/dev) database URL and commit a `run` row there before ever
+    reaching a client -- dirtying the operator's dev store in exactly the
+    case this test exists to catch.
+    """
     monkeypatch.setattr(backfill, 'get_archive_endpoint', lambda: None)
+    monkeypatch.setattr(
+        backfill, 'get_project_monitor_database_url',
+        lambda runtime_mode: database_url,
+    )
     result = asyncio.run(backfill.main([1, 2, 3, 4]))
     assert result == 1

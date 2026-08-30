@@ -125,7 +125,11 @@ PUBLIC_STATE_BLOCK_WINDOW = 5000
 # module docstring), whose real per-call block-range cap is undocumented for
 # this chain -- this is only ever a starting point there too: `fetch_window`
 # halves on the first refusal, down to `MIN_LOG_WINDOW_BLOCKS`, so a wrong
-# starting width costs one wasted call per query, not a wrong result.
+# starting width costs one wasted call PER HALVING, not a wrong result. From
+# this constant, descending to a ~10k real cap costs about eight refused
+# calls per query-run; descending all the way to the floor costs about
+# eleven -- immaterial next to the tens of thousands of calls a full sweep
+# issues, which is why this is left as a starting point rather than tuned.
 MAX_LOG_WINDOW_BLOCKS = 1_500_000
 
 

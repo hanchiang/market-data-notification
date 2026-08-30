@@ -217,6 +217,78 @@ def test_a_programming_error_is_not_treated_as_an_endpoint_failure(monkeypatch):
     assert calls == ['alchemy'], 'no fallback attempt for a programming error'
 
 
+class _FakeLogClient:
+    """Records the `Endpoint` and budget the log-window client was actually
+    constructed with. `logs.py`'s module docstring now states a universal --
+    the live job's log client never touches the metered endpoint -- and a
+    universal needs a check at the boundary it names or it only holds until
+    the next edit silently moves it: metered billing on an hourly job, with no
+    symptom until an invoice arrives."""
+
+    instances = []
+
+    def __init__(self, endpoint, budget):
+        self.endpoint = endpoint
+        self.budget = budget
+        _FakeLogClient.instances.append(self)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+def test_run_sample_builds_the_log_window_client_on_the_public_endpoint(
+    monkeypatch,
+):
+    """P1-1 (review of 49a827d, which routed BACKFILL's log plane to the
+    archive endpoint). The live job's log-window client must not follow it.
+    Runs the archive-succeeds state path (`_read_state_on` returns as if
+    'alchemy' served the state plan) and still asserts the LOG client landed
+    on 'public' with `public_rpc_budget()` -- the state plane's endpoint
+    choice must never leak into the log plane's, which is exactly the
+    regression a shared-variable refactor could introduce with no other
+    visible symptom.
+    """
+    _FakeLogClient.instances.clear()
+
+    async def fake_read_state_on(endpoint, budget, repository):
+        return _fake_sample(500), 500
+
+    monkeypatch.setattr(record_job, '_read_state_on', fake_read_state_on)
+    monkeypatch.setattr(
+        record_job, 'get_archive_endpoint',
+        lambda: Endpoint(kind='alchemy', url='https://example.invalid/k'),
+    )
+    monkeypatch.setattr(
+        record_job.recorder, 'resolve_window_start', lambda *a, **k: (400, None)
+    )
+    monkeypatch.setattr(record_job, 'EvmClient', _FakeLogClient)
+
+    async def fake_window(client, *args, **kwargs):
+        return {'raw_responses': [], 'mints': [], 'flows': [], 'events': [],
+                'boundaries': [], 'queries': []}
+
+    monkeypatch.setattr(record_job.recorder, 'read_log_window', fake_window)
+    monkeypatch.setattr(record_job.recorder, 'commit_sample', lambda *a, **k: 1)
+
+    asyncio.run(
+        record_job.run_sample(
+            None, 1, runtime_mode=RuntimeMode.from_test_mode(False), progress={}
+        )
+    )
+
+    # `record_job.EvmClient` was patched globally, so if the state plane had
+    # ALSO gone through it (rather than through the monkeypatched
+    # `_read_state_on`), it would show up here too -- this is the one and
+    # only client the log plane built.
+    assert len(_FakeLogClient.instances) == 1
+    log_client = _FakeLogClient.instances[0]
+    assert log_client.endpoint.kind == 'public'
+    assert log_client.budget.endpoint_kind == 'public'
+
+
 def _patch_entrypoint(monkeypatch, repository, database_url):
     """Point `main()` at the test database and silence the alert send."""
     monkeypatch.setattr(

@@ -121,15 +121,15 @@ BLOCKS_PER_HOUR = int(BLOCKS_PER_SECOND * 3600)  # 35,632
 PUBLIC_STATE_BLOCK_WINDOW = 5000
 
 # 1.5M-block eth_getLogs windows succeeded on the public RPC; 2M were rejected.
-# Backfill now issues its log queries against Alchemy instead (see logs.py's
-# module docstring), whose real per-call block-range cap is undocumented for
-# this chain -- this is only ever a starting point there too: `fetch_window`
-# halves on the first refusal, down to `MIN_LOG_WINDOW_BLOCKS`, so a wrong
-# starting width costs one wasted call PER HALVING, not a wrong result. From
-# this constant, descending to a ~10k real cap costs about eight refused
-# calls per query-run; descending all the way to the floor costs about
-# eleven -- immaterial next to the tens of thousands of calls a full sweep
-# issues, which is why this is left as a starting point rather than tuned.
+# Both callers -- the live job and the backfill -- issue their log queries there
+# (the keyed endpoint's free tier caps `eth_getLogs` at ten blocks; see logs.py's
+# module docstring). This is a STARTING width, not a limit: the public endpoint
+# refuses on scan cost rather than block count, so `fetch_window` halves down to
+# whatever the local density serves and widens back afterwards. A starting width
+# that is too wide for the current region costs one refused call per halving --
+# about eleven to reach the floor from here -- against the tens of thousands of
+# calls a full sweep issues, which is why it is left as a starting point rather
+# than tuned.
 MAX_LOG_WINDOW_BLOCKS = 1_500_000
 
 

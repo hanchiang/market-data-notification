@@ -381,7 +381,15 @@ def test_step_log_history_re_run_does_not_duplicate_raw_responses(
 ):
     """A backfill that dies halfway is re-run, not unwound (module docstring).
     Re-issuing the same step-3 calls must not double the raw-response rows --
-    the same guarantee `(tx_hash, log_index)` gives mint/flow/event."""
+    the same guarantee `(tx_hash, log_index)` gives mint/flow/event.
+
+    The watermark now short-circuits a PLAIN re-run, so it is rewound between
+    the two runs to keep this test pointed at the `ON CONFLICT DO NOTHING`
+    guarantee rather than at the watermark. That guarantee is still the
+    backstop: the watermark is committed AFTER the inserts, so a crash between
+    the two re-fetches the segment, and adjacent segments can overlap whenever
+    an operator resets the watermark by hand.
+    """
     repository.set_project_value(PROJECT, 'launch_block', '100')
 
     async def fake_read_log_window(
@@ -392,6 +400,13 @@ def test_step_log_history_re_run_does_not_duplicate_raw_responses(
 
     monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
     first = asyncio.run(backfill.step_log_history(repository, None, 999))
+
+    # A plain re-run does no work at all now: the watermark says the range is
+    # already covered.
+    untouched = asyncio.run(backfill.step_log_history(repository, None, 999))
+    assert 'over 0 segments' in untouched, untouched
+
+    repository.set_project_value(PROJECT, backfill.LOG_HISTORY_WATERMARK_KEY, '99')
     second = asyncio.run(backfill.step_log_history(repository, None, 999))
 
     assert '+2 raw log responses' in first, first
@@ -400,6 +415,140 @@ def test_step_log_history_re_run_does_not_duplicate_raw_responses(
         'SELECT count(*) AS n FROM backfill_log_raw_response WHERE project = %s',
         (PROJECT,),
     )[0]['n'] == 2
+
+
+def _segment_window(project_name, from_block, to_block):
+    """A one-row-per-table window whose rows are keyed to ITS OWN segment, so a
+    segment's contribution to the store is distinguishable from another's."""
+    window = _fake_window(project_name, hex(from_block), hex(to_block))
+    for key in ('mints', 'flows', 'events'):
+        for row in window[key]:
+            row['block'] = from_block
+            row['tx_hash'] = f'0x{from_block:x}'
+    return window
+
+
+def test_step_log_history_commits_a_watermark_per_segment_and_resumes_from_it(
+    repository, monkeypatch,
+):
+    """The 2026-08-30 loss, and the operator ruling of 2026-08-31. That run
+    swept ~50M blocks as ONE unit, hit a Cloudflare interstitial after ~36
+    minutes, and committed nothing -- correct under AC7 as it stood, and a
+    total loss of the work. At the request pace the public endpoint tolerates a
+    full sweep runs for hours, so the run cannot be the unit of atomicity.
+
+    Two halves, both asserted: a completed segment survives a LATER segment's
+    failure, and the re-run starts at the watermark rather than at the launch
+    block. The second half is what makes this more than a commit-more-often
+    change -- resuming is the point, and a version that committed per segment
+    but still recomputed `from_block` from `launch_block` would pass the first
+    half alone.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+    seen = []
+
+    async def failing_read(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        seen.append((from_block, to_block))
+        if from_block == 1000:
+            raise RuntimeError('the endpoint stopped serving mid-sweep')
+        return _segment_window(project_name, from_block, to_block)
+
+    monkeypatch.setattr(recorder, 'read_log_window', failing_read)
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            backfill.step_log_history(repository, None, 2999, segment_blocks=1000)
+        )
+
+    assert seen == [(0, 999), (1000, 1999)]
+    assert repository.get_project_value(
+        PROJECT, backfill.LOG_HISTORY_WATERMARK_KEY
+    ) == '999'
+    # Segment 1's rows survived segment 2's failure -- the whole point.
+    assert [r['block'] for r in repository.fetch_all(
+        'SELECT block FROM mint WHERE project = %s ORDER BY block', (PROJECT,)
+    )] == [0]
+    # ...and the sweep is not marked finished, because it is not.
+    assert repository.get_project_value(PROJECT, 'cursor_origin') is None
+
+    seen.clear()
+
+    async def working_read(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        seen.append((from_block, to_block))
+        return _segment_window(project_name, from_block, to_block)
+
+    monkeypatch.setattr(recorder, 'read_log_window', working_read)
+    result = asyncio.run(
+        backfill.step_log_history(repository, None, 2999, segment_blocks=1000)
+    )
+
+    # Resumed at the watermark. Segment 1 is NOT re-fetched: on a real sweep
+    # that is the difference between minutes and hours of repeated work.
+    assert seen == [(1000, 1999), (2000, 2999)]
+    assert 'over 2 segments' in result, result
+    assert [r['block'] for r in repository.fetch_all(
+        'SELECT block FROM mint WHERE project = %s ORDER BY block', (PROJECT,)
+    )] == [0, 1000, 2000]
+    assert repository.get_project_value(PROJECT, 'cursor_origin') == '2999'
+
+
+def test_a_segment_that_fails_part_way_writes_none_of_its_own_rows(
+    repository, monkeypatch,
+):
+    """AC7 inside the segment, which the operator's ruling explicitly left
+    binding: the watermark moves the unit of atomicity from the run to the
+    segment, it does not weaken what atomicity means.
+
+    The failure is placed BETWEEN two writes of the same segment -- after its
+    mints are inserted, before its events are -- because that is the only way
+    a half-written segment can arise. A failure in `read_log_window`, which the
+    resume test uses, happens before any write and so cannot tell a rolled-back
+    segment from one that never started.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def read(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        return _segment_window(project_name, from_block, to_block)
+
+    real_insert_events = repository.insert_events
+
+    def insert_events_failing_on_the_second_segment(rows):
+        prepared = list(rows)
+        if prepared and prepared[0]['block'] == 1000:
+            raise RuntimeError('the store rejected the write')
+        return real_insert_events(prepared)
+
+    monkeypatch.setattr(recorder, 'read_log_window', read)
+    monkeypatch.setattr(
+        repository, 'insert_events', insert_events_failing_on_the_second_segment
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            backfill.step_log_history(repository, None, 1999, segment_blocks=1000)
+        )
+
+    # Segment 2's mints were inserted before the failure and must be gone.
+    # Segment 1's must not be: rolling the whole run back would reintroduce
+    # exactly the loss the watermark exists to prevent.
+    assert [r['block'] for r in repository.fetch_all(
+        'SELECT block FROM mint WHERE project = %s ORDER BY block', (PROJECT,)
+    )] == [0]
+    assert [r['block'] for r in repository.fetch_all(
+        'SELECT block FROM flow WHERE project = %s ORDER BY block', (PROJECT,)
+    )] == [0]
+    # The watermark stayed on segment 1, so the re-run repeats segment 2 and
+    # nothing already done.
+    assert repository.get_project_value(
+        PROJECT, backfill.LOG_HISTORY_WATERMARK_KEY
+    ) == '999'
 
 
 class _FakeEndpointClient:
@@ -425,37 +574,44 @@ class _FakeEndpointClient:
         return 12_345, {'result': '0x3039'}
 
 
-def test_backfill_main_routes_every_step_to_the_archive_endpoint(
+def test_backfill_main_splits_the_state_and_log_planes_across_two_endpoints(
     monkeypatch, database_url,
 ):
-    """The public RPC's bot protection killed a real full-history sweep after
-    ~36 minutes (Cloudflare interstitial, HTTP 403, 2026-08-30 run log); the
-    keyed Alchemy endpoint was verified the same night to have full archive
-    depth. All four backfill steps must build their client on THAT endpoint
-    now, not just steps 1 and 4 as before.
+    """The routing this job's whole failure history has turned on.
 
-    Asserts the actual `endpoint.kind` each step's client was constructed
-    with, not merely that the run completed -- a stub client with no real
-    `.endpoint` attribute, or one still defaulting to 'public', would pass a
-    weaker test that only checked for a clean exit code.
+    Steps 1 and 4 read STATE at archive depth, which only the keyed endpoint
+    serves. Steps 2 and 3 read LOGS, which the keyed endpoint's FREE tier
+    refuses beyond a ten-block range -- measured 2026-08-31 at four spans, all
+    HTTP 400 / -32600 "you can make eth_getLogs requests with up to a 10 block
+    range". Ten is two orders below `MIN_LOG_WINDOW_BLOCKS`, so a log step
+    routed to the keyed endpoint does not degrade, it fails on its first call.
+    The 2026-08-30 reroute sent all four steps there and this test asserted
+    exactly that; it is inverted here rather than deleted, because the pin is
+    the same one and only the correct answer moved.
+
+    Asserts the actual `endpoint.kind` each step's client carries, not merely a
+    clean exit -- and the BUDGET alongside it, because `EvmClient(public,
+    alchemy_budget())` would carry the right endpoint with compute-unit pacing
+    against an endpoint that bills requests, and every endpoint assertion would
+    still pass.
     """
     _FakeEndpointClient.instances.clear()
-    seen_kinds = {}
+    seen = {}
 
     async def fake_step_deploy_blocks(repository, client, head):
-        seen_kinds['step1'] = client.endpoint.kind
+        seen['step1'] = client
         return 'step 1: ok'
 
     async def fake_step_epoch_boundaries(repository, client, head):
-        seen_kinds['step2'] = client.endpoint.kind
+        seen['step2'] = client
         return 'step 2: ok'
 
     async def fake_step_log_history(repository, client, head):
-        seen_kinds['step3'] = client.endpoint.kind
+        seen['step3'] = client
         return 'step 3: ok'
 
     async def fake_step_epoch_samples(repository, client, run_id, max_samples):
-        seen_kinds['step4'] = client.endpoint.kind
+        seen['step4'] = client
         return 'step 4: ok'
 
     monkeypatch.setattr(backfill, 'step_deploy_blocks', fake_step_deploy_blocks)
@@ -477,21 +633,20 @@ def test_backfill_main_routes_every_step_to_the_archive_endpoint(
     result = asyncio.run(backfill.main([1, 2, 3, 4]))
 
     assert result == 0
-    assert seen_kinds == {
-        'step1': 'alchemy', 'step2': 'alchemy', 'step3': 'alchemy', 'step4': 'alchemy',
+    assert {name: c.endpoint.kind for name, c in seen.items()} == {
+        'step1': 'alchemy', 'step2': 'public', 'step3': 'public', 'step4': 'alchemy',
     }
-    # One shared client for the whole run, not a fresh one per step: a fresh
-    # `alchemy_budget()` per step would restart its rolling rate-limit window
-    # at zero at each step boundary, which is exactly where a burst above the
-    # intended CU/s rate would slip through unaccounted for.
-    assert len(_FakeEndpointClient.instances) == 1
-    # The endpoint alone isn't the whole routing decision: `EvmClient(archive,
-    # public_rpc_budget())` would carry the right endpoint and the wrong
-    # budget -- request-rate pacing against a compute-unit-billed account --
-    # and every assertion above would still pass. `EndpointBudget` carries its
-    # own `endpoint_kind`, so the pairing is checkable independently of what
-    # `.endpoint` says.
-    assert _FakeEndpointClient.instances[0].budget.endpoint_kind == 'alchemy'
+    assert {name: c.budget.endpoint_kind for name, c in seen.items()} == {
+        'step1': 'alchemy', 'step2': 'public', 'step3': 'public', 'step4': 'alchemy',
+    }
+    # Two clients, one per endpoint -- not one per step. A fresh `EvmClient`
+    # restarts its budget's rolling window at zero, so a per-step client would
+    # let a burst above the intended rate through at every step boundary. Steps
+    # 1 and 4 must therefore be the SAME object, and so must 2 and 3.
+    assert len(_FakeEndpointClient.instances) == 2
+    assert seen['step1'] is seen['step4']
+    assert seen['step2'] is seen['step3']
+    assert seen['step1'] is not seen['step2']
 
 
 def test_backfill_main_returns_early_when_the_archive_endpoint_is_unconfigured(

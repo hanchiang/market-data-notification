@@ -3,15 +3,19 @@
 Run by hand, never scheduled. Paced through the same budgets as live reads and
 holding the same advisory lock, so backfill and a live run never overlap.
 
-All four steps go over the keyed archive endpoint (`alchemy_budget()`), state
-and logs alike -- see `logs.py`'s module docstring for why the log plane moved
-off the public RPC here. This is backfill-only: `record.py`'s live job still
-reads its small recent log window from the public endpoint, which is free and
-was never the thing that broke.
+Two endpoints, split by plane. Steps 1 and 4 read STATE at archive depth, which
+only the keyed endpoint serves, so they go there on `alchemy_budget()`. Steps 2
+and 3 read LOGS, which the keyed endpoint's free tier refuses beyond a ten-block
+range, so they go to the public RPC on `public_rpc_budget()` -- see `logs.py`'s
+module docstring for the measurement. One client per endpoint, not one per step:
+a fresh `EvmClient` restarts its budget's rolling window at zero, so a per-step
+client could burst above the intended rate at every step boundary.
 
-Resumable by construction: each step writes what it found before the next
-starts, and step 4 skips a boundary that already has a backfill sample. A
-backfill that dies halfway is re-run, not unwound.
+Resumable by construction. Step 1 writes what it found before step 2 starts,
+step 4 skips a boundary that already has a backfill sample, and step 3 commits a
+watermark per segment so an interrupted sweep resumes where it stopped rather
+than at block zero -- the 2026-08-30 run lost 36 minutes of work for want of
+that. A backfill that dies halfway is re-run, not unwound.
 
 Usage:
   PYTHONPATH="$(pwd)" poetry run python src/job/project_monitor/backfill.py --steps 1,2,3,4
@@ -21,7 +25,11 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from market_data_library.core.onchain.evm import EvmClient, alchemy_budget
+from market_data_library.core.onchain.evm import (
+    EvmClient,
+    alchemy_budget,
+    public_rpc_budget,
+)
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.project_monitor import logs as log_plane
@@ -30,6 +38,7 @@ from src.service.project_monitor.config import (
     NETNET,
     get_archive_endpoint,
     get_project_monitor_database_url,
+    get_public_endpoint,
 )
 from src.service.project_monitor.read_plan import build_read_plan
 from src.service.project_monitor.repository import ProjectMonitorRepository
@@ -37,6 +46,31 @@ from src.service.project_monitor.repository import ProjectMonitorRepository
 logger = logging.getLogger('Project monitor backfill')
 
 JOB_NAME = 'project_monitor.backfill'
+
+# Step 3's resume key. The block through which log history is COMMITTED, so a
+# re-run starts at watermark + 1.
+LOG_HISTORY_WATERMARK_KEY = 'log_history_watermark'
+
+# How much of the chain one step-3 segment covers. UNMEASURED against a full
+# sweep -- no sweep has ever finished -- so this is a judgement between two
+# costs, stated rather than implied.
+#
+# Larger segments waste less: a segment narrower than `MAX_LOG_WINDOW_BLOCKS`
+# (1.5M) clips the log window, so where the chain is sparse enough to serve a
+# full-width query, 500,000 costs three calls per query where one would have
+# done. Over ~50M blocks that is ~101 segments x 9 queries = ~909 calls at the
+# floor instead of ~306.
+#
+# Smaller segments lose less: a segment that fails part-way is re-fetched from
+# its start. Near the head, where 25,000 blocks a call is what the endpoint
+# serves, 500,000 blocks is 20 calls x 9 queries = 180 calls -- comparable to
+# the ~36 minutes the 2026-08-30 run threw away, and the ceiling on what any
+# single interruption can now cost.
+#
+# 500,000 optimises the failure case, because that is the case with evidence:
+# the one real sweep this job has attempted was interrupted. Revisit with a real
+# end-to-end measurement, which is the only thing that settles it.
+LOG_HISTORY_SEGMENT_BLOCKS = 500_000
 
 
 async def find_deploy_block(client: EvmClient, address: str, head: int) -> Optional[int]:
@@ -105,7 +139,11 @@ async def step_epoch_boundaries(
 
 
 async def step_log_history(
-    repository: ProjectMonitorRepository, client: EvmClient, head: int
+    repository: ProjectMonitorRepository,
+    client: EvmClient,
+    head: int,
+    *,
+    segment_blocks: int = LOG_HISTORY_SEGMENT_BLOCKS,
 ) -> str:
     """Fill logs from launch up to where live coverage already begins.
 
@@ -113,31 +151,64 @@ async def step_log_history(
     head: the forward pass already committed those, and `(tx_hash, log_index)`
     uniqueness would drop them anyway -- but not fetching them is cheaper than
     fetching and discarding.
+
+    Swept in segments with a committed watermark per segment, because at the
+    request pace the public endpoint tolerates a full sweep runs for hours and
+    the endpoint has already been observed to stop serving mid-run. Without the
+    watermark the whole run is the unit of atomicity, and an interruption at
+    hour three throws away three hours (2026-08-30).
+
+    AC7 still holds INSIDE a segment: a segment that fails part-way rolls back,
+    so it contributes no rows and leaves the watermark on the previous segment.
+    The re-run then repeats exactly that segment and nothing already done.
     """
     project = NETNET
     launch = repository.get_project_value(project.name, 'launch_block')
     from_block = int(launch) if launch else 0
+    watermark = repository.get_project_value(project.name, LOG_HISTORY_WATERMARK_KEY)
+    if watermark is not None:
+        from_block = max(from_block, int(watermark) + 1)
     live_cursor = repository.get_live_cursor(project.name)
     to_block = live_cursor if live_cursor is not None else head
 
-    window = await recorder.read_log_window(
-        client, project, project.name, from_block, to_block,
-        net_decimals=9, usdg_decimals=6,
-    )
-    mints = repository.insert_mints(window['mints'])
-    flows = repository.insert_flows(window['flows'])
-    events = repository.insert_events(window['events'])
-    # R2's raw-response half of this step: no sample exists to hang these on
-    # (a backfill log sweep pins no single block), so they go in block-keyed
-    # rather than sample-keyed. See `backfill_log_raw_response`'s DDL comment.
-    raws = repository.insert_backfill_log_raw_responses(
-        project.name, window['raw_responses_by_query']
-    )
+    mints = flows = events = raws = segments = 0
+    start = from_block
+    while start <= to_block:
+        end = min(start + segment_blocks - 1, to_block)
+        try:
+            window = await recorder.read_log_window(
+                client, project, project.name, start, end,
+                net_decimals=9, usdg_decimals=6,
+            )
+            mints += repository.insert_mints(window['mints'])
+            flows += repository.insert_flows(window['flows'])
+            events += repository.insert_events(window['events'])
+            # R2's raw-response half of this step: no sample exists to hang
+            # these on (a backfill log sweep pins no single block), so they go
+            # in block-keyed rather than sample-keyed. See
+            # `backfill_log_raw_response`'s DDL comment.
+            raws += repository.insert_backfill_log_raw_responses(
+                project.name, window['raw_responses_by_query']
+            )
+            repository.set_project_value(
+                project.name, LOG_HISTORY_WATERMARK_KEY, str(end)
+            )
+        except Exception:
+            # The rows and the watermark move together or not at all. Committing
+            # rows without the watermark would re-fetch them; moving the
+            # watermark without the rows would skip them forever.
+            repository.rollback()
+            raise
+        repository.commit()
+        segments += 1
+        start = end + 1
+
     repository.set_project_value(project.name, 'cursor_origin', str(to_block))
     repository.commit()
     return (
         f'step 3: +{mints} mints, +{flows} flows, +{events} events, '
-        f'+{raws} raw log responses to block {to_block}'
+        f'+{raws} raw log responses to block {to_block} '
+        f'over {segments} segments'
     )
 
 
@@ -219,30 +290,34 @@ async def main(
     ) as repository:
         run_id = repository.start_run(JOB_NAME)
         with repository.advisory_lock():
-            # All four steps read the archive endpoint now: the public RPC's bot
-            # protection killed a real full-history sweep after ~36 minutes (six
-            # queries over ~50M blocks, narrowing on refusal down to 5,859
-            # blocks, then a Cloudflare interstitial instead of JSON --
-            # 2026-08-30 run log), and the same night's read of `NET.totalSupply`
-            # at blocks 45M/40M/30M/20,076,087/12,299,690 confirmed the keyed
-            # endpoint has full archive depth. One client for the whole run,
-            # not one per step: three separate `EvmClient`s each start
-            # `alchemy_budget()`'s rolling window at zero, so the boundary
-            # between steps could burst above the intended CU/s rate right when
-            # the window resets. A single client keeps that window continuous
-            # across steps 1-4.
-            async with EvmClient(archive, alchemy_budget()) as client:
-                head, _ = await client.block_number()
+            # Split by plane, not by step. The keyed endpoint is the only one
+            # with archive depth, so the state steps (1 and 4) need it; its free
+            # tier refuses `eth_getLogs` above a ten-block range, so the log
+            # steps (2 and 3) cannot use it at all and go to the public RPC.
+            # One client per endpoint rather than one per step: a fresh
+            # `EvmClient` restarts its budget's rolling window at zero, so the
+            # step boundary is exactly where a burst above the intended rate
+            # would slip through unaccounted for.
+            async with EvmClient(archive, alchemy_budget()) as state_client, EvmClient(
+                get_public_endpoint(supports_batch=True), public_rpc_budget()
+            ) as log_client:
+                head, _ = await state_client.block_number()
                 if 1 in steps:
-                    notes.append(await step_deploy_blocks(repository, client, head))
+                    notes.append(
+                        await step_deploy_blocks(repository, state_client, head)
+                    )
                 if 2 in steps:
-                    notes.append(await step_epoch_boundaries(repository, client, head))
+                    notes.append(
+                        await step_epoch_boundaries(repository, log_client, head)
+                    )
                 if 3 in steps:
-                    notes.append(await step_log_history(repository, client, head))
+                    notes.append(
+                        await step_log_history(repository, log_client, head)
+                    )
                 if 4 in steps:
                     notes.append(
                         await step_epoch_samples(
-                            repository, client, run_id, max_samples
+                            repository, state_client, run_id, max_samples
                         )
                     )
         repository.finish_run(run_id, outcome='ok', notes='; '.join(notes))

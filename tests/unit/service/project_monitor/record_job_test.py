@@ -126,6 +126,115 @@ def test_a_window_the_endpoint_serves_is_not_narrowed():
     assert client.requested == [100_001]
 
 
+class _DenseRegionClient:
+    """Refuses on SCAN COST, the way the public RPC actually does.
+
+    The endpoint has no block cap: measured near head 2026-08-31, 50,000 blocks
+    came back `-32000 log query timed out` while 25,000 returned 1,357 logs, and
+    sparse early history served far wider windows than either. So the refusal is
+    a property of the BLOCKS being scanned, not of the number requested -- which
+    is why this fake keys its limit off the region a request overlaps rather
+    than off width alone. A fake that refused purely on width could not
+    distinguish a window that recovers from one that ratchets, because there
+    would be no region left where recovery is correct.
+    """
+
+    def __init__(self, *, sparse_serves, dense_serves, dense_from, dense_to):
+        self.sparse_serves = sparse_serves
+        self.dense_serves = dense_serves
+        self.dense_from = dense_from
+        self.dense_to = dense_to
+        # (start_block, width) per call, in order -- the observable the ticket's
+        # acceptance criterion asks the assertions to be written against.
+        self.requested = []
+        self.refused = []
+
+    async def get_logs(self, log_filter):
+        width = log_filter.to_block - log_filter.from_block + 1
+        self.requested.append((log_filter.from_block, width))
+        overlaps_dense = not (
+            log_filter.to_block < self.dense_from
+            or log_filter.from_block > self.dense_to
+        )
+        limit = self.dense_serves if overlaps_dense else self.sparse_serves
+        if width > limit:
+            self.refused.append((log_filter.from_block, width))
+            raise EvmRpcError(
+                'log query timed out', endpoint_kind='public', code=-32000
+            )
+        return [], object()
+
+
+def test_the_window_widens_back_after_a_dense_region_is_behind_it():
+    """The ratchet defect, and the reason widening is a prerequisite rather than
+    an optimisation. On the 2026-08-30 run one dense region walked the window
+    from 750,000 down to 5,859, and every one of the ~40M sparse blocks behind
+    it was then swept at 5,859 -- the narrow width was a fact about a few
+    hundred thousand blocks and was applied to the whole chain.
+
+    Asserted on the observed window sizes, per the ticket's acceptance
+    criterion: the sweep must be seen narrowing INTO the dense region and
+    widening back to `max_window` after it, not merely finishing.
+    """
+    query = build_log_queries(NETNET)[0]
+    client = _DenseRegionClient(
+        sparse_serves=200_000,
+        dense_serves=25_000,
+        dense_from=1_000_000,
+        dense_to=1_100_000,
+    )
+    asyncio.run(fetch_window(client, query, 0, 3_000_000, max_window=200_000))
+
+    widths_before = [w for start, w in client.requested if start < 1_000_000]
+    assert widths_before == [200_000] * 5, widths_before
+
+    # The narrowing, unchanged: halve until the dense region serves it.
+    at_the_wall = [w for start, w in client.requested if start == 1_000_000]
+    assert at_the_wall == [200_000, 100_000, 50_000, 25_000], at_the_wall
+
+    # THE POINT. Past the dense region the window must climb back to the
+    # starting width. On the parent commit every one of these is 25,000.
+    widths_after = [w for start, w in client.requested if start > 1_100_000]
+    assert max(widths_after) == 200_000, widths_after
+
+    # ...and it climbs the same power-of-two lattice the halving descended,
+    # rather than jumping straight back, so a widen that ignored the ceiling
+    # cannot pass by producing the right maximum for the wrong reason.
+    assert {25_000, 50_000, 100_000, 200_000} <= set(widths_after), sorted(
+        set(widths_after)
+    )
+
+
+def test_a_width_the_endpoint_refused_is_not_retried_while_that_refusal_stands():
+    """Ticket scope item 3. Widening without a ceiling turns the recovery into a
+    request storm: in a region that stays dense, the window climbs back to a
+    width already known to fail, fails, halves, climbs again.
+
+    Here the dense region runs to the end of the sweep, so no evidence ever
+    arrives that the density changed and the three narrowing refusals must be
+    the only refusals of the run.
+
+    Honest note: this does NOT redden on the parent commit, because the parent
+    never widens at all and so trivially never retries. It is a guard on the new
+    widening, verified by mutation (removing the ceiling makes it red), not a
+    regression test against the old behaviour.
+    """
+    query = build_log_queries(NETNET)[0]
+    client = _DenseRegionClient(
+        sparse_serves=200_000,
+        dense_serves=25_000,
+        dense_from=1_000_000,
+        dense_to=1_300_000,
+    )
+    asyncio.run(fetch_window(client, query, 0, 1_300_000, max_window=200_000))
+
+    assert client.refused == [
+        (1_000_000, 200_000), (1_000_000, 100_000), (1_000_000, 50_000),
+    ], client.refused
+    after_the_wall = [w for start, w in client.requested if start > 1_000_000]
+    assert max(after_the_wall) <= 25_000, after_the_wall
+
+
 def _fake_sample(block, epoch=132):
     return recorder.SampleResult(
         block=block,

@@ -9,9 +9,49 @@ services:
           mode: 0600
     working_dir: /app
     env_file: .env.test
+    environment:
+      # Set here rather than in `.env.test`: that file is untracked, so a stack
+      # relying on it for this value works on whichever machine happens to have
+      # the right line and fails everywhere else. The host is the compose
+      # service name, which only resolves inside this network -- which is the
+      # point, since CI runs pytest in the `backend` container.
+      PROJECT_MONITOR_TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/project_monitor_test
     command: pytest tests/unit
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      postgres:
+        # Waits for the server to answer, not merely for the container to
+        # exist. `depends_on` alone only orders startup, so pytest would race
+        # the server's first-init and fail on connection roughly whenever the
+        # image had to initialise the data directory.
+        condition: service_healthy
+  # The project monitor's store, the same engine as production. CI runs
+  # `pytest tests/unit` INSIDE this compose stack, so a GitHub Actions
+  # `services:` container would not be reachable from the test container --
+  # the service has to live here. `POSTGRES_DB` is the test database itself,
+  # so no /docker-entrypoint-initdb.d script is needed under compose.
+  postgres:
+    container_name: project_monitor_postgres_test
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: project_monitor_test
+    ports:
+      - "5432:5432"
+    # tmpfs, not a volume: a test database that survives a run would let one
+    # run's rows satisfy the next run's assertions.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      # `-d` names the database the tests use: during first init the server
+      # briefly accepts connections on a bootstrap database while this one does
+      # not yet exist, and a bare `pg_isready` would call that ready.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d project_monitor_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
   redis:
     container_name: redis
     image: redis:7.0.7

@@ -1,10 +1,25 @@
 """The log plane: event specs, windowed fetch, and mint classification.
 
-Logs go to the public RPC, never the keyed one. The free tier caps
-`eth_getLogs` at ten blocks per query on this chain (measured at both edges:
-ten succeed, eleven are rejected), so an hourly window there would be ~3,600
-queries per event type. The public endpoint served 1.5M-block windows and 20
-hour-wide queries with no 429.
+Which endpoint logs go to depends on the caller, not on this module. The live
+job's small, frequent window stays on the public RPC: it is unmetered, and
+measured to serve 1.5M-block windows and 20 hour-wide queries with no 429 --
+cheaper than the keyed endpoint's free tier, which caps `eth_getLogs` at ten
+blocks per query on this chain (measured at both edges: ten succeed, eleven
+are rejected) and would cost ~3,600 queries per event type for an hourly
+window.
+
+The one-shot backfill sweeping full chain history no longer uses the public
+RPC, because that endpoint cannot sustain one: a real run (2026-08-30)
+narrowed its window from 750,000 down to 5,859 blocks under repeated 429s,
+then after ~36 minutes stopped serving JSON at all and returned a Cloudflare
+"Just a moment..." interstitial (HTTP 403) -- bot protection a sustained scan
+trips that a bursty live window does not. The same night the keyed Alchemy
+endpoint was verified to have full archive depth (`NET.totalSupply()` served
+correctly at blocks 45M, 40M, 30M, 20,076,087 and 12,299,690, with `0x` only
+below the contract's deployment, never an archive error). `backfill.py` routes
+its log steps there instead. `fetch_window` and `MAX_LOG_WINDOW_BLOCKS` below
+are shared by both callers and narrow on whichever endpoint's own refusal they
+hit -- they do not assume which one that is.
 """
 import logging
 from dataclasses import dataclass
@@ -105,6 +120,21 @@ def build_log_queries(project: ProjectConfig) -> List[LogQuery]:
 
 # Below this the window is not the problem, and halving further just multiplies
 # requests against an endpoint that is already struggling.
+#
+# Unverified for Alchemy specifically: Alchemy's own docs (alchemy.com/docs/
+# reference/eth-getlogs, read 2026-08-30) put the PAID-tier `eth_getLogs`
+# block-range cap at 2,000-10,000 blocks depending on chain, or unlimited on
+# their named major chains -- none of which say which bucket this chain's
+# node falls into, and the FREE tier is 10 blocks, well below this floor. The
+# floor does not need to guess right: `_is_window_too_wide` reads the
+# endpoint's own error text ('block range', 'too many', 'limit exceeded'),
+# which is the same vocabulary Alchemy's docs use for its refusal, so halving
+# converges on whatever Alchemy's real cap turns out to be. The one case this
+# does NOT cover is a free-tier key: a true 10-block cap sits below this floor,
+# so the loop would stop halving at 1000 and raise on every call rather than
+# serve anything. Confirm the backfill key is not on the free tier before a
+# full sweep -- this raises loudly if it is, but every log step fails instantly
+# rather than making any progress.
 MIN_LOG_WINDOW_BLOCKS = 1000
 
 

@@ -3,6 +3,12 @@
 Run by hand, never scheduled. Paced through the same budgets as live reads and
 holding the same advisory lock, so backfill and a live run never overlap.
 
+All four steps go over the keyed archive endpoint (`alchemy_budget()`), state
+and logs alike -- see `logs.py`'s module docstring for why the log plane moved
+off the public RPC here. This is backfill-only: `record.py`'s live job still
+reads its small recent log window from the public endpoint, which is free and
+was never the thing that broke.
+
 Resumable by construction: each step writes what it found before the next
 starts, and step 4 skips a boundary that already has a backfill sample. A
 backfill that dies halfway is re-run, not unwound.
@@ -15,7 +21,7 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from market_data_library.core.onchain.evm import EvmClient, alchemy_budget, public_rpc_budget
+from market_data_library.core.onchain.evm import EvmClient, alchemy_budget
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.project_monitor import logs as log_plane
@@ -24,7 +30,6 @@ from src.service.project_monitor.config import (
     NETNET,
     get_archive_endpoint,
     get_project_monitor_database_url,
-    get_public_endpoint,
 )
 from src.service.project_monitor.read_plan import build_read_plan
 from src.service.project_monitor.repository import ProjectMonitorRepository
@@ -214,22 +219,30 @@ async def main(
     ) as repository:
         run_id = repository.start_run(JOB_NAME)
         with repository.advisory_lock():
-            async with EvmClient(archive, alchemy_budget()) as state_client:
-                head, _ = await state_client.block_number()
+            # All four steps read the archive endpoint now: the public RPC's bot
+            # protection killed a real full-history sweep after ~36 minutes (six
+            # queries over ~50M blocks, narrowing on refusal down to 5,859
+            # blocks, then a Cloudflare interstitial instead of JSON --
+            # 2026-08-30 run log), and the same night's read of `NET.totalSupply`
+            # at blocks 45M/40M/30M/20,076,087/12,299,690 confirmed the keyed
+            # endpoint has full archive depth. One client for the whole run,
+            # not one per step: three separate `EvmClient`s each start
+            # `alchemy_budget()`'s rolling window at zero, so the boundary
+            # between steps could burst above the intended CU/s rate right when
+            # the window resets. A single client keeps that window continuous
+            # across steps 1-4.
+            async with EvmClient(archive, alchemy_budget()) as client:
+                head, _ = await client.block_number()
                 if 1 in steps:
-                    notes.append(await step_deploy_blocks(repository, state_client, head))
-            async with EvmClient(
-                get_public_endpoint(), public_rpc_budget()
-            ) as log_client:
+                    notes.append(await step_deploy_blocks(repository, client, head))
                 if 2 in steps:
-                    notes.append(await step_epoch_boundaries(repository, log_client, head))
+                    notes.append(await step_epoch_boundaries(repository, client, head))
                 if 3 in steps:
-                    notes.append(await step_log_history(repository, log_client, head))
-            async with EvmClient(archive, alchemy_budget()) as state_client:
+                    notes.append(await step_log_history(repository, client, head))
                 if 4 in steps:
                     notes.append(
                         await step_epoch_samples(
-                            repository, state_client, run_id, max_samples
+                            repository, client, run_id, max_samples
                         )
                     )
         repository.finish_run(run_id, outcome='ok', notes='; '.join(notes))

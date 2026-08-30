@@ -121,6 +121,11 @@ BLOCKS_PER_HOUR = int(BLOCKS_PER_SECOND * 3600)  # 35,632
 PUBLIC_STATE_BLOCK_WINDOW = 5000
 
 # 1.5M-block eth_getLogs windows succeeded on the public RPC; 2M were rejected.
+# Backfill now issues its log queries against Alchemy instead (see logs.py's
+# module docstring), whose real per-call block-range cap is undocumented for
+# this chain -- this is only ever a starting point there too: `fetch_window`
+# halves on the first refusal, down to `MIN_LOG_WINDOW_BLOCKS`, so a wrong
+# starting width costs one wasted call per query, not a wrong result.
 MAX_LOG_WINDOW_BLOCKS = 1_500_000
 
 

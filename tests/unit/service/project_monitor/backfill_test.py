@@ -10,6 +10,8 @@ import asyncio
 
 import pytest
 
+from market_data_library.core.onchain.evm.types import Endpoint
+
 from src.job.project_monitor import backfill
 from src.service.project_monitor import recorder
 from src.service.project_monitor.config import NETNET
@@ -398,3 +400,99 @@ def test_step_log_history_re_run_does_not_duplicate_raw_responses(
         'SELECT count(*) AS n FROM backfill_log_raw_response WHERE project = %s',
         (PROJECT,),
     )[0]['n'] == 2
+
+
+class _FakeEndpointClient:
+    """Records the `Endpoint` and budget `main()` actually constructed it
+    with, and how many times construction happened -- the two things a
+    routing regression would get wrong with no other visible symptom until a
+    multi-hour production run trips over it (see this task's run log)."""
+
+    instances = []
+
+    def __init__(self, endpoint, budget):
+        self.endpoint = endpoint
+        self.budget = budget
+        _FakeEndpointClient.instances.append(self)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def block_number(self):
+        return 12_345, {'result': '0x3039'}
+
+
+def test_backfill_main_routes_every_step_to_the_archive_endpoint(
+    monkeypatch, database_url,
+):
+    """The public RPC's bot protection killed a real full-history sweep after
+    ~36 minutes (Cloudflare interstitial, HTTP 403, 2026-08-30 run log); the
+    keyed Alchemy endpoint was verified the same night to have full archive
+    depth. All four backfill steps must build their client on THAT endpoint
+    now, not just steps 1 and 4 as before.
+
+    Asserts the actual `endpoint.kind` each step's client was constructed
+    with, not merely that the run completed -- a stub client with no real
+    `.endpoint` attribute, or one still defaulting to 'public', would pass a
+    weaker test that only checked for a clean exit code.
+    """
+    _FakeEndpointClient.instances.clear()
+    seen_kinds = {}
+
+    async def fake_step_deploy_blocks(repository, client, head):
+        seen_kinds['step1'] = client.endpoint.kind
+        return 'step 1: ok'
+
+    async def fake_step_epoch_boundaries(repository, client, head):
+        seen_kinds['step2'] = client.endpoint.kind
+        return 'step 2: ok'
+
+    async def fake_step_log_history(repository, client, head):
+        seen_kinds['step3'] = client.endpoint.kind
+        return 'step 3: ok'
+
+    async def fake_step_epoch_samples(repository, client, run_id, max_samples):
+        seen_kinds['step4'] = client.endpoint.kind
+        return 'step 4: ok'
+
+    monkeypatch.setattr(backfill, 'step_deploy_blocks', fake_step_deploy_blocks)
+    monkeypatch.setattr(backfill, 'step_epoch_boundaries', fake_step_epoch_boundaries)
+    monkeypatch.setattr(backfill, 'step_log_history', fake_step_log_history)
+    monkeypatch.setattr(backfill, 'step_epoch_samples', fake_step_epoch_samples)
+    monkeypatch.setattr(backfill, 'EvmClient', _FakeEndpointClient)
+    monkeypatch.setattr(
+        backfill, 'get_archive_endpoint',
+        # A fake, non-secret URL: never the real keyed endpoint, per this
+        # task's constraint against reading or echoing it.
+        lambda: Endpoint(kind='alchemy', url='https://example.invalid/k'),
+    )
+    monkeypatch.setattr(
+        backfill, 'get_project_monitor_database_url',
+        lambda runtime_mode: database_url,
+    )
+
+    result = asyncio.run(backfill.main([1, 2, 3, 4]))
+
+    assert result == 0
+    assert seen_kinds == {
+        'step1': 'alchemy', 'step2': 'alchemy', 'step3': 'alchemy', 'step4': 'alchemy',
+    }
+    # One shared client for the whole run, not a fresh one per step: a fresh
+    # `alchemy_budget()` per step would restart its rolling rate-limit window
+    # at zero at each step boundary, which is exactly where a burst above the
+    # intended CU/s rate would slip through unaccounted for.
+    assert len(_FakeEndpointClient.instances) == 1
+
+
+def test_backfill_main_returns_early_when_the_archive_endpoint_is_unconfigured(
+    monkeypatch,
+):
+    """The archive-endpoint check must still gate the run: since every step now
+    depends on that endpoint, a missing key can no longer be a partial-failure
+    mode -- it has to stop before touching the database or any client."""
+    monkeypatch.setattr(backfill, 'get_archive_endpoint', lambda: None)
+    result = asyncio.run(backfill.main([1, 2, 3, 4]))
+    assert result == 1

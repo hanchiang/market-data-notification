@@ -499,3 +499,61 @@ def test_the_log_re_derivation_check_can_fail(log_window_fixture):
     assert _comparable(window['mints'], keys) != _comparable(
         log_window_fixture['mints'], keys
     )
+
+
+# The one InverseBonded execution in chain history. Values decoded from the raw
+# log independently of this codebase before the fixture was captured:
+# data word 1 = 0x519891a2 = 1,368,953,250 (9 dp NET), word 2 =
+# 0x6a3941b6705665b0 = 7,654,221,293,517,432,240 (18 dp USDG).
+BUYBACK_TX = '0x6029006837baf9236f8565a4b0ed6512f70e35b2c22e84c8a7618b8db6e96dc4'
+BUYBACK_NET_BURNED = Decimal('1.36895325')
+BUYBACK_USDG_PAID = Decimal('7.65422129351743224')
+
+
+def test_the_buyback_event_decodes_against_a_real_execution(buyback_fixture):
+    """Round-2 test review, finding 7: `InverseBonded` had no ground-truth
+    event anywhere, so scrambling `INVERSE_BONDED`'s field order left AC5's
+    `repurchased` and `burned` rendering 0.00 forever -- indistinguishable
+    from an epoch with no buybacks, which is the silent-zero shape the
+    requirement itself warns about.
+
+    The program has executed exactly once. That window is now committed, and
+    the decode is pinned to values read off the raw log before any of this
+    code touched them.
+    """
+    window, _ = _replay(buyback_fixture)
+    events = [e for e in window['events'] if e['name'] == 'InverseBonded']
+    assert len(events) == 1
+    fields = events[0]['fields_json']
+
+    assert events[0]['tx_hash'].lower() == BUYBACK_TX
+    assert Decimal(fields['netBurned']) / Decimal(10) ** 9 == BUYBACK_NET_BURNED
+    assert Decimal(fields['usdgPaidWad']) / Decimal(10) ** 18 == BUYBACK_USDG_PAID
+    # `seller` is the indexed field, so it comes from topics[1] rather than the
+    # data words -- a different decode path from the two amounts above.
+    assert fields['seller'].lower().startswith('0x')
+    assert len(fields['seller']) == 42
+
+    # Independent corroboration that the field ORDER is right, not merely that
+    # two numbers decoded: the same transaction's USDG outflow from the
+    # Treasury is 7.654221 at 6 dp, which is `usdgPaidWad` rescaled. A swapped
+    # field order would put 1.37 here and the two would stop agreeing.
+    outflow = next(f for f in window['flows'] if f['direction'] == 'out')
+    assert Decimal(outflow['amount']) / Decimal(10) ** 6 == (
+        BUYBACK_USDG_PAID.quantize(Decimal('0.000001'))
+    )
+
+
+def test_the_buyback_window_re_derives_from_its_own_raw_responses(buyback_fixture):
+    """The same re-derivation contract the other two windows carry."""
+    window, client = _replay(buyback_fixture)
+    assert len(client.served) == 9
+    assert _comparable(
+        window['events'], ('block', 'tx_hash', 'log_index', 'contract', 'name')
+    ) == _comparable(
+        buyback_fixture['events'],
+        ('block', 'tx_hash', 'log_index', 'contract', 'name'),
+    )
+    derived = {e['name']: e['fields_json'] for e in window['events']}
+    for stored in buyback_fixture['events']:
+        assert derived[stored['name']] == stored['fields_json'], stored['name']

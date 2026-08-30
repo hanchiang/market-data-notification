@@ -145,6 +145,45 @@ async def capture_issuance_window(out_dir: Path, block: int) -> None:
           f'{len(window["mints"])} mints, {len(window["flows"])} flows')
 
 
+async def capture_buyback_window(out_dir: Path, block: int) -> None:
+    """Capture the single-block window holding the one `InverseBonded` execution.
+
+    Same reason as the issuance window, more extreme: the buyback program has
+    executed exactly ONCE in the chain's whole history (block 20,076,087,
+    found 2026-08-30 by scanning `eth_getLogs` over blocks 0..49,977,432 in
+    1.5M-block windows on the public RPC -- 34 queries, one hit). So no window
+    near head can contain one, and without this fixture the `InverseBonded`
+    ABI has no ground-truth event to decode against -- which leaves AC5's
+    `repurchased` and `burned` rendering 0.00 forever if the decode is wrong,
+    indistinguishable from an epoch with no buybacks.
+    """
+    endpoint = get_public_endpoint(supports_batch=True)
+    async with EvmClient(endpoint, public_rpc_budget()) as client:
+        window = await recorder.read_log_window(
+            client, NETNET, NETNET.name, block, block,
+            net_decimals=9, usdg_decimals=6,
+        )
+    (out_dir / 'buyback_window.json').write_text(
+        json.dumps(
+            {
+                'from_block': block,
+                'to_block': block,
+                'note': 'the only InverseBonded execution in chain history, '
+                        'found by full-range eth_getLogs scan 2026-08-30',
+                'raw_responses': [_raw_to_dict(r) for r in window['raw_responses']],
+                'mints': [{**m, 'amount': str(m['amount'])} for m in window['mints']],
+                'flows': [{**f, 'amount': str(f['amount'])} for f in window['flows']],
+                'events': window['events'],
+            },
+            indent=2,
+        )
+        + '\n'
+    )
+    inverse = [e for e in window['events'] if e['name'] == 'InverseBonded']
+    print(f'captured buyback window at block {block}: '
+          f'{len(inverse)} InverseBonded events')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -152,11 +191,17 @@ if __name__ == '__main__':
         help='capture only the single-block issuance window at this block',
     )
     parser.add_argument(
+        '--buyback_block', type=int, default=None,
+        help='capture only the single-block InverseBonded window at this block',
+    )
+    parser.add_argument(
         '--out', default='tests/unit/service/project_monitor/fixtures', type=Path
     )
     parser.add_argument('--log_window_blocks', type=int, default=36000)
     args = parser.parse_args()
-    if args.issuance_block is not None:
+    if args.buyback_block is not None:
+        asyncio.run(capture_buyback_window(args.out, args.buyback_block))
+    elif args.issuance_block is not None:
         asyncio.run(capture_issuance_window(args.out, args.issuance_block))
     else:
         asyncio.run(capture(args.out, args.log_window_blocks))

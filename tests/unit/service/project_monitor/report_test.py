@@ -562,8 +562,15 @@ def test_the_json_agreement_is_not_vacuous_for_the_p1_2_figures(
     rows = load_epoch_rows(repository, NETNET)
     parsed = json.loads(render_json(rows))
 
+    # `buyback.repurchased` and `buyback.burned` are deliberately NOT in this
+    # list. They are summed from `event` rows, and `_sum_event_field` returns
+    # Decimal(0) on an empty table -- so an `is not None` assertion here would
+    # pass off that default and claim a coverage this test does not have
+    # (round-2 test review, finding 7). They are pinned instead by
+    # `test_a_recorded_buyback_reaches_the_repurchased_and_burned_columns`
+    # below, which inserts a real event row.
     p1_2_columns = (
-        'buyback.capacity', 'buyback.repurchased', 'buyback.burned',
+        'buyback.capacity',
         'loopback.total_supplied', 'loopback.total_borrowed',
         'loopback.utilization_pct', 'loopback.borrow_apr_pct',
         'sleeve_total_usd',
@@ -572,3 +579,63 @@ def test_the_json_agreement_is_not_vacuous_for_the_p1_2_figures(
         value = _lookup(rows[0], key)
         assert value is not None, f'{key} is still None -- the check is vacuous'
         assert _lookup(parsed[0], key) == str(value), key
+
+
+# The one InverseBonded execution in chain history, decoded in
+# `fixture_test.py` against its raw log. Restated here as the amount a report
+# row must show when such an event falls inside the epoch.
+BUYBACK_NET_BURNED_RAW = 1_368_953_250  # 9 dp
+BUYBACK_NET_BURNED = Decimal('1.36895325')
+
+
+def test_a_recorded_buyback_reaches_the_repurchased_and_burned_columns(
+    repository, expected_fixture
+):
+    """AC5's `repurchased` and `burned`, which the 2026-08-30 amendment pinned
+    to `InverseBonded.netBurned` -- the dapp sets both to the same sum, so a
+    buyback burns exactly what it repurchases.
+
+    Round-2 test review, finding 7: nothing inserted an `InverseBonded` row
+    anywhere, and `_sum_event_field` returns Decimal(0) for an empty table, so
+    mistyping the event name in `report.py` left both columns rendering 0.00
+    forever -- which reads exactly like an epoch with no buybacks. The zero
+    default is why this needs a non-zero event rather than an `is not None`
+    check.
+    """
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=100, epoch=10,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 60,
+        expected_fixture=expected_fixture,
+    )
+    _commit_fixture_epoch(
+        repository, run_id, block=200, epoch=11,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 120,
+        expected_fixture=expected_fixture,
+    )
+    repository.insert_events([{
+        'project': PROJECT, 'block': 150, 'tx_hash': '0xbb', 'log_index': 4,
+        'contract': 'inverseBond', 'name': 'InverseBonded',
+        'fields_json': {
+            'seller': '0x' + '8' * 40,
+            'netBurned': str(BUYBACK_NET_BURNED_RAW),
+            'usdgPaidWad': '7654221293517432240',
+        },
+    }])
+    repository.commit()
+
+    rows = load_epoch_rows(repository, NETNET)
+    buyback = rows[1]['buyback']
+
+    assert buyback['repurchased'] == BUYBACK_NET_BURNED
+    assert buyback['burned'] == BUYBACK_NET_BURNED
+    # Both figures come from the same field by design; asserting they agree is
+    # the property the amendment states, not a redundant restatement.
+    assert buyback['repurchased'] == buyback['burned']
+
+    # The epoch BEFORE the buyback must stay at zero -- the block-window filter
+    # is what keeps a buyback from being counted in every later epoch too.
+    assert rows[0]['buyback']['repurchased'] == Decimal(0)
+
+    # And it survives rendering.
+    assert '1.3690' in render_table(rows)

@@ -98,6 +98,15 @@ def log_window_fixture():
 
 
 @pytest.fixture
+def buyback_fixture():
+    """The single-block window holding the ONE `InverseBonded` execution in the
+    chain's history (block 20,076,087), found 2026-08-30 by scanning
+    `eth_getLogs` over blocks 0..49,977,432 in 1.5M-block windows. Without it
+    the buyback ABI has no ground-truth event to decode against."""
+    return load_fixture('buyback_window.json')
+
+
+@pytest.fixture
 def issuance_fixture():
     """The one premiumSeller execution named in the dapp-crawl trace, captured
     as its own single-block window. Separate from `log_window.json` because the

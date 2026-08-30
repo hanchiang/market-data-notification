@@ -85,9 +85,17 @@ SLEEVE_EQUITIES: Dict[str, Dict[str, str]] = {
 }
 
 # Morpho Blue market params for the Loopback facility, from the bundle's own
-# market-params builder. The market id is keccak256(abi.encode(params)); the
-# facility also exposes `marketId()`, so the two are asserted equal rather than
-# either being trusted alone.
+# market-params builder. The market id is keccak256(abi.encode(params)).
+#
+# UNCROSS-CHECKED, and the one input here that is trusted rather than verified:
+# these five values are read off the dapp bundle, and the id derived from them
+# is what every Loopback figure in the report is keyed by. If the bundle named a
+# stale param, `Morpho.market` would return a real, well-formed row for the
+# WRONG market and nothing downstream would notice. A second source would settle
+# it -- the facility contract's own `marketId()` -- but slice 1 never located
+# that contract's address (the registry carries `loopbackOracle` and
+# `morphoBlue`, no facility), so the check cannot be written yet. Finding the
+# address is the prerequisite; until then this stays a single-sourced input.
 LOOPBACK_MARKET_PARAMS = {
     'loanToken': NETNET_CORE['USDG'],
     'collateralToken': NETNET_CORE['wsNET'],

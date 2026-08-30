@@ -75,14 +75,22 @@ async def run_sample(
     run_id: int,
     *,
     runtime_mode: RuntimeMode,
+    progress: Optional[dict] = None,
 ) -> dict:
-    """Pin a block, read state, fetch the window, commit once."""
+    """Pin a block, read state, fetch the window, commit once.
+
+    `progress` is written as the run advances so the caller can name the
+    endpoint in use when a failure happened. Passing the value back in the
+    return dict would not do: on the failing path there is no return.
+    """
+    progress = progress if progress is not None else {}
     archive = get_archive_endpoint()
     # `--test_mode` points state reads at the public endpoint, so a manual run
     # spends nothing on the metered account.
     use_archive = archive is not None and not runtime_mode.is_test_mode
     state_endpoint = archive if use_archive else get_public_endpoint(supports_batch=False)
     state_budget = alchemy_budget() if use_archive else public_rpc_budget()
+    progress['endpoint_kind'] = state_endpoint.kind
 
     log_endpoint = get_public_endpoint(supports_batch=True)
     project = NETNET
@@ -94,17 +102,26 @@ async def run_sample(
             sample, pinned_block = await _read_state_on(
                 state_endpoint, state_budget, repository
             )
-        except EvmClientError as exc:
+        except (EvmClientError, recorder.CoreReadFailedError) as exc:
             # Endpoint failover (design: Endpoint roles). The whole state plan is
             # re-issued on the fallback from the first batch -- never mixed within
             # one sample, because a sample whose reads came from two endpoints
             # cannot be reasoned about if they disagree.
+            #
+            # `CoreReadFailedError` belongs in this tuple and is the case the
+            # failover mostly exists for: a mid-plan core batch exhausting its
+            # retries is wrapped by the recorder, so catching only
+            # `EvmClientError` would fall back for a failure in the head pin and
+            # for nothing after it. Widening to bare `Exception` is the wrong fix
+            # -- it would route a programming error into a fallback retry and
+            # then report it as an endpoint problem.
             notes.append(f'archive state read failed ({type(exc).__name__}); '
                          'falling back to the public endpoint')
             use_archive = False
 
     if sample is None:
         fallback = get_public_endpoint(supports_batch=False)
+        progress['endpoint_kind'] = fallback.kind
         sample, pinned_block = await _read_state_on(
             fallback, public_rpc_budget(), repository
         )
@@ -206,12 +223,15 @@ async def main(force_run: bool = False, test_mode: bool = False) -> int:
     outcome = 'failed'
     error_class: Optional[str] = None
     notes: list = []
+    progress: dict = {}
     try:
         repository = ProjectMonitorRepository(database_url)
         run_id = repository.start_run(JOB_NAME)
         with repository.advisory_lock():
             try:
-                result = await run_sample(repository, run_id, runtime_mode=runtime_mode)
+                result = await run_sample(
+                    repository, run_id, runtime_mode=runtime_mode, progress=progress
+                )
                 notes.extend(result['notes'])
                 notes.append(f'sample at block {result["block"]} epoch {result["epoch"]}')
                 outcome = 'ok'
@@ -246,22 +266,29 @@ async def main(force_run: bool = False, test_mode: bool = False) -> int:
             repository.close()
 
     if outcome not in ('ok', 'skipped'):
-        await _alert(run_id, error_class or 'unknown')
+        await _alert(run_id, error_class or 'unknown', progress.get('endpoint_kind'))
     print('; '.join(notes))
     return 0 if outcome in ('ok', 'partial', 'skipped') else 1
 
 
-async def _alert(run_id: Optional[int], error_class: str) -> None:
+async def _alert(
+    run_id: Optional[int], error_class: str, endpoint_kind: Optional[str] = None
+) -> None:
     """One admin-chat message: run id, endpoint kind, exception CLASS.
 
-    Never the exception's message text, which could carry a URL. The class name
-    goes through the MarkdownV2 escaper because a name carrying `.` or `_` is
-    rejected by Telegram otherwise. The whole send is guarded so an alert
-    failure never masks the run outcome.
+    Never the exception's message text, which could carry a URL. The endpoint
+    kind is the 'alchemy'/'public' label, never the URL -- it is here because it
+    is what tells the operator whether to look at the metered account or the
+    public node before opening anything.
+
+    The class name goes through the MarkdownV2 escaper because a name carrying
+    `.` or `_` is rejected by Telegram otherwise. The whole send is guarded so an
+    alert failure never masks the run outcome.
     """
     try:
         message = escape_markdown(
-            f'project_monitor run {run_id} failed: {error_class}'
+            f'project_monitor run {run_id} failed on '
+            f'{endpoint_kind or "unknown"}: {error_class}'
         )
         await send_message_to_admin(message, MarketDataType.CRYPTO)
     except Exception:

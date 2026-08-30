@@ -37,6 +37,13 @@ def _database_url() -> str:
 
 
 @pytest.fixture
+def database_url():
+    """The connection string the fixtures use, for tests that drive an
+    entrypoint which opens its own connection."""
+    return _database_url()
+
+
+@pytest.fixture
 def repository():
     url = _database_url()
     try:
@@ -88,3 +95,12 @@ def expected_fixture():
 @pytest.fixture
 def log_window_fixture():
     return load_fixture('log_window.json')
+
+
+@pytest.fixture
+def issuance_fixture():
+    """The one premiumSeller execution named in the dapp-crawl trace, captured
+    as its own single-block window. Separate from `log_window.json` because the
+    live capture near head contains no issuance mint -- the desk had not
+    executed inside it -- and AC6 asks for one."""
+    return load_fixture('issuance_window.json')

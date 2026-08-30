@@ -28,6 +28,8 @@ import json
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .attribution import LABEL_UNLABELLED
+from .config import ProjectConfig
 from .repository import ProjectMonitorRepository
 
 MISSING = None
@@ -48,10 +50,17 @@ def _pct_change(current: Optional[Decimal], previous: Optional[Decimal]) -> Opti
 
 
 def load_epoch_rows(
-    repository: ProjectMonitorRepository, project_name: str
+    repository: ProjectMonitorRepository, project: ProjectConfig
 ) -> List[Dict[str, Any]]:
-    """One row per epoch, from `sample`, `reading`, `mint`, `flow` and
-    `epoch_boundary` only. Nothing here re-reads the chain."""
+    """One row per epoch, from `sample`, `reading`, `mint`, `flow` and `event`.
+    Nothing here re-reads the chain.
+
+    `epoch_boundary` is deliberately NOT read: an epoch's closing sample is the
+    last sample that observed that epoch number, which the sample rows already
+    say. The boundary table exists for backfill's window planning, and reading
+    it here would make the report depend on a derived table when the primary one
+    answers the question.
+    """
     closing_samples = repository.fetch_all(
         """
         SELECT DISTINCT ON (epoch_number)
@@ -60,7 +69,7 @@ def load_epoch_rows(
         WHERE project = %s AND epoch_number IS NOT NULL
         ORDER BY epoch_number, block DESC, id DESC
         """,
-        (project_name,),
+        (project.name,),
     )
     if not closing_samples:
         return []
@@ -78,30 +87,80 @@ def load_epoch_rows(
         if sample is None:
             rows.append({'epoch': epoch, 'present': False})
             continue
-        row = _build_row(repository, project_name, sample, previous)
+        row = _build_row(repository, project, sample, previous)
         rows.append(row)
         previous = row
     return rows
 
 
 
+
+def _flow_key(label: str, counterparty: str) -> str:
+    """A labelled flow buckets by label; an unlabelled one keeps its address.
+
+    Named buckets (`bond`, `issuance`, a project label) are aggregates on
+    purpose. `unlabelled` is not a counterparty, so aggregating on it would
+    merge unrelated addresses into one line.
+    """
+    return label if label != LABEL_UNLABELLED else f'{LABEL_UNLABELLED}:{counterparty}'
+
+
+def _bucket_flows(flows: List[Dict[str, Any]], direction: str) -> Dict[str, Decimal]:
+    buckets: Dict[str, Decimal] = {}
+    for row in flows:
+        if row['direction'] != direction:
+            continue
+        key = _flow_key(row['label'], row['counterparty'])
+        amount = _scaled(row['total'], row['decimals'])
+        if amount is None:
+            continue
+        buckets[key] = buckets.get(key, Decimal(0)) + amount
+    return buckets
+
+
 def _price_and_premium(
-    readings: Dict[str, Any], backing: Optional[Decimal]
+    readings: Dict[str, Any],
+    backing: Optional[Decimal],
+    project: ProjectConfig,
 ) -> Tuple[Optional[Decimal], Optional[Decimal]]:
     """Spot price from the pair's reserves, and its premium over backing.
 
-    Reserve order is (USDG, NET) at 6 and 9 decimals respectively -- taken from
-    `token0()`/`token1()` in the read plan, not assumed.
+    Reserve order is read from `token0()`, not assumed: a pair orders its tokens
+    by address, so which reserve is USDG is a property of the deployed pair and
+    would silently inverse the price if the pair were ever redeployed. Decimals
+    come from the sample's own `decimals()` readings for the same reason -- the
+    read plan issues them in every sample precisely so nothing downstream has to
+    hardcode 6 and 9.
     """
     reserves = readings.get('pair.getReserves')
     if not reserves or reserves['state'] != 'ok' or not reserves['value_json']:
         return None, None
-    usdg_reserve = Decimal(reserves['value_json'][0]) / (Decimal(10) ** 6)
-    net_reserve = Decimal(reserves['value_json'][1]) / (Decimal(10) ** 9)
+    token0 = readings.get('pair.token0')
+    if not token0 or token0['state'] != 'ok' or not isinstance(token0['value_json'], str):
+        return None, None
+
+    usdg_first = token0['value_json'].lower() == project.address('USDG').lower()
+    reserve0 = Decimal(reserves['value_json'][0])
+    reserve1 = Decimal(reserves['value_json'][1])
+    usdg_raw, net_raw = (reserve0, reserve1) if usdg_first else (reserve1, reserve0)
+
+    usdg_dp = _decimals_reading(readings, 'USDG.decimals')
+    net_dp = _decimals_reading(readings, 'NET.decimals')
+    if usdg_dp is None or net_dp is None:
+        return None, None
+
+    net_reserve = net_raw / (Decimal(10) ** net_dp)
     if not net_reserve:
         return None, None
-    price = usdg_reserve / net_reserve
+    price = (usdg_raw / (Decimal(10) ** usdg_dp)) / net_reserve
     return price, (price / backing) if backing else None
+
+
+def _decimals_reading(readings: Dict[str, Any], name: str) -> Optional[int]:
+    reading = readings.get(name)
+    if not reading or reading['state'] != 'ok' or reading['value_int'] is None:
+        return None
+    return int(reading['value_int'])
 
 
 def _loopback(readings: Dict[str, Any], state: Callable[[str], str]) -> Dict[str, Any]:
@@ -179,10 +238,11 @@ def _sleeve(
 
 def _build_row(
     repository: ProjectMonitorRepository,
-    project_name: str,
+    project: ProjectConfig,
     sample: Dict[str, Any],
     previous: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    project_name = project.name
     readings = {
         r['name']: r
         for r in repository.fetch_all(
@@ -220,22 +280,20 @@ def _build_row(
     }
     total_emission = sum((v for v in emission.values() if v is not None), Decimal(0))
 
+    # Grouped by counterparty as well as label, because R6 says an unlabelled
+    # flow is reported "with the address" and AC5 asks for outflows BY
+    # RECIPIENT. Grouping on the label alone collapses every unknown recipient
+    # into one `unlabelled` bucket -- which reads as a single counterparty and
+    # is the one shape that makes an unrecognised drain look ordinary.
     flows = repository.fetch_all(
-        'SELECT direction, label, sum(amount) AS total, max(decimals) AS decimals '
+        'SELECT direction, label, counterparty, sum(amount) AS total, '
+        'max(decimals) AS decimals '
         'FROM flow WHERE project = %s AND block > %s AND block <= %s '
-        'GROUP BY direction, label',
+        'GROUP BY direction, label, counterparty',
         (project_name, previous_block if previous_block is not None else -1, block),
     )
-    inflows = {
-        row['label']: _scaled(row['total'], row['decimals'])
-        for row in flows
-        if row['direction'] == 'in'
-    }
-    outflows = {
-        row['label']: _scaled(row['total'], row['decimals'])
-        for row in flows
-        if row['direction'] == 'out'
-    }
+    inflows = _bucket_flows(flows, 'in')
+    outflows = _bucket_flows(flows, 'out')
 
     liquid = value('Treasury.liquidUsdg')
     morpho_assets = value('Treasury.morphoAssets')
@@ -256,7 +314,7 @@ def _build_row(
     if rfv is not None and previous_rfv is not None:
         residual = (rfv - previous_rfv) - (net_inflow - net_outflow)
 
-    price, premium = _price_and_premium(readings, backing)
+    price, premium = _price_and_premium(readings, backing, project)
 
     lp_total = value('pair.totalSupply')
     lp_treasury = value('pair.balanceOf(Treasury)')
@@ -356,6 +414,14 @@ HEADER_NOTES = (
     'buyback "filled" has no on-chain source and is reported as unavailable',
 )
 
+# AC5's enumerated figures, in AC5's order. Every one of them that has a fixed
+# arity is a column here; the two that do not -- inflows by bucket/label and
+# outflows by recipient -- are unbounded in cardinality (a new counterparty
+# appears whenever one transacts) and cannot be fixed columns at all. Those are
+# rendered per epoch in the detail block below the table, which is why
+# `render_table` emits both halves and neither is optional.
+#
+# A dotted key reaches into a nested dict on the row (`buyback.capacity`).
 COLUMNS = (
     ('epoch', 'epoch'),
     ('block', 'close block'),
@@ -372,20 +438,65 @@ COLUMNS = (
     ('premium_x', 'premium x'),
     ('lp_total_supply', 'LP supply'),
     ('lp_treasury_share_pct', 'LP treasury %'),
+    ('buyback.capacity', 'bb capacity'),
+    ('buyback.filled', 'bb filled'),
+    ('buyback.repurchased', 'bb repurchased'),
+    ('buyback.burned', 'bb burned'),
+    ('loopback.total_supplied', 'lb supplied'),
+    ('loopback.total_borrowed', 'lb borrowed'),
+    ('loopback.utilization_pct', 'lb util %'),
+    ('loopback.borrow_apr_pct', 'lb borrow APR %'),
     ('sleeve_total_usd', 'Sleeve $ (memo)'),
 )
+
+# Columns whose absence is explained by a state field on the same nested dict,
+# so a blank cell can say WHY it is blank instead of printing one dash for a
+# not-yet-deployed contract and a failed read alike.
+STATE_KEYS = {
+    'buyback.capacity': ('buyback', 'capacity_state'),
+    'buyback.filled': ('buyback', 'filled_state'),
+    'loopback.total_supplied': ('loopback', 'state'),
+    'loopback.total_borrowed': ('loopback', 'state'),
+    'loopback.utilization_pct': ('loopback', 'state'),
+    'loopback.borrow_apr_pct': ('loopback', 'state'),
+}
+
+STATE_RENDERING = {
+    'not_deployed': 'n/a (not deployed)',
+    'no_onchain_source': 'n/a (no source)',
+    'failed': 'failed',
+    'absent': '-',
+}
+
+
+def _lookup(row: Dict[str, Any], key: str) -> Any:
+    """Resolve a plain or dotted column key against a row."""
+    if '.' not in key:
+        return row.get(key)
+    outer, inner = key.split('.', 1)
+    nested = row.get(outer)
+    return nested.get(inner) if isinstance(nested, dict) else None
 
 
 def _cell(row: Dict[str, Any], key: str) -> str:
     if not row.get('present'):
-        return '-'
-    value = row.get(key)
+        # The epoch number still prints, so the reader can see WHICH epoch is
+        # missing. A row of dashes with no identifier says only "something is
+        # absent", which is the one thing the gap row exists to make specific.
+        return str(row['epoch']) if key == 'epoch' else '-'
+    value = _lookup(row, key)
     if value is None:
-        state = row.get('reading_states', {})
         # A not-deployed contract is a different fact from a failed read, and
-        # the table says which rather than printing one dash for both.
-        if any(s == 'not_deployed' for s in state.values()) and key.startswith('inverse'):
-            return 'n/a (not deployed)'
+        # the table says which rather than printing one dash for both. The state
+        # consulted is THIS column's own, not "any reading anywhere was
+        # not_deployed" -- which would stamp the label onto unrelated blanks.
+        state_path = STATE_KEYS.get(key)
+        if state_path:
+            outer, inner = state_path
+            nested = row.get(outer)
+            state = nested.get(inner) if isinstance(nested, dict) else None
+            if state in STATE_RENDERING:
+                return STATE_RENDERING[state]
         return '-'
     if isinstance(value, Decimal):
         # The pair's LP token is 18 dp with a total supply around 2.7e-7, so a
@@ -409,7 +520,40 @@ def render_table(rows: List[Dict[str, Any]]) -> str:
         lines.append('  '.join(cell.ljust(widths[i]) for i, cell in enumerate(record)))
         if index == 0:
             lines.append('  '.join('-' * w for w in widths))
+    lines.extend(_render_flow_detail(rows))
     return '\n'.join(lines)
+
+
+def _render_flow_detail(rows: List[Dict[str, Any]]) -> List[str]:
+    """AC5's inflows and outflows, per epoch, beneath the table.
+
+    Not columns, because neither is fixed-arity: a bucket appears the first time
+    a counterparty transacts, so the column set would change between two runs of
+    the same report. Rendered per epoch instead, always emitted -- an epoch with
+    no flows prints "none", which is a different statement from an epoch the
+    report skipped.
+    """
+    lines = ['', 'flows by epoch (AC5: inflows by bucket, outflows by recipient)']
+    for row in rows:
+        if not row.get('present'):
+            lines.append(f'  epoch {row["epoch"]}: no sample')
+            continue
+        lines.append(f'  epoch {row["epoch"]} (close block {row["block"]})')
+        for direction, key in (('in', 'inflows'), ('out', 'outflows')):
+            entries = row.get(key) or {}
+            if not entries:
+                lines.append(f'    {direction:3} none')
+                continue
+            for name, amount in sorted(entries.items()):
+                lines.append(f'    {direction:3} {name:<52} {_format_amount(amount)}')
+    return lines
+
+
+def _format_amount(amount: Any) -> str:
+    value = amount if isinstance(amount, Decimal) else Decimal(str(amount))
+    if value != 0 and abs(value) < Decimal('0.001'):
+        return f'{value:.4g}'
+    return f'{value:,.4f}'
 
 
 def render_json(rows: List[Dict[str, Any]]) -> str:

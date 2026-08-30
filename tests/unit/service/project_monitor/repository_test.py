@@ -234,3 +234,67 @@ def test_a_killed_connection_leaves_no_lock_behind(repository, second_repository
             if time.monotonic() > deadline:
                 raise
             time.sleep(0.01)
+
+
+def _window(boundaries):
+    return {
+        'raw_responses': [], 'mints': [], 'flows': [], 'events': [],
+        'boundaries': boundaries, 'queries': [],
+    }
+
+
+def test_a_window_with_two_rebases_names_only_the_epoch_it_observed(repository):
+    """P2-1. A sample observes exactly ONE epoch, so it can name exactly one
+    boundary: the latest in the window. A window spanning two rebases -- an
+    outage longer than one 8 h epoch -- also discovers the earlier boundary, but
+    the sample says nothing about which epoch that one opened.
+
+    Stamping the sample's number onto both mislabels the earlier boundary, and
+    `upsert_epoch_boundary` COALESCEs on update, so the wrong value is then
+    frozen against every later correction.
+    """
+    run_id = repository.start_run('test')
+    sample = _sample_result(1000, epoch=50)
+    recorder.commit_sample(
+        repository, run_id=run_id, project_name=PROJECT, sample=sample,
+        kind=recorder.KIND_LIVE,
+        log_window=_window([
+            {'first_block': 700, 'rebase_tx': '0xa'},
+            {'first_block': 900, 'rebase_tx': '0xb'},
+        ]),
+    )
+
+    rows = {
+        row['first_block']: row['epoch_number']
+        for row in repository.fetch_all(
+            'SELECT first_block, epoch_number FROM epoch_boundary WHERE project = %s',
+            (PROJECT,),
+        )
+    }
+    assert rows == {700: None, 900: 50}, rows
+
+
+def test_a_later_sample_can_fill_a_boundary_left_unnamed(repository):
+    """The other half of leaving it NULL: the gap must be fillable, or the
+    conservative choice above just loses the number permanently."""
+    run_id = repository.start_run('test')
+    recorder.commit_sample(
+        repository, run_id=run_id, project_name=PROJECT,
+        sample=_sample_result(1000, epoch=50), kind=recorder.KIND_LIVE,
+        log_window=_window([
+            {'first_block': 700, 'rebase_tx': '0xa'},
+            {'first_block': 900, 'rebase_tx': '0xb'},
+        ]),
+    )
+    # A backfill sample at 699 observes epoch 48, so the boundary at 700 opens 49.
+    repository.upsert_epoch_boundary(PROJECT, 700, None, epoch_number=49)
+    repository.commit()
+
+    rows = {
+        row['first_block']: row['epoch_number']
+        for row in repository.fetch_all(
+            'SELECT first_block, epoch_number FROM epoch_boundary WHERE project = %s',
+            (PROJECT,),
+        )
+    }
+    assert rows == {700: 49, 900: 50}

@@ -108,11 +108,55 @@ async def capture(out_dir: Path, log_window_blocks: int) -> None:
     print(f'  events          {len(window["events"])}')
 
 
+async def capture_issuance_window(out_dir: Path, block: int) -> None:
+    """Capture one single-block log window around a known issuance transaction.
+
+    Separate from the head capture because the desk executes rarely: a window
+    taken near head contains no issuance mint at all, and AC6 asks for one. The
+    block is passed in rather than searched for, so the fixture is reproducible
+    without re-scanning ~1.7M blocks of `PremiumSold` logs to find it again.
+
+    Block 49,066,320 holds `0x0fe14bcf...7b19`, the execution the dapp-crawl
+    trace names.
+    """
+    endpoint = get_public_endpoint(supports_batch=True)
+    async with EvmClient(endpoint, public_rpc_budget()) as client:
+        window = await recorder.read_log_window(
+            client, NETNET, NETNET.name, block, block,
+            net_decimals=9, usdg_decimals=6,
+        )
+    (out_dir / 'issuance_window.json').write_text(
+        json.dumps(
+            {
+                'from_block': block,
+                'to_block': block,
+                'note': 'the premiumSeller execution recorded in the dapp crawl '
+                        'trace, 0x0fe14bcf...7b19',
+                'raw_responses': [_raw_to_dict(r) for r in window['raw_responses']],
+                'mints': [{**m, 'amount': str(m['amount'])} for m in window['mints']],
+                'flows': [{**f, 'amount': str(f['amount'])} for f in window['flows']],
+                'events': window['events'],
+            },
+            indent=2,
+        )
+        + '\n'
+    )
+    print(f'captured issuance window at block {block}: '
+          f'{len(window["mints"])} mints, {len(window["flows"])} flows')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--issuance_block', type=int, default=None,
+        help='capture only the single-block issuance window at this block',
+    )
     parser.add_argument(
         '--out', default='tests/unit/service/project_monitor/fixtures', type=Path
     )
     parser.add_argument('--log_window_blocks', type=int, default=36000)
     args = parser.parse_args()
-    asyncio.run(capture(args.out, args.log_window_blocks))
+    if args.issuance_block is not None:
+        asyncio.run(capture_issuance_window(args.out, args.issuance_block))
+    else:
+        asyncio.run(capture(args.out, args.log_window_blocks))

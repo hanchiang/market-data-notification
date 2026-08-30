@@ -217,8 +217,10 @@ def build_read_plan(project: ProjectConfig) -> List[Read]:
 def loopback_market_id() -> str:
     """`keccak256(abi.encode(marketParams))`, per Morpho Blue.
 
-    The facility also exposes `marketId()`; the recorder asserts the two are
-    equal rather than trusting either alone.
+    Single-sourced from the dapp bundle and not cross-checked against the
+    facility's own `marketId()`, because slice 1 never found that contract's
+    address. See the note on `LOOPBACK_MARKET_PARAMS` in `config.py` for what
+    that leaves unverified.
     """
     encoded = abi.encode(
         MARKET_PARAMS_TYPE,

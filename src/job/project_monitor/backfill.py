@@ -167,8 +167,16 @@ async def step_epoch_samples(
                 repository, run_id=run_id, project_name=project.name,
                 sample=sample, kind=recorder.KIND_BACKFILL,
             )
+            # The sample sits at `first_block - 1`, so it observes the epoch the
+            # boundary CLOSES. The boundary's number is the epoch it opens --
+            # one more. Writing `sample.epoch_number` here would disagree by one
+            # with what the live writer records for the same boundary, and
+            # `COALESCE` would then freeze whichever ran first.
+            opening_epoch = (
+                sample.epoch_number + 1 if sample.epoch_number is not None else None
+            )
             repository.upsert_epoch_boundary(
-                project.name, block + 1, None, epoch_number=sample.epoch_number
+                project.name, block + 1, None, epoch_number=opening_epoch
             )
             repository.commit()
             filled += 1

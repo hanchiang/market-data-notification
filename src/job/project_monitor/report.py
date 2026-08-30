@@ -19,7 +19,7 @@ def main(as_json: bool = False, test_mode: bool = False) -> int:
     with ProjectMonitorRepository(
         get_project_monitor_database_url(runtime_mode)
     ) as repository:
-        rows = load_epoch_rows(repository, NETNET.name)
+        rows = load_epoch_rows(repository, NETNET)
     print(render_json(rows) if as_json else render_table(rows))
     return 0
 

@@ -39,7 +39,10 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: project_monitor_test
     ports:
-      - "5432:5432"
+      # Loopback-bound. A bare "5432:5432" publishes on 0.0.0.0, putting a
+      # password-`postgres` server on every interface the host has; it would
+      # also collide with a host Postgres on the default port.
+      - "127.0.0.1:5432:5432"
     # tmpfs, not a volume: a test database that survives a run would let one
     # run's rows satisfy the next run's assertions.
     tmpfs:

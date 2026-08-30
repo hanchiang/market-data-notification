@@ -11,6 +11,7 @@ import pytest
 from market_data_library.core.onchain.evm import abi
 
 from src.service.project_monitor import logs as log_plane
+from src.service.project_monitor import recorder
 from src.service.project_monitor.attribution import LABEL_BOND, RULE_BOND_EVENT
 from src.service.project_monitor.config import NETNET
 from src.service.project_monitor.read_plan import build_read_plan
@@ -59,10 +60,15 @@ def test_every_reading_re_derives_from_its_own_raw_responses(
         if record is None or record['state'] != 'ok':
             continue
         value = abi.decode_single(read.result_type, raw['body']['result'])
+        # The stored shape comes from the recorder's own `split_value`, not from
+        # a second copy of the rule here. A local copy is what let an address be
+        # stored as 42 one-character strings and still pass: both sides built
+        # the same wrong shape and compared them to each other.
+        value_int, value_json = recorder.split_value(value)
         if record['value_int'] is not None:
-            assert int(value) == int(record['value_int']), read.name
+            assert value_int == int(record['value_int']), read.name
         else:
-            assert [str(v) for v in value] == record['value_json'], read.name
+            assert value_json == record['value_json'], read.name
         checked += 1
 
     # Not vacuous: the whole core plan really was re-derived.
@@ -133,12 +139,17 @@ def test_the_pair_price_is_above_backing(expected_fixture):
     which is the whole reason the treasury series is worth recording."""
     expected = _readings_by_name(expected_fixture)
     usdg_reserve, net_reserve, _ = expected['pair.getReserves']['value_json']
-    # token0 is USDG (6 dp), token1 is NET (9 dp) -- asserted, not assumed,
-    # because reserve0/reserve1 carry no labels and swapping them inverts the
-    # price silently.
-    assert expected['pair.token0']['value_int'] is None
-    price = (Decimal(usdg_reserve) / Decimal(10) ** 6) / (
-        Decimal(net_reserve) / Decimal(10) ** 9
+    # token0 is USDG, token1 is NET -- asserted against the addresses the sample
+    # actually read, because reserve0/reserve1 carry no labels and swapping them
+    # inverts the price silently. The previous version of this assertion checked
+    # only that `value_int is None`, which is true of every non-integer reading
+    # and therefore said nothing about which token came first.
+    assert expected['pair.token0']['value_json'].lower() == NETNET.address('USDG').lower()
+    assert expected['pair.token1']['value_json'].lower() == NETNET.address('NET').lower()
+    usdg_dp = int(expected['USDG.decimals']['value_int'])
+    net_dp = int(expected['NET.decimals']['value_int'])
+    price = (Decimal(usdg_reserve) / Decimal(10) ** usdg_dp) / (
+        Decimal(net_reserve) / Decimal(10) ** net_dp
     )
     backing = Decimal(expected['Treasury.backingPerToken']['value_int']) / Decimal(10) ** 18
     assert price > backing
@@ -264,3 +275,49 @@ def test_mint_classes_are_decided_by_recipient(recipient_key, expected_class):
         log_plane.classify_mint(NETNET.address(recipient_key), NETNET)
         == expected_class
     )
+
+
+ISSUANCE_TX = '0x0fe14bcf821343c228921e995b085b5c1f76e1eaae1301397fedcad8c6337b19'
+
+
+def test_the_premium_sale_mints_new_net_in_the_same_transaction(issuance_fixture):
+    """Settles the claim the requirement held pending this decode.
+
+    The research note read the dapp's UI copy and inferred that the desk sells
+    NET at a premium; whether it MINTS that NET in the same act was unverified,
+    and only the stronger claim depends on it -- that a premium sale moves
+    supply and reserves together, corrupting both terms of the
+    emission-against-growth comparison the whole report is built on.
+
+    Decoded from the one execution the trace names: a NET mint of 0.813691617
+    from the zero address to `premiumSeller`, and a transfer of that exact
+    amount on to the pair, both in transaction 0x0fe14bcf...7b19. It mints.
+    """
+    mints = issuance_fixture['mints']
+    assert [m['class'] for m in mints] == ['issuance']
+    mint = mints[0]
+    assert mint['tx_hash'].lower() == ISSUANCE_TX
+    assert Decimal(mint['amount']) / Decimal(10) ** 9 == Decimal('0.813691617')
+
+    # The paired USDG inflow is attributed to `issuance` by the same-transaction
+    # mint correlation -- rule 2, not a labelled sender. That is what makes the
+    # issuance bucket land on the flow as well as on the supply.
+    inflows = [f for f in issuance_fixture['flows'] if f['direction'] == 'in']
+    assert len(inflows) == 1
+    assert inflows[0]['label'] == 'issuance'
+    assert inflows[0]['rule'] == 'issuance:same-transaction-mint'
+    assert Decimal(inflows[0]['amount']) / Decimal(10) ** 6 == Decimal('952.809405')
+
+
+def test_the_issuance_window_carries_the_premium_sold_event(issuance_fixture):
+    """The event decode, cross-checked against a source outside the chain: the
+    dapp's own activity table rendered this execution as "0.81 NET | 952.81
+    USDG". The decoded figures round to exactly that, which is independent
+    evidence that the ABI extracted from the minified bundle is the right one --
+    a wrong field order would still decode, just to different numbers.
+    """
+    events = [e for e in issuance_fixture['events'] if e['name'] == 'PremiumSold']
+    assert len(events) == 1
+    fields = events[0]['fields_json']
+    assert Decimal(fields['netSold']) / Decimal(10) ** 9 == Decimal('0.813691617')
+    assert Decimal(fields['usdgSweptRaw']) / Decimal(10) ** 6 == Decimal('952.809405')

@@ -9,7 +9,7 @@ mistaken for a real one.
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from market_data_library.core.onchain.evm import (
     EvmClient,
@@ -196,22 +196,47 @@ async def _issue_individually(
         _record_decoded(read, raw_hex, result, decoded)
 
 
+def split_value(value: Any) -> Tuple[Optional[int], Any]:
+    """Split a decoded ABI value into the (`value_int`, `value_json`) pair.
+
+    Three shapes, kept apart deliberately:
+      int/bool  -> `value_int`, so it can be summed in SQL
+      str       -> `value_json` as the string itself (an address, a bytes32)
+      tuple     -> `value_json` as a LIST of strings, because a uint256 exceeds
+                   what a JSON number represents exactly
+
+    The string case needs its own branch: `[str(v) for v in value]` treats a str
+    as an iterable and stores an address as 42 one-character strings. That shape
+    still round-trips through the AC3 re-derivation, because the check compares
+    char array to char array -- which is why it survived a green suite, and why
+    the report had to hardcode the reserve order this reading exists to supply.
+
+    Public, and used by the fixture test as well as by the recorder, so the
+    stored shape and the shape the re-derivation expects cannot drift apart --
+    that symmetry is what hid the bug the first time.
+    """
+    is_scalar = isinstance(value, (int, bool)) and not isinstance(value, tuple)
+    if is_scalar:
+        return int(value), None
+    if isinstance(value, str):
+        return None, value
+    return None, [str(v) for v in value]
+
+
 def _record_decoded(
     read: Read, raw_hex: str, result: SampleResult, decoded: Dict[str, Any]
 ) -> None:
     value = abi.decode_single(read.result_type, raw_hex)
     decoded[read.name] = value
-    # A scalar goes in `value_int` for arithmetic; a tuple goes in `value_json`
-    # as strings, because a uint256 exceeds what JSON numbers represent exactly.
-    is_scalar = isinstance(value, (int, bool)) and not isinstance(value, tuple)
+    value_int, value_json = split_value(value)
     result.readings.append(
         {
             'name': read.name,
             'contract': read.contract,
             'tier': read.tier,
             'raw_hex': raw_hex,
-            'value_int': int(value) if is_scalar else None,
-            'value_json': None if is_scalar else [str(v) for v in value],
+            'value_int': value_int,
+            'value_json': value_json,
             # Decimals are resolved in a second pass: `NET.totalSupply` is
             # issued before `NET.decimals` in the same batch, so the sibling
             # reading does not exist yet at this point. Filling it here silently
@@ -397,15 +422,30 @@ def commit_sample(
         repository.insert_mints(log_window['mints'])
         repository.insert_flows(log_window['flows'])
         repository.insert_events(log_window['events'])
+        # A boundary's `epoch_number` means "the epoch this boundary OPENS".
+        # The sample observes exactly one epoch, so it can name exactly one
+        # boundary: the latest in the window. A window spanning two or more
+        # rebases (an outage longer than one 8 h epoch) discovers earlier
+        # boundaries too, but the sample says nothing about which epochs those
+        # opened -- so they are written with a NULL number and left for a
+        # backfill sample to fill. Stamping the sample's number onto all of them
+        # would mislabel every boundary but the last, and `COALESCE` on update
+        # then freezes whichever wrong value landed first.
+        latest_boundary = (
+            max(log_window['boundaries'], key=lambda b: int(b['first_block']))
+            if log_window['boundaries']
+            else None
+        )
         for boundary in log_window['boundaries']:
-            # The rebase at the N->N+1 transition lands in the first sample
-            # observing N+1, so this sample's epoch number is the one the
-            # boundary opens.
+            names_this_epoch = (
+                latest_boundary is not None
+                and int(boundary['first_block']) == int(latest_boundary['first_block'])
+            )
             repository.upsert_epoch_boundary(
                 project_name,
                 boundary['first_block'],
                 boundary['rebase_tx'],
-                epoch_number=sample.epoch_number,
+                epoch_number=sample.epoch_number if names_this_epoch else None,
             )
     repository.commit()
     return sample_id

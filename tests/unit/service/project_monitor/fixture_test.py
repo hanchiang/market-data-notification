@@ -414,6 +414,21 @@ def test_the_log_window_re_derives_from_its_own_raw_responses(log_window_fixture
 
     assert len(client.served) == 9, 'every one of the nine queries was served'
 
+    # Pins `read_log_window`'s `raws_by_query.extend(...)` (recorder.py) --
+    # the only production line that populates `raw_responses_by_query`, which
+    # backfill step 3 depends on entirely for R2's raw-response storage.
+    # Nothing else in this test exercises that line: deleting it leaves
+    # `raw_responses_by_query` empty while every mint/flow/event assertion
+    # below still passes, so a real backfill would print `+0 raw log
+    # responses` and exit looking healthy.
+    query_names = {q.name for q in log_plane.build_log_queries(NETNET)}
+    by_query = window['raw_responses_by_query']
+    assert {name for name, _ in by_query} == query_names
+    assert [raw for _, raw in by_query] == window['raw_responses'], (
+        'raw_responses_by_query must carry the exact same raws, in the same '
+        'order, as raw_responses -- just paired with the query name'
+    )
+
     assert _comparable(
         window['mints'], ('block', 'tx_hash', 'log_index', 'recipient', 'amount', 'class')
     ) == _comparable(

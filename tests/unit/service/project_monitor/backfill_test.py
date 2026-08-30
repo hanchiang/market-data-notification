@@ -332,6 +332,48 @@ def test_step_log_history_stores_the_raw_log_responses_block_keyed(
     assert net_mints_row['params_json'][0]['fromBlock'] == '0x64'
 
 
+def test_step_log_history_keys_narrowed_sub_windows_by_their_own_span(
+    repository, monkeypatch,
+):
+    """`fetch_window` narrows on a too-wide-window RPC error, so ONE query can
+    issue several `eth_getLogs` calls over disjoint sub-spans inside a single
+    step-3 run. The stored span must come from each call's own
+    `raw.params[0]['fromBlock']`/`['toBlock']`, not from the caller's outer
+    `[from_block, to_block]` -- the two previous tests never separate them
+    (both raws there share one span that also equals the outer window), so a
+    version that stored the outer range for every row would still pass those."""
+    repository.set_project_value(PROJECT, 'launch_block', '100')
+
+    async def fake_read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        window = _fake_window(project_name, '0x64', '0x3e7')
+        window['raw_responses_by_query'] = [
+            ('net_mints', _FakeRawResponse(
+                '0x64', '0x1f3', {'jsonrpc': '2.0', 'id': 1, 'result': []}
+            )),
+            ('net_mints', _FakeRawResponse(
+                '0x1f4', '0x3e7', {'jsonrpc': '2.0', 'id': 2, 'result': []}
+            )),
+        ]
+        return window
+
+    monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
+    result = asyncio.run(backfill.step_log_history(repository, None, 999))
+
+    assert '+2 raw log responses' in result, result
+
+    rows = repository.fetch_all(
+        'SELECT from_block, to_block FROM backfill_log_raw_response '
+        'WHERE project = %s AND query_name = %s ORDER BY from_block',
+        (PROJECT, 'net_mints'),
+    )
+    assert [(r['from_block'], r['to_block']) for r in rows] == [
+        (100, 499), (500, 999),
+    ]
+
+
 def test_step_log_history_re_run_does_not_duplicate_raw_responses(
     repository, monkeypatch,
 ):

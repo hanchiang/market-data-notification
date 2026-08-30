@@ -276,9 +276,9 @@ Data-provider split:
   SQLite history; they do not fetch fresh coin or regime provider data.
 - Run `crypto.py` first when you need fresh test-mode signal rows before
   rendering `crypto_signal_report.py`.
-- Phase 3A calibration, currently branch-local until merge/deploy, also freezes
-  emitted private-signal candidates into cohort rows and lets later scheduled
-  crypto runs resolve `24h`, `3d`, and `7d` outcomes.
+- Phase 3A calibration, merged 2026-05-08 (`63c321d`), also freezes emitted
+  private-signal candidates into cohort rows and lets later scheduled crypto
+  runs resolve `24h`, `3d`, and `7d` outcomes.
 
 ```mermaid
 flowchart LR
@@ -409,9 +409,10 @@ PYTHONPATH=. poetry run pytest tests/unit
 `PYTHONPATH=.` is needed because nothing puts the repo root on `sys.path`; without it the
 `src.*` imports fail before any test runs.
 
-`uv run` also works, but it resolves dependencies from `pyproject.toml` rather than
-`poetry.lock`, so it can test a different dependency set than CI and production. A stale
-`uv.lock` sat here until 2026-08-30 doing exactly that, five months behind the poetry lock.
+`uv run` also works, but this repo has no `uv.lock`, so it re-resolves from `pyproject.toml`
+on every invocation and can test a different dependency set than the `poetry.lock` CI and
+production install from. The `uv.lock` removed on 2026-08-30 would not have helped: it held
+three header lines and zero package pins.
 
 ## TradingView Replay
 

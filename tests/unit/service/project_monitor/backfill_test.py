@@ -139,3 +139,81 @@ def test_a_backfill_boundary_is_stamped_with_the_epoch_it_opens(
         (PROJECT,),
     )[0]
     assert row['epoch_number'] == 42
+
+
+def test_step_deploy_blocks_records_every_contract_in_the_read_plan(repository):
+    """Step 1's own orchestration, not just `find_deploy_block` in isolation:
+    P2-4 named all four backfill steps as untested, and a step that silently
+    dropped a contract from the plan -- or wrote the wrong address alongside
+    the right name -- would show up nowhere `find_deploy_block`'s own unit
+    tests can see, since those never touch the read plan or the repository."""
+    from src.service.project_monitor.read_plan import build_read_plan
+
+    plan_contracts = {read.contract for read in build_read_plan(NETNET)}
+
+    client = FakeCodeClient(deploy=1_000)
+    asyncio.run(backfill.step_deploy_blocks(repository, client, head=2_000))
+
+    deploy_blocks = repository.get_deploy_blocks(PROJECT)
+    assert plan_contracts <= set(deploy_blocks), (
+        f'missing from the store: {plan_contracts - set(deploy_blocks)}'
+    )
+    assert all(deploy_blocks[name] == 1_000 for name in plan_contracts)
+    # Staking is read separately from the plan loop, for `launch_block`, which
+    # the report and every other backfill step key off of.
+    assert repository.get_project_value(PROJECT, 'launch_block') == '1000'
+
+
+def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origin(
+    repository, monkeypatch,
+):
+    """Step 3's own orchestration: it must actually reach the repository with
+    what `read_log_window` decodes, and it must record where it stopped so
+    step 4 and the live cursor both start from the right place."""
+    repository.set_project_value(PROJECT, 'launch_block', '100')
+
+    captured = {}
+
+    async def fake_read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        captured['from_block'] = from_block
+        captured['to_block'] = to_block
+        return {
+            'mints': [{
+                'project': project_name, 'block': 150, 'tx_hash': '0xm',
+                'log_index': 0, 'recipient': '0x1', 'amount': 5, 'decimals': 9,
+                'class': 'bond',
+            }],
+            'flows': [{
+                'project': project_name, 'block': 150, 'tx_hash': '0xm',
+                'log_index': 1, 'direction': 'in', 'counterparty': '0x2',
+                'amount': 5, 'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated',
+            }],
+            'events': [{
+                'project': project_name, 'block': 150, 'tx_hash': '0xm',
+                'log_index': 0, 'contract': 'bondDepository', 'name': 'BondCreated',
+                'fields_json': {'marketId': '2'},
+            }],
+            'raw_responses': [],
+            'boundaries': [],
+        }
+
+    monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
+    result = asyncio.run(backfill.step_log_history(repository, None, 999))
+
+    assert captured['from_block'] == 100
+    assert captured['to_block'] == 999
+    assert '+1 mints' in result and '+1 flows' in result and '+1 events' in result
+
+    assert repository.fetch_all(
+        'SELECT count(*) AS n FROM mint WHERE project = %s', (PROJECT,)
+    )[0]['n'] == 1
+    assert repository.fetch_all(
+        'SELECT count(*) AS n FROM flow WHERE project = %s', (PROJECT,)
+    )[0]['n'] == 1
+    assert repository.fetch_all(
+        'SELECT count(*) AS n FROM event WHERE project = %s', (PROJECT,)
+    )[0]['n'] == 1
+    assert repository.get_project_value(PROJECT, 'cursor_origin') == '999'

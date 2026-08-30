@@ -280,3 +280,135 @@ def test_the_deploy_gate_does_not_fire_without_a_deploy_block():
     assert not any(
         r['state'] == recorder.STATE_NOT_DEPLOYED for r in result.readings
     )
+
+
+# ------------------------------------------- core/peripheral tier isolation
+#
+# P1-1 was caught only at the record.py failover clause, which mocked away
+# `_read_state_on` entirely -- so nothing ever proved `read_state` itself
+# actually raises `CoreReadFailedError` for a real core-batch failure, as
+# opposed to the caller just happening to catch the right exception type by
+# coincidence. These two tests drive `read_state` through a fake server the
+# way `test_a_rejecting_endpoint_makes_the_read_fail_loudly` above does, but
+# fail an `eth_call` batch rather than the block read that precedes every
+# batch -- the shape an archive outage actually takes (design, P1-1).
+
+def _generic_ok(entry):
+    # Eight words: covers every result_type in the plan (up to six for
+    # `Morpho.market`), same convention as the fixtures above.
+    return {'jsonrpc': '2.0', 'id': entry['id'], 'result': '0x' + f'{1:064x}' * 8}
+
+
+def _rpc_error(entry, message='execution reverted'):
+    return {
+        'jsonrpc': '2.0', 'id': entry['id'],
+        'error': {'code': -32000, 'message': message},
+    }
+
+
+def test_a_core_batch_failure_raises_core_read_failed_error():
+    """P1-1's other half: `read_state` must actually raise `CoreReadFailedError`
+    for a core `eth_call` batch failure, not merely be caught as one by whatever
+    happens to be watching. Every `eth_call` in batch 1 (core) is failed here --
+    distinct from failing `eth_getBlockByNumber`, which the existing AC2 test
+    already covers and which is not what P1-1 was about."""
+
+    async def run():
+        async def handler(payload):
+            entries = payload if isinstance(payload, list) else [payload]
+            body = []
+            for entry in entries:
+                if entry['method'] == 'eth_getBlockByNumber':
+                    body.append({'jsonrpc': '2.0', 'id': entry['id'],
+                                 'result': {'number': '0x64', 'timestamp': '0x1'}})
+                elif entry['method'] == 'eth_call':
+                    body.append(_rpc_error(entry))
+                else:
+                    body.append(_generic_ok(entry))
+            return web.Response(
+                text=json.dumps(body if isinstance(payload, list) else body[0]),
+                content_type='application/json',
+            )
+
+        server, url, runner = await _start(handler)
+        client = EvmClient(
+            Endpoint(kind='public', url=url),
+            public_rpc_budget(min_request_interval_seconds=0.0),
+        )
+        try:
+            with pytest.raises(recorder.CoreReadFailedError):
+                await recorder.read_state(client, NETNET, 100)
+        finally:
+            await client.close()
+            await runner.cleanup()
+
+    asyncio.run(run())
+
+
+def test_a_peripheral_batch_failure_retries_individually_and_isolates_the_bad_read():
+    """The counterpart of the test above, on the other side of R8's split: one
+    bad peripheral read must not blank its whole batch. `inverseBond.price`
+    fails; its batch-3 sibling `inverseBond.active` -- issued in the same
+    batch, then retried in the same individual fallback pass -- must still come
+    back `ok`, and the failure must be attributed to the read that actually
+    failed, not to the batch as a whole."""
+
+    async def run():
+        from src.service.project_monitor.read_plan import build_read_plan
+
+        plan = {r.name: r for r in build_read_plan(NETNET)}
+        bad = plan['inverseBond.price']
+
+        async def handler(payload):
+            entries = payload if isinstance(payload, list) else [payload]
+            is_batch = len(entries) > 1
+            body = []
+            for entry in entries:
+                if entry['method'] == 'eth_getBlockByNumber':
+                    body.append({'jsonrpc': '2.0', 'id': entry['id'],
+                                 'result': {'number': '0x64', 'timestamp': '0x1'}})
+                    continue
+                if entry['method'] == 'eth_call':
+                    call = entry['params'][0]
+                    is_bad = (
+                        call['to'].lower() == bad.to.lower()
+                        and call['data'] == bad.calldata
+                    )
+                    if is_bad:
+                        body.append(_rpc_error(entry))
+                    else:
+                        body.append(_generic_ok(entry))
+                    continue
+                body.append(_generic_ok(entry))
+            return web.Response(
+                text=json.dumps(body if is_batch else body[0]),
+                content_type='application/json',
+            )
+
+        server, url, runner = await _start(handler)
+        client = EvmClient(
+            Endpoint(kind='public', url=url),
+            public_rpc_budget(min_request_interval_seconds=0.0),
+        )
+        try:
+            return await recorder.read_state(client, NETNET, 100)
+        finally:
+            await client.close()
+            await runner.cleanup()
+
+    result = asyncio.run(run())
+    by_name = {r['name']: r for r in result.readings}
+
+    assert by_name['inverseBond.price']['state'] == recorder.STATE_FAILED
+    assert by_name['inverseBond.price']['error_class'] == 'EvmRpcError'
+    assert 'inverseBond.price' in result.failed_peripheral
+
+    # Its batch-3 sibling, retried individually in the same fallback pass,
+    # must still succeed -- one bad read in a peripheral batch must not blank
+    # the rest of it.
+    assert by_name['inverseBond.active']['state'] == recorder.STATE_OK
+    assert 'inverseBond.active' not in result.failed_peripheral
+
+    # And a CORE reading from an earlier batch is untouched -- the peripheral
+    # failure must not have propagated backward.
+    assert by_name['Treasury.rfv']['state'] == recorder.STATE_OK

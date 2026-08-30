@@ -27,8 +27,9 @@ DEFAULT_TEST_DATABASE_URL = (
 )
 
 TABLES = (
-    'manifest_diff', 'manifest_snapshot', 'raw_response', 'reading', 'sample',
-    'mint', 'flow', 'event', 'epoch_boundary', 'contract', 'project', 'run',
+    'manifest_diff', 'manifest_snapshot', 'raw_response', 'backfill_log_raw_response',
+    'reading', 'sample', 'mint', 'flow', 'event', 'epoch_boundary', 'contract',
+    'project', 'run',
 )
 
 

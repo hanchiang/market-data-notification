@@ -122,9 +122,18 @@ async def step_log_history(
     mints = repository.insert_mints(window['mints'])
     flows = repository.insert_flows(window['flows'])
     events = repository.insert_events(window['events'])
+    # R2's raw-response half of this step: no sample exists to hang these on
+    # (a backfill log sweep pins no single block), so they go in block-keyed
+    # rather than sample-keyed. See `backfill_log_raw_response`'s DDL comment.
+    raws = repository.insert_backfill_log_raw_responses(
+        project.name, window['raw_responses_by_query']
+    )
     repository.set_project_value(project.name, 'cursor_origin', str(to_block))
     repository.commit()
-    return f'step 3: +{mints} mints, +{flows} flows, +{events} events to block {to_block}'
+    return (
+        f'step 3: +{mints} mints, +{flows} flows, +{events} events, '
+        f'+{raws} raw log responses to block {to_block}'
+    )
 
 
 async def step_epoch_samples(

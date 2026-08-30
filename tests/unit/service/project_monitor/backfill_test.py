@@ -209,6 +209,49 @@ def test_step_deploy_blocks_records_every_contract_in_the_read_plan(repository):
     )
 
 
+class _FakeRawResponse:
+    """Stands in for `market_data_library`'s `RawResponse` (a frozen dataclass
+    with `method`/`params`/`body`/`endpoint_kind`), which the repository layer
+    accesses by attribute, not by key -- a dict fixture would pass a test that
+    the real client's return value fails against."""
+
+    def __init__(self, from_block_hex, to_block_hex, body):
+        self.method = 'eth_getLogs'
+        self.params = [{'fromBlock': from_block_hex, 'toBlock': to_block_hex}]
+        self.body = body
+        self.endpoint_kind = 'public'
+
+
+def _fake_window(project_name, from_block_hex, to_block_hex, seq_body='0x1'):
+    return {
+        'mints': [{
+            'project': project_name, 'block': 150, 'tx_hash': '0xm',
+            'log_index': 0, 'recipient': '0x1', 'amount': 5, 'decimals': 9,
+            'class': 'bond',
+        }],
+        'flows': [{
+            'project': project_name, 'block': 150, 'tx_hash': '0xm',
+            'log_index': 1, 'direction': 'in', 'counterparty': '0x2',
+            'amount': 5, 'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated',
+        }],
+        'events': [{
+            'project': project_name, 'block': 150, 'tx_hash': '0xm',
+            'log_index': 0, 'contract': 'bondDepository', 'name': 'BondCreated',
+            'fields_json': {'marketId': '2'},
+        }],
+        'raw_responses': [],
+        'raw_responses_by_query': [
+            ('net_mints', _FakeRawResponse(
+                from_block_hex, to_block_hex, {'jsonrpc': '2.0', 'id': 1, 'result': [seq_body]}
+            )),
+            ('usdg_in', _FakeRawResponse(
+                from_block_hex, to_block_hex, {'jsonrpc': '2.0', 'id': 2, 'result': []}
+            )),
+        ],
+        'boundaries': [],
+    }
+
+
 def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origin(
     repository, monkeypatch,
 ):
@@ -225,34 +268,7 @@ def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origi
     ):
         captured['from_block'] = from_block
         captured['to_block'] = to_block
-        return {
-            'mints': [{
-                'project': project_name, 'block': 150, 'tx_hash': '0xm',
-                'log_index': 0, 'recipient': '0x1', 'amount': 5, 'decimals': 9,
-                'class': 'bond',
-            }],
-            'flows': [{
-                'project': project_name, 'block': 150, 'tx_hash': '0xm',
-                'log_index': 1, 'direction': 'in', 'counterparty': '0x2',
-                'amount': 5, 'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated',
-            }],
-            'events': [{
-                'project': project_name, 'block': 150, 'tx_hash': '0xm',
-                'log_index': 0, 'contract': 'bondDepository', 'name': 'BondCreated',
-                'fields_json': {'marketId': '2'},
-            }],
-            # Empty, and this test is structurally blind to that: step 3
-            # DISCARDS `window['raw_responses']` (backfill.py) because
-            # `raw_response` is sample-keyed and step 3 has no sample, so
-            # historical mint/flow rows are un-re-derivable and R2's "the raw
-            # JSON-RPC response is stored with the block" is narrowed on the
-            # backfill path only. That is a schema and design decision, not a
-            # test one -- escalated to the operator in test-plan.md
-            # ("Escalation: backfill step 3 discards its raw responses").
-            # This comment stands until that decision lands.
-            'raw_responses': [],
-            'boundaries': [],
-        }
+        return _fake_window(project_name, hex(from_block), hex(to_block))
 
     monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
     result = asyncio.run(backfill.step_log_history(repository, None, 999))
@@ -271,3 +287,72 @@ def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origi
         'SELECT count(*) AS n FROM event WHERE project = %s', (PROJECT,)
     )[0]['n'] == 1
     assert repository.get_project_value(PROJECT, 'cursor_origin') == '999'
+
+
+def test_step_log_history_stores_the_raw_log_responses_block_keyed(
+    repository, monkeypatch,
+):
+    """R2 on the backfill path (operator ruling, test-plan.md "Escalation:
+    backfill step 3 discards its raw responses"): the raw `eth_getLogs` bodies
+    step 3 fetches must land somewhere re-derivable, not be discarded because
+    there is no sample to key them under.
+
+    Asserts real content -- method, decoded block bounds, the actual body,
+    endpoint_kind -- not just a row count, which a table holding the wrong
+    query's raw under the right count would still satisfy."""
+    repository.set_project_value(PROJECT, 'launch_block', '100')
+
+    async def fake_read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        return _fake_window(project_name, '0x64', '0x3e7', seq_body='0xdeadbeef')
+
+    monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
+    result = asyncio.run(backfill.step_log_history(repository, None, 999))
+
+    assert '+2 raw log responses' in result, result
+
+    rows = repository.fetch_all(
+        'SELECT query_name, from_block, to_block, method, params_json, '
+        'body_json, endpoint_kind FROM backfill_log_raw_response '
+        'WHERE project = %s ORDER BY query_name',
+        (PROJECT,),
+    )
+    assert [r['query_name'] for r in rows] == ['net_mints', 'usdg_in']
+
+    net_mints_row = rows[0]
+    assert net_mints_row['from_block'] == 100
+    assert net_mints_row['to_block'] == 999
+    assert net_mints_row['method'] == 'eth_getLogs'
+    assert net_mints_row['endpoint_kind'] == 'public'
+    # The body is what a re-derivation actually needs back -- not just present,
+    # but the SAME result the query returned.
+    assert net_mints_row['body_json']['result'] == ['0xdeadbeef']
+    assert net_mints_row['params_json'][0]['fromBlock'] == '0x64'
+
+
+def test_step_log_history_re_run_does_not_duplicate_raw_responses(
+    repository, monkeypatch,
+):
+    """A backfill that dies halfway is re-run, not unwound (module docstring).
+    Re-issuing the same step-3 calls must not double the raw-response rows --
+    the same guarantee `(tx_hash, log_index)` gives mint/flow/event."""
+    repository.set_project_value(PROJECT, 'launch_block', '100')
+
+    async def fake_read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        return _fake_window(project_name, '0x64', '0x3e7')
+
+    monkeypatch.setattr(recorder, 'read_log_window', fake_read_log_window)
+    first = asyncio.run(backfill.step_log_history(repository, None, 999))
+    second = asyncio.run(backfill.step_log_history(repository, None, 999))
+
+    assert '+2 raw log responses' in first, first
+    assert '+0 raw log responses' in second, second
+    assert repository.fetch_all(
+        'SELECT count(*) AS n FROM backfill_log_raw_response WHERE project = %s',
+        (PROJECT,),
+    )[0]['n'] == 2

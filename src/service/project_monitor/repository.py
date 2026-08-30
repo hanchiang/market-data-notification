@@ -74,6 +74,33 @@ SCHEMA_STATEMENTS: Sequence[str] = (
         UNIQUE (sample_id, seq)
     )
     """,
+    # Step 3's analogue of `raw_response`, for the one part of R2 the sample
+    # table cannot carry: a backfill log sweep pins no single block, so there is
+    # no `sample_id` to hang the raw body on. What identifies a row instead is
+    # the query that produced it (`query_name`, matching `params_json`'s own
+    # address/topics) and the `[from_block, to_block]` span that ONE JSON-RPC
+    # call actually covered -- `fetch_window` narrows that span on a
+    # too-wide-window error, so it can differ per call even within one step-3
+    # run. That triple is also the re-run guard: a second backfill reissues the
+    # same calls, and `ON CONFLICT DO NOTHING` on it keeps that harmless instead
+    # of duplicating rows, the same role `(tx_hash, log_index)` plays for
+    # mint/flow/event. The endpoint URL is absent for the same reason as
+    # `raw_response`: `endpoint_kind` is the provenance, the URL is a credential.
+    """
+    CREATE TABLE IF NOT EXISTS backfill_log_raw_response (
+        id            bigserial PRIMARY KEY,
+        project       text NOT NULL,
+        query_name    text NOT NULL,
+        from_block    bigint NOT NULL,
+        to_block      bigint NOT NULL,
+        method        text NOT NULL,
+        params_json   jsonb NOT NULL,
+        body_json     jsonb NOT NULL,
+        endpoint_kind text NOT NULL,
+        fetched_at    timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (project, query_name, from_block, to_block)
+    )
+    """,
     # `state` is what keeps a peripheral failure from becoming a null that reads
     # like a zero: 'ok', 'not_deployed' (the contract had no code at this
     # block -- a defined observation, not a failure) or 'failed' with its class.
@@ -192,6 +219,8 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     "CREATE INDEX IF NOT EXISTS sample_epoch_idx ON sample (project, epoch_number)",
     "CREATE INDEX IF NOT EXISTS mint_block_idx ON mint (project, block)",
     "CREATE INDEX IF NOT EXISTS flow_block_idx ON flow (project, block)",
+    "CREATE INDEX IF NOT EXISTS backfill_log_raw_response_block_idx "
+    "ON backfill_log_raw_response (project, from_block, to_block)",
 )
 
 
@@ -333,6 +362,45 @@ class ProjectMonitorRepository:
                         raw.endpoint_kind,
                     ),
                 )
+
+    def insert_backfill_log_raw_responses(
+        self, project: str, entries: Iterable[Any]
+    ) -> int:
+        """Step 3's raw `eth_getLogs` bodies (R2), keyed by query + block span
+        rather than a sample id -- see `backfill_log_raw_response`'s DDL comment
+        for why. `entries` is `(query_name, RawResponse)` pairs from
+        `recorder.read_log_window`'s `raw_responses_by_query`. Returns the
+        number of rows actually inserted, so a re-run can report "0 new" instead
+        of silently looking like it fetched again.
+        """
+        inserted = 0
+        with self.connection.cursor() as cursor:
+            for query_name, raw in entries:
+                # `raw.params` is `[filterObject]` (see `LogFilter.to_params`);
+                # `fromBlock`/`toBlock` are the request's own hex block bounds,
+                # not `from_block`/`to_block` passed in from the caller -- those
+                # narrow per sub-window and this is the one place that survives.
+                filter_params = raw.params[0]
+                cursor.execute(
+                    'INSERT INTO backfill_log_raw_response '
+                    '(project, query_name, from_block, to_block, method, '
+                    'params_json, body_json, endpoint_kind) '
+                    'VALUES (%s, %s, %s, %s, %s, %s, %s, %s) '
+                    'ON CONFLICT (project, query_name, from_block, to_block) '
+                    'DO NOTHING',
+                    (
+                        project,
+                        query_name,
+                        int(filter_params['fromBlock'], 16),
+                        int(filter_params['toBlock'], 16),
+                        raw.method,
+                        json.dumps(raw.params),
+                        json.dumps(raw.body),
+                        raw.endpoint_kind,
+                    ),
+                )
+                inserted += cursor.rowcount
+        return inserted
 
     def insert_readings(self, sample_id: int, readings: Iterable[Dict[str, Any]]) -> None:
         with self.connection.cursor() as cursor:

@@ -307,12 +307,14 @@ async def read_log_window(
     queries = {q.name: q for q in log_plane.build_log_queries(project)}
     fetched: Dict[str, List[Dict[str, Any]]] = {}
     raws: List[Any] = []
+    raws_by_query: List[Tuple[str, Any]] = []
     for name, query in queries.items():
         entries, query_raws = await log_plane.fetch_window(
             client, query, from_block, to_block
         )
         fetched[name] = entries
         raws.extend(query_raws)
+        raws_by_query.extend((name, raw) for raw in query_raws)
 
     mint_rows = log_plane.build_mint_rows(
         project_name, project, fetched['net_mints'], net_decimals
@@ -356,6 +358,12 @@ async def read_log_window(
         'flows': flow_rows,
         'events': event_rows,
         'raw_responses': raws,
+        # Same raws, paired with the query name that produced each one -- the
+        # live path's `commit_sample` doesn't need this (a `sample_id` already
+        # groups its raws under one block), but backfill's step 3 has no
+        # sample to group under, so it stores each raw keyed by
+        # (query, block span) instead and needs the name to do it (R2).
+        'raw_responses_by_query': raws_by_query,
         'boundaries': log_plane.rebase_boundaries(project, mint_rows),
     }
 

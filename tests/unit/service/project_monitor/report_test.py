@@ -371,3 +371,204 @@ def test_the_not_deployed_label_does_not_leak_across_columns():
     }
     assert _cell(row, 'buyback.capacity') == 'n/a (not deployed)'
     assert _cell(row, 'loopback.utilization_pct') == '-'
+
+
+# --------------------------------- AC5's VALUE path for the P1-2 figures
+#
+# Round-1 test review, finding 1: every test above seeds only the four readings
+# in `_readings()`, so `Morpho.market`, `IRM.borrowRateView`,
+# `inverseBond.capacityRemaining` and all twelve Sleeve/Mark readings are
+# ABSENT from every row those tests build. The JSON/table agreement test then
+# compares `None == None` for exactly the eight figures P1-2 was about, and
+# `test_the_table_carries_every_ac5_figure` checks static header text only.
+# Demonstrated: swapping `supplied`/`borrowed` in `_loopback` AND pointing
+# `buyback.capacity` at a nonexistent reading name left the suite green.
+#
+# So P1-2 was fixed at the header level and never pinned at the value level --
+# the same defect one layer down. The tests below seed the REAL readings from
+# the committed fixture and assert the derived figures, with every expected
+# value stated as a literal computed from the struct's documented field order
+# rather than by re-running the production formula.
+
+SLEEVE_SYMBOLS = ('NVDA', 'SPCX', 'AAPL', 'MSFT', 'GOOGL', 'COIN')
+
+# The newest Chainlink `updatedAt` across the six marks in the fixture. A
+# sample timestamp at or just after it is "fresh"; +25 h is stale.
+FIXTURE_NEWEST_MARK_AT = 1787956586
+
+
+def _fixture_readings(expected_fixture, names=None):
+    """Readings straight from the committed fixture, in the recorder's own
+    stored shape, so the report is driven by values a real chain read produced
+    rather than by numbers invented to satisfy the assertions."""
+    rows = []
+    for reading in expected_fixture['readings']:
+        if names is not None and reading['name'] not in names:
+            continue
+        rows.append({
+            'name': reading['name'],
+            'contract': reading['contract'],
+            'tier': reading['tier'],
+            'raw_hex': reading['raw_hex'],
+            'value_int': reading['value_int'],
+            'value_json': reading['value_json'],
+            'decimals': reading['decimals'],
+            'state': reading['state'],
+            'error_class': reading['error_class'],
+        })
+    return rows
+
+
+def _commit_fixture_epoch(repository, run_id, *, block, epoch, block_timestamp,
+                          expected_fixture):
+    sample = recorder.SampleResult(
+        block=block, block_timestamp=block_timestamp, epoch_number=epoch,
+        endpoint_kind='public', readings=_fixture_readings(expected_fixture),
+    )
+    return recorder.commit_sample(
+        repository, run_id=run_id, project_name=PROJECT, sample=sample,
+        kind=recorder.KIND_LIVE,
+    )
+
+
+def test_the_loopback_figures_carry_the_markets_own_field_order(
+    repository, expected_fixture
+):
+    """Morpho Blue's `Market` is
+    (totalSupplyAssets, totalSupplyShares, totalBorrowAssets, totalBorrowShares,
+    lastUpdate, fee) -- supplied at index 0 and borrowed at index 2, NOT
+    adjacent. Swapping them inverts utilization, which is one of G5's six
+    pre-registered thresholds and the figure that says whether a supplier can
+    still exit. The expected numbers below are read off the fixture's own
+    `Morpho.market` tuple by that documented order, not by re-running
+    `_loopback`."""
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=49_877_926, epoch=132,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 60,
+        expected_fixture=expected_fixture,
+    )
+    repository.commit()
+
+    row = load_epoch_rows(repository, NETNET)[0]
+    loopback = row['loopback']
+
+    assert loopback['state'] == 'ok'
+    # 51,225,024,314 / 1e6 and 51,211,175,064 / 1e6 -- indices 0 and 2.
+    assert loopback['total_supplied'] == Decimal('51225.024314')
+    assert loopback['total_borrowed'] == Decimal('51211.175064')
+    # 99.97%: the market was effectively fully drawn when captured, which is
+    # the state the requirement calls out (a supplier cannot exit).
+    assert loopback['utilization_pct'] > Decimal('99.9')
+    assert loopback['utilization_pct'] < Decimal('100')
+    # borrowRateView is a per-second wad rate; x seconds-per-year x 100.
+    assert loopback['borrow_apr_pct'].quantize(Decimal('0.01')) == Decimal('25.93')
+    # Supply APR is derived, not read: borrow x utilization x (1 - fee), and
+    # fee is 0 here, so it sits just under the borrow rate.
+    assert loopback['supply_apr_pct'] < loopback['borrow_apr_pct']
+    assert loopback['supply_apr_pct'] > loopback['borrow_apr_pct'] * Decimal('0.99')
+
+
+def test_the_buyback_capacity_reaches_the_row_and_the_rendered_table(
+    repository, expected_fixture
+):
+    """`inverseBond.capacityRemaining` is one of AC5's four buyback figures and
+    feeds a G5 threshold. A reading name that no longer resolves would leave the
+    cell blank, which reads exactly like a contract that is not deployed."""
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=49_877_926, epoch=132,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 60,
+        expected_fixture=expected_fixture,
+    )
+    repository.commit()
+
+    rows = load_epoch_rows(repository, NETNET)
+    buyback = rows[0]['buyback']
+    assert buyback['capacity_state'] == 'ok'
+    assert buyback['capacity'] == Decimal('21551.46043603')
+    # And it survives rendering rather than only existing on the row dict.
+    assert '21,551.4604' in render_table(rows)
+    # `filled` stays unavailable by design -- no on-chain source exists, and
+    # inventing one is worse than the visible gap.
+    assert buyback['filled'] is None
+    assert buyback['filled_state'] == 'no_onchain_source'
+    assert 'n/a (no source)' in render_table(rows)
+
+
+def test_the_sleeve_total_marks_every_leg_at_its_own_feed(
+    repository, expected_fixture
+):
+    """The Sleeve is six balances at six independent Chainlink marks, each with
+    its own feed decimals. The expected total is stated as a literal, computed
+    once from the fixture's balances and answers -- deliberately NOT by looping
+    over the same symbols the way `_sleeve` does, because a test that rebuilds
+    the value with the production algorithm passes whenever both are wrong the
+    same way (which is exactly how the char-array bug survived AC3)."""
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=49_877_926, epoch=132,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 60,
+        expected_fixture=expected_fixture,
+    )
+    repository.commit()
+
+    row = load_epoch_rows(repository, NETNET)[0]
+
+    assert row['sleeve_state'] == 'ok', 'every leg present; no silent omission'
+    assert row['sleeve_total_usd'].quantize(Decimal('0.01')) == Decimal('2392608.40')
+    # A fresh sample must not be flagged stale, or the flag says nothing.
+    assert row['sleeve_mark_stale'] is False
+    # That the Sleeve is not inside rfv is pinned against the fixture's own
+    # rfv components in `fixture_test.py`; not restated here.
+
+
+def test_a_sample_long_after_its_marks_flags_the_sleeve_as_stale(
+    repository, expected_fixture
+):
+    """The counterpart: a dead feed must not value the Sleeve forever at
+    whatever the last price happened to be. Same readings, a sample 25 h later."""
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=49_877_926, epoch=132,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 25 * 3600,
+        expected_fixture=expected_fixture,
+    )
+    repository.commit()
+
+    row = load_epoch_rows(repository, NETNET)[0]
+    assert row['sleeve_mark_stale'] is True
+    # The total is still computed -- stale is a warning on a figure, not a
+    # reason to blank it.
+    assert row['sleeve_total_usd'] > 0
+
+
+def test_the_json_agreement_is_not_vacuous_for_the_p1_2_figures(
+    repository, expected_fixture
+):
+    """`test_json_and_table_agree_column_for_column` above compares every
+    column, but with only four readings seeded it compares `None == None` for
+    the eight figures P1-2 was about. Driven from the fixture, those columns
+    carry real values -- so the agreement check has something to disagree
+    about."""
+    run_id = repository.start_run('test')
+    _commit_fixture_epoch(
+        repository, run_id, block=49_877_926, epoch=132,
+        block_timestamp=FIXTURE_NEWEST_MARK_AT + 60,
+        expected_fixture=expected_fixture,
+    )
+    repository.commit()
+
+    rows = load_epoch_rows(repository, NETNET)
+    parsed = json.loads(render_json(rows))
+
+    p1_2_columns = (
+        'buyback.capacity', 'buyback.repurchased', 'buyback.burned',
+        'loopback.total_supplied', 'loopback.total_borrowed',
+        'loopback.utilization_pct', 'loopback.borrow_apr_pct',
+        'sleeve_total_usd',
+    )
+    for key in p1_2_columns:
+        value = _lookup(rows[0], key)
+        assert value is not None, f'{key} is still None -- the check is vacuous'
+        assert _lookup(parsed[0], key) == str(value), key

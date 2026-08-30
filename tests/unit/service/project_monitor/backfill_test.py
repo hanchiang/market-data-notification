@@ -18,15 +18,32 @@ PROJECT = NETNET.name
 
 
 class FakeCodeClient:
-    """`eth_getCode` over a chain where `address` gained code at `deploy`."""
+    """`eth_getCode` over a chain where each address gained code at its own block.
+
+    `deploy` is either one block for every address, or a mapping of
+    lowercased address to its own deploy block. The per-address form exists
+    because a fake that ignores its `address` argument makes an
+    address/name mismatch uncatchable: every contract would report the same
+    deploy block, so step 1 writing contract A's address under contract B's
+    name produces byte-identical store content (round-1 test review,
+    finding 6 -- the same class as a claimed check that does not exist).
+    """
 
     def __init__(self, deploy):
         self.deploy = deploy
         self.calls = 0
+        self.addresses_seen = []
+
+    def _deploy_for(self, address):
+        if isinstance(self.deploy, dict):
+            return self.deploy.get(address.lower())
+        return self.deploy
 
     async def get_code(self, address, block):
         self.calls += 1
-        has_code = self.deploy is not None and block >= self.deploy
+        self.addresses_seen.append(address.lower())
+        deploy = self._deploy_for(address)
+        has_code = deploy is not None and block >= deploy
         return ('0xdeadbeef' if has_code else '0x'), {'block': block}
 
 
@@ -146,22 +163,50 @@ def test_step_deploy_blocks_records_every_contract_in_the_read_plan(repository):
     P2-4 named all four backfill steps as untested, and a step that silently
     dropped a contract from the plan -- or wrote the wrong address alongside
     the right name -- would show up nowhere `find_deploy_block`'s own unit
-    tests can see, since those never touch the read plan or the repository."""
+    tests can see, since those never touch the read plan or the repository.
+
+    Every contract is given a DIFFERENT deploy block, derived from its own
+    address, so that second claim is actually testable: with one shared block
+    for everything, a step that read contract A's address under contract B's
+    name would produce identical store content and stay green (round-1 test
+    review, finding 6).
+    """
     from src.service.project_monitor.read_plan import build_read_plan
 
-    plan_contracts = {read.contract for read in build_read_plan(NETNET)}
+    plan = build_read_plan(NETNET)
+    address_of = {read.contract: read.to for read in plan}
+    staking = NETNET.address('staking')
 
-    client = FakeCodeClient(deploy=1_000)
+    # A distinct, reproducible deploy block per address.
+    deploy_of_address = {
+        address.lower(): 1_000 + 7 * index
+        for index, address in enumerate(
+            sorted({a.lower() for a in list(address_of.values()) + [staking]})
+        )
+    }
+
+    client = FakeCodeClient(deploy=deploy_of_address)
     asyncio.run(backfill.step_deploy_blocks(repository, client, head=2_000))
 
     deploy_blocks = repository.get_deploy_blocks(PROJECT)
-    assert plan_contracts <= set(deploy_blocks), (
-        f'missing from the store: {plan_contracts - set(deploy_blocks)}'
+    assert set(address_of) <= set(deploy_blocks), (
+        f'missing from the store: {set(address_of) - set(deploy_blocks)}'
     )
-    assert all(deploy_blocks[name] == 1_000 for name in plan_contracts)
+    # Each name carries the block belonging to ITS OWN address, so a name/
+    # address mix-up in step 1 shows up as a wrong number rather than as
+    # nothing at all.
+    for name, address in address_of.items():
+        assert deploy_blocks[name] == deploy_of_address[address.lower()], name
+
+    # The distinct blocks are only load-bearing if they really are distinct.
+    assert len(set(deploy_of_address.values())) == len(deploy_of_address)
+
     # Staking is read separately from the plan loop, for `launch_block`, which
-    # the report and every other backfill step key off of.
-    assert repository.get_project_value(PROJECT, 'launch_block') == '1000'
+    # the report and every other backfill step key off of -- and it must come
+    # from Staking's address, not from whichever contract was read last.
+    assert repository.get_project_value(PROJECT, 'launch_block') == str(
+        deploy_of_address[staking.lower()]
+    )
 
 
 def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origin(
@@ -196,6 +241,15 @@ def test_step_log_history_persists_mints_flows_and_events_and_advances_the_origi
                 'log_index': 0, 'contract': 'bondDepository', 'name': 'BondCreated',
                 'fields_json': {'marketId': '2'},
             }],
+            # Empty, and this test is structurally blind to that: step 3
+            # DISCARDS `window['raw_responses']` (backfill.py) because
+            # `raw_response` is sample-keyed and step 3 has no sample, so
+            # historical mint/flow rows are un-re-derivable and R2's "the raw
+            # JSON-RPC response is stored with the block" is narrowed on the
+            # backfill path only. That is a schema and design decision, not a
+            # test one -- escalated to the operator in test-plan.md
+            # ("Escalation: backfill step 3 discards its raw responses").
+            # This comment stands until that decision lands.
             'raw_responses': [],
             'boundaries': [],
         }

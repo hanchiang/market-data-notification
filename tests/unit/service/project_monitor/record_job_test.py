@@ -296,3 +296,57 @@ def test_a_second_run_while_one_holds_the_lock_is_skipped_not_failed(
     )[0]
     assert run['outcome'] == 'skipped'
     assert sent == [], 'a skipped run is not a failure and must not alert'
+
+
+def test_a_failed_peripheral_read_is_named_on_the_run_row(
+    repository, database_url, monkeypatch
+):
+    """AC7's second half, the clause nothing exercised: "the run row names it".
+
+    Round-1 test review, finding 5: the only run-row assertion for this lived
+    in `repository_test.py`, where the TEST composed the
+    `'failed peripheral reads: ...'` string and handed it to `finish_run` --
+    so it could not fail if `record.py` stopped producing it. The wiring
+    (`run_sample` appending the note -> `finish_run` writing it) is exactly
+    where P1-1 escaped three review rounds, so it is asserted here through
+    `main()` against the real run row.
+    """
+    sent = _patch_entrypoint(monkeypatch, repository, database_url)
+
+    sample = _fake_sample(700)
+    sample.failed_peripheral = ['Mark.NVDA.latestRoundData', 'Morpho.market']
+
+    async def fake_read_state_on(endpoint, budget, repo):
+        return sample, 700
+
+    monkeypatch.setattr(record_job, '_read_state_on', fake_read_state_on)
+    monkeypatch.setattr(record_job, 'get_archive_endpoint', lambda: None)
+    monkeypatch.setattr(
+        record_job.recorder, 'resolve_window_start', lambda *a, **k: (600, None)
+    )
+
+    async def fake_window(*args, **kwargs):
+        return {'raw_responses': [], 'mints': [], 'flows': [], 'events': [],
+                'boundaries': [], 'queries': []}
+
+    monkeypatch.setattr(record_job.recorder, 'read_log_window', fake_window)
+    monkeypatch.setattr(record_job.recorder, 'commit_sample', lambda *a, **k: 1)
+
+    async def fake_manifest(repo):
+        return 'manifest skipped'
+
+    monkeypatch.setattr(record_job, 'run_manifest_snapshot', fake_manifest)
+
+    exit_code = asyncio.run(record_job.main())
+
+    assert exit_code == 0, 'a peripheral failure is not a failed run'
+    run = repository.fetch_all(
+        'SELECT outcome, notes FROM run ORDER BY id DESC LIMIT 1'
+    )[0]
+    assert run['outcome'] == 'ok'
+    # Both names, not merely the prefix: a note that says some reads failed
+    # without saying which sends the operator looking through fifty readings.
+    assert 'failed peripheral reads' in run['notes']
+    assert 'Mark.NVDA.latestRoundData' in run['notes']
+    assert 'Morpho.market' in run['notes']
+    assert sent == [], 'a run that committed its sample must not alert'

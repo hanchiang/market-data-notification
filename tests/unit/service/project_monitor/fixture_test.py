@@ -4,6 +4,7 @@ The fixture was captured from the public endpoint on 2026-08-30 at block
 49,877,926 by `scripts/capture_project_monitor_fixture.py`, which is committed
 beside it so it can be recaptured when the read plan changes.
 """
+import asyncio
 from decimal import Decimal
 
 import pytest
@@ -321,3 +322,180 @@ def test_the_issuance_window_carries_the_premium_sold_event(issuance_fixture):
     fields = events[0]['fields_json']
     assert Decimal(fields['netSold']) / Decimal(10) ** 9 == Decimal('0.813691617')
     assert Decimal(fields['usdgSweptRaw']) / Decimal(10) ** 6 == Decimal('952.809405')
+
+
+# ------------------------------------------- AC6's log half, actually decoded
+#
+# Round-1 test review, finding 2: the tests above read the PRE-DECODED
+# `mints`/`flows`/`events` arrays that the capture script stored, so they
+# assert properties of their own stored output and the decoder never runs.
+# Demonstrated: swapping `from`/`to` in `decode_transfer` corrupts every mint
+# recipient, every mint class and every flow counterparty, and the whole suite
+# stayed green. AC6 says "when the decoder and the attribution rules run on it,
+# then the expected values written beside the fixture reproduce exactly" -- for
+# the log half they were not running at all.
+#
+# The route below replays the fixture's own nine raw `eth_getLogs` bodies
+# through the REAL `recorder.read_log_window`, which is what makes this the
+# analogue of `test_every_reading_re_derives_from_its_own_raw_responses` for
+# state: every decoder (`decode_transfer`, `build_mint_rows`,
+# `extract_event_rows`, `classify_mint`) and the R6 attribution rules run for
+# real, and so does the composition that wires them together.
+
+
+class _ReplayingLogClient:
+    """Serves the fixture's stored `eth_getLogs` bodies back to the real code.
+
+    Matched on the query's own address+topics filter rather than on call order:
+    order matching would still pass if `build_log_queries` swapped two queries,
+    which would file one event type's logs under another's decoder.
+    """
+
+    def __init__(self, raw_responses):
+        self.endpoint = type('E', (), {'kind': 'public'})()
+        self.by_filter = {}
+        for raw in raw_responses:
+            self.by_filter[self._key(raw['params'][0])] = raw
+        self.served = []
+
+    @staticmethod
+    def _key(params):
+        addresses = tuple(sorted(a.lower() for a in (params.get('address') or [])))
+        topics = tuple(
+            tuple(sorted(t)) if isinstance(t, list) else t
+            for t in (params.get('topics') or [])
+        )
+        return (addresses, topics)
+
+    async def get_logs(self, log_filter):
+        params = log_filter.to_params()
+        key = self._key(params)
+        raw = self.by_filter.get(key)
+        assert raw is not None, f'no fixture response for query filter {key}'
+        self.served.append(key)
+        result = raw['body'].get('result') or []
+        return list(result), raw
+
+
+def _replay(fixture):
+    client = _ReplayingLogClient(fixture['raw_responses'])
+    window = asyncio.run(
+        recorder.read_log_window(
+            client,
+            NETNET,
+            'NETNET',
+            fixture['from_block'],
+            fixture['to_block'],
+            net_decimals=9,
+            usdg_decimals=6,
+        )
+    )
+    return window, client
+
+
+def _comparable(rows, keys):
+    """Rows reduced to the named fields, with every value stringified.
+
+    The fixture stores uint256 amounts as decimal STRINGS (they exceed what a
+    JSON number holds exactly) while the decoders return ints, so the two sides
+    are normalised before comparison. Stringifying is not a weakening: a wrong
+    amount, recipient or label still differs as a string.
+    """
+    return sorted(
+        tuple((k, str(row[k])) for k in keys) for row in rows
+    )
+
+
+def test_the_log_window_re_derives_from_its_own_raw_responses(log_window_fixture):
+    """AC6's log half, run for real. Every mint, flow and event stored beside
+    the fixture must reproduce from the fixture's own raw `eth_getLogs` bodies
+    through the live decoders and the R6 attribution rules."""
+    window, client = _replay(log_window_fixture)
+
+    assert len(client.served) == 9, 'every one of the nine queries was served'
+
+    assert _comparable(
+        window['mints'], ('block', 'tx_hash', 'log_index', 'recipient', 'amount', 'class')
+    ) == _comparable(
+        log_window_fixture['mints'],
+        ('block', 'tx_hash', 'log_index', 'recipient', 'amount', 'class'),
+    )
+
+    assert _comparable(
+        window['flows'],
+        ('block', 'tx_hash', 'log_index', 'direction', 'counterparty', 'amount',
+         'label', 'rule'),
+    ) == _comparable(
+        log_window_fixture['flows'],
+        ('block', 'tx_hash', 'log_index', 'direction', 'counterparty', 'amount',
+         'label', 'rule'),
+    )
+
+    assert len(window['events']) == len(log_window_fixture['events'])
+    assert _comparable(
+        window['events'], ('block', 'tx_hash', 'log_index', 'contract', 'name')
+    ) == _comparable(
+        log_window_fixture['events'],
+        ('block', 'tx_hash', 'log_index', 'contract', 'name'),
+    )
+
+    # Decoded event FIELDS too, not just their identity: a wrong ABI field
+    # order still produces the right number of events at the right blocks.
+    derived_fields = {
+        (e['tx_hash'].lower(), e['log_index'], e['name']): e['fields_json']
+        for e in window['events']
+    }
+    for stored in log_window_fixture['events']:
+        key = (stored['tx_hash'].lower(), stored['log_index'], stored['name'])
+        assert derived_fields[key] == stored['fields_json'], key
+
+
+def test_the_issuance_window_re_derives_from_its_own_raw_responses(issuance_fixture):
+    """The same, for the single-block window holding the settling premium sale.
+    This one carries the `issuance` mint class and the transaction-correlated
+    `issuance` inflow, so it exercises an R6 rule the near-head window does
+    not."""
+    window, _ = _replay(issuance_fixture)
+
+    assert [m['class'] for m in window['mints']] == ['issuance']
+    assert _comparable(
+        window['mints'], ('block', 'tx_hash', 'recipient', 'amount', 'class')
+    ) == _comparable(
+        issuance_fixture['mints'], ('block', 'tx_hash', 'recipient', 'amount', 'class')
+    )
+    assert _comparable(
+        window['flows'], ('direction', 'counterparty', 'amount', 'label', 'rule')
+    ) == _comparable(
+        issuance_fixture['flows'],
+        ('direction', 'counterparty', 'amount', 'label', 'rule'),
+    )
+    premium = [e for e in window['events'] if e['name'] == 'PremiumSold']
+    assert len(premium) == 1
+    assert premium[0]['fields_json'] == next(
+        e['fields_json'] for e in issuance_fixture['events'] if e['name'] == 'PremiumSold'
+    )
+
+
+def test_the_log_re_derivation_check_can_fail(log_window_fixture):
+    """The vacuity control for the two tests above, matching the one the state
+    half already has. Corrupt one stored log's `to` topic and the re-derived
+    mint recipient must stop matching -- without this, a green re-derivation is
+    equally consistent with a comparison that compared nothing."""
+    import copy
+
+    corrupted = copy.deepcopy(log_window_fixture)
+    mint_raw = next(
+        raw for raw in corrupted['raw_responses']
+        if (raw['body'].get('result') or [])
+        and raw['params'][0]['topics'][1] == '0x' + '0' * 64
+    )
+    entry = mint_raw['body']['result'][0]
+    # topics[2] of a Transfer is the recipient; flip its last nibble.
+    original = entry['topics'][2]
+    entry['topics'][2] = original[:-1] + ('0' if original[-1] != '0' else '1')
+
+    window, _ = _replay(corrupted)
+    keys = ('block', 'tx_hash', 'log_index', 'recipient', 'amount', 'class')
+    assert _comparable(window['mints'], keys) != _comparable(
+        log_window_fixture['mints'], keys
+    )

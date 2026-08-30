@@ -396,15 +396,22 @@ docker exec -it market_data_notification sh -c "ENV=dev poetry run python -m src
 
 ## Testing And Validation
 
-Preferred checks:
+Poetry is what governs this repo: `poetry.lock` is the only lock file, and both CI
+(`.github/workflows/test.yml`) and the Docker image install through it. Run the checks the
+same way, so what you test is what deploys:
 
 ```bash
-uv run ruff check .
-uv run python -m compileall src tests main.py
-uv run pytest tests/unit
+PYTHONPATH=. poetry run ruff check .
+PYTHONPATH=. poetry run python -m compileall src tests main.py
+PYTHONPATH=. poetry run pytest tests/unit
 ```
 
-If you are staying on the Poetry workflow instead of `uv`, the equivalent commands still work via `poetry run`.
+`PYTHONPATH=.` is needed because nothing puts the repo root on `sys.path`; without it the
+`src.*` imports fail before any test runs.
+
+`uv run` also works, but it resolves dependencies from `pyproject.toml` rather than
+`poetry.lock`, so it can test a different dependency set than CI and production. A stale
+`uv.lock` sat here until 2026-08-30 doing exactly that, five months behind the poetry lock.
 
 ## TradingView Replay
 

@@ -218,9 +218,14 @@ def test_the_header_carries_the_notes_that_stop_a_misreading(repository):
     table = render_table(load_epoch_rows(repository, NETNET))
     assert 'fees unattributed' in table
     assert 'Sleeve total is NOT part of rfv()' in table
-    assert 'do not sum to rfv()' in table
+    assert 'credits the Morpho vault at 98%' in table
+    # The note must say what the 2% IS. The version it replaced called it a
+    # modelling gap, which reads as "a number nobody has explained" -- the one
+    # conclusion the trace rules out.
+    assert 'modelling gap' not in table
+    assert 'vault interest plus the polRfv move' in table
     assert 'excluded from the residual only' in table
-    assert len(HEADER_NOTES) == 6
+    assert len(HEADER_NOTES) == 7
 
 
 def test_json_and_table_agree_column_for_column(repository):
@@ -703,16 +708,23 @@ def test_a_deposit_into_rfv_s_own_vault_leaves_the_residual_alone(repository):
     """The ticket's acceptance criterion, asserted by VALUE.
 
     rfv moved +100. The flows that crossed `rfv()`'s boundary were +90 in and
-    -10 out, so 20 of the move is unexplained and that is the residual. The
-    500 moved into the Morpho vault crossed nothing -- `morphoAssets` gained
-    what `liquidUsdg` lost -- and counting it as an outflow would report 520,
-    which is the defect this replaces: at epoch 133 of the real backfill it
-    turned a 965,383 deposit into a 946,213 residual and buried the two- and
-    three-figure signals every other epoch carries.
+    -10 out, so 20 of the move is unexplained. The 500 moved into the Morpho
+    vault crossed nothing -- `morphoAssets` gained what `liquidUsdg` lost --
+    and counting it as an outflow would report 520, which is the defect this
+    replaces: at epoch 133 of the real backfill it turned a 965,383 deposit
+    into a 946,213 residual and buried the two- and three-figure signals every
+    other epoch carries.
+
+    The deposit does cost `rfv()` 2% of itself, because the vault position is
+    credited at 98%, so the predicted rfv move is 10 lower than the flows alone
+    say and the residual is 30 rather than 20. That correction is what keeps a
+    treasury-internal move out of the column; the haircut is reported beside it.
     """
     _seed_boundary_epoch(repository, vault_direction='out')
     row = load_epoch_rows(repository, NETNET)[1]
-    assert row['residual'] == Decimal(20)
+    assert row['residual'] == Decimal(30)
+    assert row['vault_net_deposit'] == Decimal(500)
+    assert row['deposit_haircut'] == Decimal(10)
     # The transfer is real and stays visible in full; only the residual ignores
     # it. An implementation that dropped the flow instead would pass the
     # assertion above and lose the operator's view of a 500 USDG move.
@@ -724,10 +736,17 @@ def test_a_withdrawal_from_the_vault_is_internal_in_the_inflow_direction_too(rep
     """The same move run backwards. A rule written only for the outflow side
     would count a vault withdrawal as new value entering the treasury, which is
     the identical error with the sign flipped: rfv would predict +590 against an
-    actual +100 and the residual would read -480."""
+    actual +100 and the residual would read -480.
+
+    The haircut runs backwards with it: a withdrawal returns value to a
+    component credited at 100%, so it is worth 2% MORE inside `rfv()` than it
+    was in the vault and the residual is 10, not the deposit case's 30. A
+    haircut applied to gross vault movement rather than the net would report 30
+    here and pass a test that only checked the deposit direction."""
     _seed_boundary_epoch(repository, vault_direction='in')
     row = load_epoch_rows(repository, NETNET)[1]
-    assert row['residual'] == Decimal(20)
+    assert row['residual'] == Decimal(10)
+    assert row['vault_net_deposit'] == Decimal(-500)
     assert row['inflows']['morphoUsdgVault'] == '500'
     assert row['internal_flows'] == {'in': ['morphoUsdgVault'], 'out': []}
 

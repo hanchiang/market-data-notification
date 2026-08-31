@@ -27,6 +27,12 @@ from .read_plan import (
     build_read_plan,
 )
 from .repository import ProjectMonitorRepository
+from .rfv_identity import (
+    IDENTITY_BROKEN,
+    IDENTITY_EXPRESSION,
+    IDENTITY_READINGS,
+    check_rfv_identity,
+)
 
 logger = logging.getLogger('Project monitor recorder')
 
@@ -425,6 +431,7 @@ def commit_sample(
         raw_responses += log_window['raw_responses']
     repository.insert_raw_responses(sample_id, raw_responses)
     repository.insert_readings(sample_id, sample.readings)
+    _log_rfv_identity(sample)
 
     if log_window:
         repository.insert_mints(log_window['mints'])
@@ -457,3 +464,34 @@ def commit_sample(
             )
     repository.commit()
     return sample_id
+
+
+def _log_rfv_identity(sample: SampleResult) -> None:
+    """Check the 98% Morpho credit on this sample and shout if it broke.
+
+    Logged, never raised: the sample is still the best record we have of the
+    block it read, and refusing to store it would delete the evidence of the
+    very change this warns about. Checked here rather than only in the report
+    because the report sees one closing sample per epoch, and this is the
+    earliest point at which any sample's four readings are all in hand.
+    """
+    identity = check_rfv_identity(
+        {
+            reading['name']: (
+                reading['value_int'] if reading.get('state') == STATE_OK else None
+            )
+            for reading in sample.readings
+            if reading['name'] in IDENTITY_READINGS
+        }
+    )
+    if identity.state == IDENTITY_BROKEN:
+        logger.error(
+            'rfv() identity broken at block %s: %s is off by %s wei. The 98%% '
+            'Morpho credit is observed over 133 epochs, not read from the '
+            'contract -- a re-rating of the vault position looks exactly like '
+            'this, and the report residual models deposits with the old '
+            'coefficient until it is confirmed.',
+            sample.block,
+            IDENTITY_EXPRESSION,
+            identity.diff_wei,
+        )

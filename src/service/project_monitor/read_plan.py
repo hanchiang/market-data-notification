@@ -103,8 +103,10 @@ def build_read_plan(project: ProjectConfig) -> List[Read]:
             decimals_from='const:18',
         ),
         # The three components rfv() publishes, recorded so a movement is
-        # attributable to a component rather than to "rfv moved". Measured
-        # 2026-08-30: they do NOT sum to rfv (see report.py's residual note).
+        # attributable to a component rather than to "rfv moved". They do not
+        # sum to rfv(): the Morpho position is credited at 98%, which is also
+        # why all three are read on every sample rather than only when a vault
+        # flow appears -- `rfv_identity.py` checks that credit per sample.
         Read(
             'Treasury.liquidUsdg', 'treasury', treasury,
             abi.encode_call('liquidUsdg'), 'uint256', CORE, 1,

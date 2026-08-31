@@ -117,6 +117,20 @@ def buyback_fixture():
 
 
 @pytest.fixture
+def haircut_fixture():
+    """Six real epochs from the operator store, for the Morpho-haircut tests.
+
+    Fixture rather than a query against the operator database: the suite runs
+    against a truncated `project_monitor_test`, and in CI against a tmpfs server
+    that has never seen a backfill, so a store-backed assertion on epoch 133
+    would be green on one machine and absent everywhere else. Rebuilt by
+    `scripts/capture_project_monitor_haircut_fixture.py`; the file's own
+    `provenance` block names the queries.
+    """
+    return load_fixture('haircut_epochs.json')
+
+
+@pytest.fixture
 def issuance_fixture():
     """The one premiumSeller execution named in the dapp-crawl trace, captured
     as its own single-block window. Separate from `log_window.json` because the

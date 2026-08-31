@@ -189,7 +189,20 @@ BOUNDARY_EXTERNAL = 'external'
 # key belongs here only when `rfv()` grows a component measured at a new
 # address. Evidence for the enumeration, over all 133 epochs of the project's
 # history: MARKET-DATA/docs/traces/2026-08-31-netnet-flow-boundary-trace.md.
-RFV_INTERNAL_ADDRESS_KEYS = ('morphoUsdgVault',)
+MORPHO_VAULT_ADDRESS_KEY = 'morphoUsdgVault'
+RFV_INTERNAL_ADDRESS_KEYS = (MORPHO_VAULT_ADDRESS_KEY,)
+
+
+def is_morpho_vault(counterparty: str, project: ProjectConfig) -> bool:
+    """The Morpho vault specifically, not "internal" generally.
+
+    The 98% credit is a property of the `morphoAssets` component alone, so the
+    deposit haircut keys on this address and not on `RFV_INTERNAL_ADDRESS_KEYS`.
+    The two coincide today; a second internal address would be credited at
+    whatever its own component is worth, and haircutting its deposits at 98%
+    would be a fresh error wearing this one's fix.
+    """
+    return project.addresses[MORPHO_VAULT_ADDRESS_KEY].lower() == counterparty.lower()
 
 
 def rfv_boundary(counterparty: str, project: ProjectConfig) -> str:

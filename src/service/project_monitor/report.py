@@ -15,27 +15,65 @@ Two header notes are not decoration:
   summed into it. Presenting it as a column beside rfv without that line is how
   someone adds them.
 
-A third note is new to this implementation and is a measurement, not a policy:
-`rfv()` does NOT equal `liquidUsdg + morphoAssets + polRfv`. Read live at block
-49,867,666 on 2026-08-30 the three components summed to 4,987,116.39 against an
-`rfv()` of 4,930,626.16 -- the components overshoot by 56,490.24, or 1.15% of
-rfv. So the components make a movement attributable to a component, which is why
-they are recorded, but the difference is a modelling gap rather than an
-unaccounted inflow, and the header says so rather than letting a reader treat it
-as one.
+A third note is a measurement, not a policy: the three components overshoot
+`rfv()` by exactly 2% of `morphoAssets`, because `rfv()` credits the Morpho
+vault position at 98%. That is a property of the contract, not a modelling gap
+-- an earlier version of this note called the 56,490.24 overshoot at block
+49,867,666 unexplained, and it is 2% of `morphoAssets` at that block to the
+cent. `rfv_identity.py` owns the coefficient and the check on it.
+
+The residual models the one consequence that is predictable ahead of time. A
+deposit into the vault moves USDG from a component credited at 100% to one
+credited at 98%, so `rfv()` rises by 2% less than the amount moved even though
+nothing left the treasury; the residual subtracts that haircut from a booked
+vault flow. It does NOT predict the other two terms the residual carries --
+vault interest and `delta polRfv`. Neither is observable as a flow, so the only
+way to predict them is to read the same epoch's realised component deltas, which
+would drive the residual to zero in every epoch by construction and swallow
+exactly what the column exists to surface: a polRfv drain or a vault re-mark
+would land inside the predicted terms and disappear.
 """
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .attribution import BOUNDARY_INTERNAL, LABEL_UNLABELLED, rfv_boundary
+from .attribution import (
+    BOUNDARY_INTERNAL,
+    LABEL_UNLABELLED,
+    is_morpho_vault,
+    rfv_boundary,
+)
 from .config import ProjectConfig
 from .repository import ProjectMonitorRepository
+from .rfv_identity import (
+    IDENTITY_BROKEN,
+    IDENTITY_EXPRESSION,
+    IDENTITY_READINGS,
+    MORPHO_DEPOSIT_HAIRCUT,
+    check_rfv_identity,
+)
 
 MISSING = None
 SECONDS_PER_YEAR = 365 * 24 * 3600
 WAD = Decimal(10) ** 18
+
+# The vault's per-epoch yield, in parts per million of the position it opened
+# on, measured over the 69 quiet epochs of the backfill: min 23.5, median 28.5,
+# max 42.3. Deposit epochs run wider (16.2 to 46.6) because the deposit lands
+# mid-window, so the accrual is not earned on the opening position throughout.
+INTEREST_PPM_OBSERVED = (Decimal('23.5'), Decimal('42.3'))
+# The band a rate must leave before it is called signal. Deliberately about 1.6x
+# below and 2x above the widest rate any of the 133 epochs has shown, because a
+# yield that floats with the market will move within a factor of two and crying
+# wolf on that would train the operator to ignore the column. What it still
+# catches immediately is the case the check exists for: a vault re-mark or a
+# halted position, which moves the rate by orders of magnitude or below zero.
+INTEREST_PPM_TOLERANCE = (Decimal('10'), Decimal('95'))
+
+INTEREST_OK = 'ok'
+INTEREST_OUTSIDE_ENVELOPE = 'outside_envelope'
+INTEREST_UNAVAILABLE = 'unavailable'
 
 
 def _scaled(value: Optional[Any], decimals: Optional[int]) -> Optional[Decimal]:
@@ -145,6 +183,64 @@ def _bucket_flows(
         ):
             internal.append(key)
     return buckets, sorted(internal)
+
+
+def _vault_net_deposit(
+    flows: List[Dict[str, Any]], project: ProjectConfig
+) -> Decimal:
+    """USDG booked into the Morpho vault this window, net of what came back out.
+
+    Netted rather than counted one-way because both legs get the same 98%
+    credit: an epoch that deposits 500 and withdraws 200 moves 300 of face value
+    across the 100%/98% line, and haircutting the gross 500 would over-correct
+    the residual by 2% of the round trip.
+    """
+    total = Decimal(0)
+    for row in flows:
+        if not is_morpho_vault(str(row['counterparty']), project):
+            continue
+        amount = _scaled(row['total'], row['decimals'])
+        if amount is None:
+            continue
+        total += amount if row['direction'] == 'out' else -amount
+    return total
+
+
+def _vault_interest(
+    row_components: Dict[str, Optional[Decimal]],
+    previous: Optional[Dict[str, Any]],
+    vault_deposit: Decimal,
+    epochs_spanned: Optional[int],
+) -> Dict[str, Any]:
+    """Vault accrual this window, and its rate against the tolerance envelope.
+
+    Attribution after the fact, never a prediction: this is the realised
+    `morphoAssets` move minus the flow that was booked into it, and the residual
+    does not subtract it. Modelling it would zero the residual by construction
+    -- see the module docstring -- so what it earns is a rate to check, which is
+    the only part of it that carries a signal ahead of a human looking.
+
+    The rate is per epoch, divided by the number of epochs the window spans, so
+    a gap in the samples does not read as a doubled yield.
+    """
+    interest = {'state': INTEREST_UNAVAILABLE, 'amount': None, 'rate_ppm': None}
+    morpho = row_components.get('morpho_assets')
+    previous_components = (previous or {}).get('rfv_components') or {}
+    previous_morpho = previous_components.get('morpho_assets')
+    if morpho is None or not previous_morpho or not epochs_spanned:
+        return interest
+
+    amount = morpho - previous_morpho - vault_deposit
+    rate = amount / previous_morpho * Decimal(10) ** 6 / epochs_spanned
+    low, high = INTEREST_PPM_TOLERANCE
+    interest.update(
+        {
+            'state': INTEREST_OK if low <= rate <= high else INTEREST_OUTSIDE_ENVELOPE,
+            'amount': amount,
+            'rate_ppm': rate,
+        }
+    )
+    return interest
 
 
 def _price_and_premium(
@@ -335,6 +431,21 @@ def _build_row(
     component_sum = None
     if None not in (liquid, morpho_assets, pol):
         component_sum = liquid + morpho_assets + pol
+    # Checked in wei on the values the chain returned, not on the scaled
+    # Decimals above: the 98% credit is observed rather than read from the
+    # contract, so this equality is the only warning we get that the protocol
+    # re-rated its own vault -- and a comparison of two rounded quotients would
+    # not notice a re-rating smaller than the rounding.
+    identity = check_rfv_identity(
+        {
+            name: (
+                readings[name]['value_int']
+                if name in readings and readings[name]['state'] == 'ok'
+                else None
+            )
+            for name in IDENTITY_READINGS
+        }
+    )
 
     previous_rfv = previous.get('rfv') if previous and previous.get('present') else None
     previous_supply = previous.get('supply') if previous and previous.get('present') else None
@@ -353,14 +464,37 @@ def _build_row(
         (v for k, v in outflows.items() if v is not None and k not in internal_outflow_keys),
         Decimal(0),
     )
+    # A booked deposit into the Morpho vault costs `rfv()` 2% of itself: the
+    # USDG leaves a component credited at 100% for one credited at 98%. That is
+    # the whole of the predictable part, and subtracting it is what stops a
+    # treasury-internal move reading as a six-figure outflow -- epoch 133's
+    # 965,383 deposit reported a residual of -19,170 before this term.
+    vault_deposit = _vault_net_deposit(flows, project)
+    deposit_haircut = MORPHO_DEPOSIT_HAIRCUT * vault_deposit
     # The residual asks: how much of the rfv move is NOT explained by the USDG
-    # that visibly entered and left across `rfv()`'s boundary? A non-zero
-    # residual is a vault re-mark, a POL move, or something we have not
-    # labelled -- it is a prompt to look, never a number to publish as a
-    # category.
+    # that visibly entered and left across `rfv()`'s boundary, once the one
+    # modelled contract behaviour is allowed for? What is left is vault interest
+    # plus `delta polRfv` plus anything we have not labelled -- all three
+    # deliberately unmodelled, because predicting them needs the realised
+    # component deltas and that makes the number zero in every epoch forever.
+    # It is a prompt to look, never a number to publish as a category.
     residual = None
     if rfv is not None and previous_rfv is not None:
-        residual = (rfv - previous_rfv) - (net_inflow - net_outflow)
+        residual = (rfv - previous_rfv) - (net_inflow - net_outflow) + deposit_haircut
+
+    pol_delta = (
+        pol - previous['rfv_components']['pol_rfv']
+        if pol is not None
+        and previous
+        and (previous.get('rfv_components') or {}).get('pol_rfv') is not None
+        else None
+    )
+    vault_interest = _vault_interest(
+        {'morpho_assets': morpho_assets},
+        previous,
+        vault_deposit,
+        epoch - int(previous['epoch']) if previous and previous.get('present') else None,
+    )
 
     price, premium = _price_and_premium(readings, backing, project)
 
@@ -416,14 +550,26 @@ def _build_row(
         # left to suspect the arithmetic.
         'internal_flows': {'in': internal_inflow_keys, 'out': internal_outflow_keys},
         'residual': residual,
+        # The modelled part of the residual, reported beside it so a reader can
+        # see how large a correction was applied rather than inferring it from
+        # the flow detail.
+        'deposit_haircut': deposit_haircut,
+        'vault_net_deposit': vault_deposit,
         'rfv_components': {
             'liquid_usdg': liquid,
             'morpho_assets': morpho_assets,
             'pol_rfv': pol,
+            # Left unmodelled on purpose and shown for that reason: POL drift is
+            # the signal class the residual exists to surface, so it belongs in
+            # front of the operator rather than inside a prediction.
+            'pol_rfv_delta': pol_delta,
             'sum': component_sum,
-            # Measured non-zero; see the module docstring.
+            # The components overshoot rfv() by exactly 2% of morphoAssets --
+            # the vault credit, not a gap. See the module docstring.
             'sum_minus_rfv': (component_sum - rfv) if component_sum and rfv else None,
         },
+        'rfv_identity': {'state': identity.state, 'diff_wei': identity.diff_wei},
+        'vault_interest': vault_interest,
         'pair_price': price,
         'premium_x': premium,
         'lp_total_supply': lp_total,
@@ -460,8 +606,12 @@ def _sum_event_field(
 HEADER_NOTES = (
     'fees unattributed (the 500 bps trading tax path is unidentified; ticket step 3)',
     'Sleeve total is NOT part of rfv() and is never summed into it',
-    'rfv() components do not sum to rfv() (measured -1.15% at block 49,867,666); '
-    'the difference is a modelling gap, not an unaccounted flow',
+    'rfv() credits the Morpho vault at 98% (rfv() = liquidUsdg + 0.98 x '
+    'morphoAssets + polRfv, exact in wei in all 133 epochs), so the components '
+    'overshoot rfv() by 2% of morphoAssets -- the credit, not an unaccounted flow',
+    'the residual models that 2% on a booked vault deposit and nothing else; '
+    'what remains in a quiet epoch is vault interest plus the polRfv move, '
+    'neither of which is booked as a transfer (measured 7.2 to 185.2 USDG)',
     'Loopback supply APR is derived as borrow rate x utilization x (1 - fee); '
     'it has no on-chain getter',
     'buyback "filled" has no on-chain source and is reported as unavailable',
@@ -492,6 +642,8 @@ COLUMNS = (
     ('emission_other', 'other'),
     ('dilution_pct', 'dilution %'),
     ('residual', 'residual'),
+    ('rfv_components.pol_rfv_delta', 'd polRfv'),
+    ('vault_interest.rate_ppm', 'vault ppm'),
     ('premium_x', 'premium x'),
     ('lp_total_supply', 'LP supply'),
     ('lp_treasury_share_pct', 'LP treasury %'),
@@ -516,6 +668,7 @@ STATE_KEYS = {
     'loopback.total_borrowed': ('loopback', 'state'),
     'loopback.utilization_pct': ('loopback', 'state'),
     'loopback.borrow_apr_pct': ('loopback', 'state'),
+    'vault_interest.rate_ppm': ('vault_interest', 'state'),
 }
 
 STATE_RENDERING = {
@@ -523,6 +676,7 @@ STATE_RENDERING = {
     'no_onchain_source': 'n/a (no source)',
     'failed': 'failed',
     'absent': '-',
+    'unavailable': '-',
 }
 
 
@@ -580,9 +734,61 @@ def _iso8601_utc(block_timestamp: int) -> str:
     )
 
 
+def identity_breaks(rows: List[Dict[str, Any]]) -> List[int]:
+    """Epochs whose sample contradicts the 98% credit.
+
+    The caller decides how loud to be; the report prints them above the table
+    and the job exits non-zero on them, because a broken identity invalidates
+    the deposit haircut for every epoch after it, not just the one it appears in.
+    """
+    return [
+        row['epoch']
+        for row in rows
+        if (row.get('rfv_identity') or {}).get('state') == IDENTITY_BROKEN
+    ]
+
+
+def _interest_excursions(rows: List[Dict[str, Any]]) -> List[Tuple[int, Decimal]]:
+    return [
+        (row['epoch'], row['vault_interest']['rate_ppm'])
+        for row in rows
+        if (row.get('vault_interest') or {}).get('state') == INTEREST_OUTSIDE_ENVELOPE
+    ]
+
+
+def render_alerts(rows: List[Dict[str, Any]]) -> List[str]:
+    """The two checks that have something to say only when they fail.
+
+    Printed above the table rather than as a column: over 133 rows a per-row
+    "ok" is scrolled past, and both of these are conditions the operator must
+    not be able to miss on a run they only glanced at.
+    """
+    lines = []
+    broken = identity_breaks(rows)
+    if broken:
+        lines.append(
+            f'  !! rfv() IDENTITY BROKEN at epoch(s) {broken}: {IDENTITY_EXPRESSION} '
+            'no longer holds. The 98% credit is observed, not read from the '
+            'contract, so treat this as a possible re-rating of the vault '
+            'position -- every residual here models the deposit haircut with a '
+            'coefficient the chain has stopped honouring.'
+        )
+    low, high = INTEREST_PPM_TOLERANCE
+    for epoch, rate in _interest_excursions(rows):
+        lines.append(
+            f'  !! epoch {epoch}: vault interest ran at {rate:,.1f} ppm of the '
+            f'position, outside the {low}-{high} ppm tolerance (observed range '
+            f'{INTEREST_PPM_OBSERVED[0]}-{INTEREST_PPM_OBSERVED[1]} ppm over the '
+            'backfill). A rate this far off is a re-mark or a halted position, '
+            'not a yield move.'
+        )
+    return lines
+
+
 def render_table(rows: List[Dict[str, Any]]) -> str:
     lines = ['NETNET treasury vs emission, by epoch']
     lines += [f'  note: {note}' for note in HEADER_NOTES]
+    lines += render_alerts(rows)
     lines.append('')
     headers = [label for _, label in COLUMNS]
     table = [headers] + [[_cell(row, key) for key, _ in COLUMNS] for row in rows]

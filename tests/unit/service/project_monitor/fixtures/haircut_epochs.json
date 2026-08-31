@@ -1,0 +1,1557 @@
+{
+  "epochs": {
+    "118": {
+      "block": 46161411,
+      "block_timestamp": 1787704415,
+      "flows": [],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "918485353185000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "1521082721830000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "21809270064729659500031"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "2430955690643129659500031"
+        }
+      }
+    },
+    "119": {
+      "block": 46447367,
+      "block_timestamp": 1787733223,
+      "flows": [
+        {
+          "amount": "21837102264",
+          "counterparty": "0x086c58400b8708ef993f256e12e752dcf0ac918e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "taxCollector"
+        },
+        {
+          "amount": "1097360000",
+          "counterparty": "0x11acd401e769c4ea69bd7bfe2599c41f5d689ce2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4006820000",
+          "counterparty": "0x14af09a8e8bc32c633d36fa015f9cf84851f72a0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "22199960",
+          "counterparty": "0x1646ebd6a46400be64230a88eeeb5440fac72788",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "269188310",
+          "counterparty": "0x2b855f24c587aeb568b5d88e402ca024b4b6703c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3184395648",
+          "counterparty": "0x346e1a31171a0f7ac73909010b5435768d3b5462",
+          "decimals": 6,
+          "direction": "in",
+          "label": "issuance"
+        },
+        {
+          "amount": "9969150000",
+          "counterparty": "0x352495ac380e1a48df322252673950947b5aef95",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "50000000",
+          "counterparty": "0x3bb7a23316f82c0e984fa2e784846d8928a35f42",
+          "decimals": 6,
+          "direction": "in",
+          "label": "teamMultisig"
+        },
+        {
+          "amount": "1041000000",
+          "counterparty": "0x45534eb276f471c5294021532b9017046de4ba2c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1200000000",
+          "counterparty": "0x457b13ab4d63390c984a06a913719f53f5ef1edc",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "195588177",
+          "counterparty": "0x52a8e541cba46313a4ba05b6cf2e00060fa30870",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "282330000",
+          "counterparty": "0x53d06083dd7b72efd17d3c23929f024e72631e68",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "30648420000",
+          "counterparty": "0x54d545bf04f84265112153d8ade19f791f24deb2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "55676069",
+          "counterparty": "0x5b82f54bc25ea0a665ee6490ace899ec04c0d655",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "9482680000",
+          "counterparty": "0x6bd6e5744638bdb169d28ec5cdd4b0b12cff0cb7",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "19500000",
+          "counterparty": "0x6e9cfd8d6d2eca3b3bb03a3e7267e6004acc76cd",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "92490009",
+          "counterparty": "0x7cf28d61d42352eb2fd68167e9b08f73cbbf21eb",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "337500000",
+          "counterparty": "0x8062adc3e18c0b54b73171d13ead74891056dc10",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "18551919592",
+          "counterparty": "0x82ee46870ab64634f569513394cded99bb1bb2f6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "300000000",
+          "counterparty": "0x83e7322328d902940c490634396860d875e448c2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "200000000",
+          "counterparty": "0x95c5ba5eec55259d59d06886609b280b9086291d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "210000000",
+          "counterparty": "0x973b7fb6bbeac3e8cc8887910d3fae56d1265954",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2501288857",
+          "counterparty": "0x99b6ee6ede47d9a8a9bfd03f728a99b789df1961",
+          "decimals": 6,
+          "direction": "in",
+          "label": "rwaDeskV1"
+        },
+        {
+          "amount": "353170984",
+          "counterparty": "0xa664d570bad6399722295298be23da2ff268f0d5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "19533151887",
+          "counterparty": "0xabe0cdd036456fcc1b64d1ddb7aa3bdf7d5b98b1",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "958656",
+          "counterparty": "0xafab15849fd560dc0e1b99a12ca4b3d963c4864b",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2686290725",
+          "counterparty": "0xb359439487ea89d5ebab5c3f68228fd45abebbf6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "250000000",
+          "counterparty": "0xcc6d2c49c1bac32b4092a2ffb6f3d6010ddaf3a9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2472190000",
+          "counterparty": "0xd03e18bf298cecc1f6d1e629125a0994fd0ca639",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2922885906",
+          "counterparty": "0xd135ec92bc835cc37b37f4d46d90560182d4edd4",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "40000000",
+          "counterparty": "0xe0290f11a134e3a0b247d555ae67f1f4f752ce09",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2439103568",
+          "counterparty": "0xebd52abf0586967ac862709ad398a487052badce",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2845516547",
+          "counterparty": "0xf4e14d778c2dbd6fd1a04f08721941eb3e1c9d6c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "272913923664",
+          "counterparty": "0xbeeff033f34c046626b8d0a041844c5d1a5409dd",
+          "decimals": 6,
+          "direction": "out",
+          "label": "morphoUsdgVault"
+        }
+      ],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "784669306680000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "1794042652518000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "21848056344516194868859"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "2564679162492156194868859"
+        }
+      }
+    },
+    "120": {
+      "block": 46732709,
+      "block_timestamp": 1787762017,
+      "flows": [
+        {
+          "amount": "10000000000",
+          "counterparty": "0x053ab16a247321e312f3a8a2a0a8abda48707241",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "61960676182",
+          "counterparty": "0x086c58400b8708ef993f256e12e752dcf0ac918e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "taxCollector"
+        },
+        {
+          "amount": "1000000000",
+          "counterparty": "0x11acd401e769c4ea69bd7bfe2599c41f5d689ce2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2319380716",
+          "counterparty": "0x2b855f24c587aeb568b5d88e402ca024b4b6703c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4787426895",
+          "counterparty": "0x346e1a31171a0f7ac73909010b5435768d3b5462",
+          "decimals": 6,
+          "direction": "in",
+          "label": "issuance"
+        },
+        {
+          "amount": "200000000",
+          "counterparty": "0x3bb7a23316f82c0e984fa2e784846d8928a35f42",
+          "decimals": 6,
+          "direction": "in",
+          "label": "teamMultisig"
+        },
+        {
+          "amount": "1997850000",
+          "counterparty": "0x4a7c38c4e9e3774590272c1ec03d7dd8d97e3b27",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "412832001",
+          "counterparty": "0x4d6edec1c9006b6086495c50010a9d33ee730766",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3000944430",
+          "counterparty": "0x52e552a077445b6bb9fa7317915cdd7282f5d47a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2001023228",
+          "counterparty": "0x535faa541252d9650f1f8a8bbd88709fb8b55a1b",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "250742635",
+          "counterparty": "0x5b82f54bc25ea0a665ee6490ace899ec04c0d655",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "7275110000",
+          "counterparty": "0x6bd6e5744638bdb169d28ec5cdd4b0b12cff0cb7",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "15000000000",
+          "counterparty": "0x7103a46bb31ce7b26972e4e63d1a83e857e7f7ef",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "676629896",
+          "counterparty": "0x7a545821c1fbc0a6978a1123279fd791656328c8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "10702959",
+          "counterparty": "0x7cf28d61d42352eb2fd68167e9b08f73cbbf21eb",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "54320000",
+          "counterparty": "0x865c068effe7119f5f98e35c4a8e8330fa748534",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "8304702813",
+          "counterparty": "0x99b6ee6ede47d9a8a9bfd03f728a99b789df1961",
+          "decimals": 6,
+          "direction": "in",
+          "label": "rwaDeskV1"
+        },
+        {
+          "amount": "53135453511",
+          "counterparty": "0xabe0cdd036456fcc1b64d1ddb7aa3bdf7d5b98b1",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "400000000",
+          "counterparty": "0xb660a09d61d646c2d9ea17aec4c9a9f1bd423cbd",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4996990000",
+          "counterparty": "0xd028babbdc15949aaa35587f95f9e96c7d49417d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3052330000",
+          "counterparty": "0xd03e18bf298cecc1f6d1e629125a0994fd0ca639",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "707450000",
+          "counterparty": "0xdf126b0c7a5572f7204c7fba2827a057b4352b15",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1544420000",
+          "counterparty": "0xe3ed35a29df699b4c4c844c2a22075ed689c5822",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "8408125237",
+          "counterparty": "0xe936b97624669cf6e60fe14bb24b3336a9ff3867",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2744374137",
+          "counterparty": "0xeb75a45b99a8698ebc45f24a1ecb57235cc0f875",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1596000000",
+          "counterparty": "0xf4e14d778c2dbd6fd1a04f08721941eb3e1c9d6c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "5050000000",
+          "counterparty": "0xf5c7f48887536e4e8f4a947472546ba81e74c569",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "53486370",
+          "counterparty": "0xfad14e74911353728b9bbfd9f0566827790c16c2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "121794665471",
+          "counterparty": "0xbeeff033f34c046626b8d0a041844c5d1a5409dd",
+          "decimals": 6,
+          "direction": "out",
+          "label": "morphoUsdgVault"
+        }
+      ],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "863815612219000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "1915894382405000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "22017387936755239547604"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "2763409494912655239547604"
+        }
+      }
+    },
+    "131": {
+      "block": 49870043,
+      "block_timestamp": 1788078812,
+      "flows": [],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "2140133121313000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "2824512635003000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "22471489954016911193178"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "4930626993569956911193178"
+        }
+      }
+    },
+    "132": {
+      "block": 50154642,
+      "block_timestamp": 1788107613,
+      "flows": [
+        {
+          "amount": "90000000000",
+          "counterparty": "0x006e4bd8d50b4c36b21d967b7fbd67ea389d0a2b",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "297148928",
+          "counterparty": "0x021cbcb336a7bf64c652491445ddc022f6abfa2a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1944209109",
+          "counterparty": "0x06691a22b31b0878b879642527fd7ea038066595",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2700000000",
+          "counterparty": "0x082cb14f04d9c485473dedc00d604d7e9abca303",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "7556990000",
+          "counterparty": "0x08698a396418f0c4bdde0d32652c90b405bdd331",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "13653993809",
+          "counterparty": "0x086c58400b8708ef993f256e12e752dcf0ac918e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "taxCollector"
+        },
+        {
+          "amount": "2123560000",
+          "counterparty": "0x11a943916a0f4b99df1f9f64fa67e30c0d919f32",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "6496900000",
+          "counterparty": "0x11acd401e769c4ea69bd7bfe2599c41f5d689ce2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "70000000",
+          "counterparty": "0x122e0d24f51f32aed7266653028a0ea69c48590a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "78810000",
+          "counterparty": "0x25e2a352478b83dc0de5d74bec53a8f13d4062b6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1199700",
+          "counterparty": "0x279037d601210469ac32e9e711be6682053673b3",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "11401048169",
+          "counterparty": "0x2b855f24c587aeb568b5d88e402ca024b4b6703c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "778000000",
+          "counterparty": "0x321dde65422421144a916141dc052d5e272fb97c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1102666049",
+          "counterparty": "0x346e1a31171a0f7ac73909010b5435768d3b5462",
+          "decimals": 6,
+          "direction": "in",
+          "label": "issuance"
+        },
+        {
+          "amount": "50000000",
+          "counterparty": "0x3bb7a23316f82c0e984fa2e784846d8928a35f42",
+          "decimals": 6,
+          "direction": "in",
+          "label": "teamMultisig"
+        },
+        {
+          "amount": "244080000",
+          "counterparty": "0x415fc02ac3cb6300c97732fcc22ffd8060f4a0f2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "50000000",
+          "counterparty": "0x422c30d711383771fb11a57ee6e940533330dd41",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4995169347",
+          "counterparty": "0x44dad0081b7472c9212a1514f2f0410958ef6014",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "464153730",
+          "counterparty": "0x467ca1b38d4f70e8baec689d268c2840214a3407",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1000000000",
+          "counterparty": "0x52848de66e585179dcb8fbfd5c1392d0f0893cc0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2000000000",
+          "counterparty": "0x5d740fb7164128530ce9ed695fa909acd88abefe",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "7418809",
+          "counterparty": "0x605e39d307bad8c70f0124da9f604434d8067488",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "310760000",
+          "counterparty": "0x6593bb5382060ef6c78fba58b790d5d78bdc1198",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2595000",
+          "counterparty": "0x6a90a22b8af50c0c59e038f57596c5ecbdb695ee",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "10230000",
+          "counterparty": "0x6eda3ff32b2c932ea6e4349d6a919449120fbced",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1500000",
+          "counterparty": "0x73c1296543dd3737e94233e8277890f7b6ec2730",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "2944091804",
+          "counterparty": "0x776893049ed7c9d6f571fa42ba02c08ad78fc962",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4874061979",
+          "counterparty": "0x78dbc9057209816a97a083fe69b947281a970403",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1491000000",
+          "counterparty": "0x797ad3c073b9fef2a27d4ff718a4b036dea2888f",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4615498965",
+          "counterparty": "0x8e09518fa8d9780968cedc9ce3d3c3856d2a9f59",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "288580000",
+          "counterparty": "0x8ecb327e761ee1c5f0e90bf79a8b3da89f99765f",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "146390000",
+          "counterparty": "0x93f6151d39e5dcad329c401fed44567e030172a9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2293740000",
+          "counterparty": "0x946034cf8f20734455591441c4000dfa225ae600",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "438322790",
+          "counterparty": "0x96ea017109c7691a3080e16c2095b547e29d82f5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3360000000",
+          "counterparty": "0x9af670eba161af30fc152f511e27e2e8231586e0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "100000000",
+          "counterparty": "0x9fac4bd5547967e9196d8124a229929b259f4c1d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "20000000",
+          "counterparty": "0xa4e71c31c4994c323aa09abfa9e93d5b7694742a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "89840000",
+          "counterparty": "0xa664d570bad6399722295298be23da2ff268f0d5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "8567740807",
+          "counterparty": "0xa6feb14224c26745b3ddd4be217ede28e6125aef",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "13687500000",
+          "counterparty": "0xa82fb6f7f9dccfbcab9d99addeb884033af11b86",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "4554726790",
+          "counterparty": "0xa84efc3136bf1bb89ade9e5be6ab32cb1a04f08d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "rwaDesk"
+        },
+        {
+          "amount": "1530000000",
+          "counterparty": "0xaaf74fc3530e405295a0679c6dfa9d60a345595b",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "65000000",
+          "counterparty": "0xadd7689c51e88af18d6e348e826c728aaf53c6e3",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "5402175161",
+          "counterparty": "0xb32842f73c26ad9837f2e4bc7871e0d8e6db80f5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "40700000",
+          "counterparty": "0xb595ff830ff95922fd9089b029edfbeff2cccc28",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2980000000",
+          "counterparty": "0xb6985c655cae89019f6d9666a7970628cb5c88bf",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1100100",
+          "counterparty": "0xb8707a97c3ee78753b46769c813785f2de0a634a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "972600",
+          "counterparty": "0xbbb22bf074adb21255aa5a893d8efb9e0aad81d1",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "5000000000",
+          "counterparty": "0xbd9c944dcfb31cd24c81ebf1c974d950f44e42b8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2466268684",
+          "counterparty": "0xbdc86d0c868a22c0210485361d9e91d12f567562",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "109136739",
+          "counterparty": "0xbf636fe8e028c5b5a12a8c5cd7aed241692bf5a4",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1500000000",
+          "counterparty": "0xc07c6c363f0d928806144e98a445b782aa639ec9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "858300",
+          "counterparty": "0xc6d1c9603757006a57f211e0c6c6ab8c57d35835",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "11077884",
+          "counterparty": "0xc884eb27ea6e221e5d208230167d3f910eacece8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "49380000",
+          "counterparty": "0xc8f5e193045808dbf190ac084cc1c72ae846a5d4",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2000000000",
+          "counterparty": "0xc97fa1c6a8878e06c35dac74df05a6fba069146a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "330000000",
+          "counterparty": "0xcac2edcd082628ba3ba31b3b74537792550319e6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1599471301",
+          "counterparty": "0xcc3f1c8e723fb6afa14b1ad19a017cecacd307f9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1360000000",
+          "counterparty": "0xccb6481337625d16cf2284faf13840af71467fa2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3437970000",
+          "counterparty": "0xcf177776e15348260a64bdeadab0303ac186a013",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "274080000",
+          "counterparty": "0xd144f5dd5118743b2392e8e31441e2540ba68ab3",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "367291345",
+          "counterparty": "0xd6da5b97151c2fea9ccf11287985a21304a521a1",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "20000000",
+          "counterparty": "0xd7d830cdb029874ee390920ac99aefa5db0515be",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "994200",
+          "counterparty": "0xd8d5ac7b8b55f435cd1e1fc697c7416d54b65520",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "25000000",
+          "counterparty": "0xded7c9013c1c954abdb5cf387677848eb539c8ed",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "510317803",
+          "counterparty": "0xe7e85aa40432ea86d224f66aa06014ca264bc7c6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1340000000",
+          "counterparty": "0xeb5b1b5dfbd1c00e3e1807a4212aabf03be79f14",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "8096100",
+          "counterparty": "0xeb5dd5fed9fc5c26777c436c0f56b323a897714c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "2410500",
+          "counterparty": "0xebfbfa8e7ef5d5864ef60e343a5fa109d643076d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "91242060",
+          "counterparty": "0xec7164f421aa7224cfefa381ea13dfded2f383ab",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "150000000",
+          "counterparty": "0xeefc554db789aafd2197081f9218a5d7efad769c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "6206000000",
+          "counterparty": "0xf4067fd034521339f8f73e490f09c2d781398c80",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "500000000",
+          "counterparty": "0xf52ed80e388a08fb060ba6f98a240ce2ca868124",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "500000000",
+          "counterparty": "0xf9cfebf28bf9c35682fbf98b72cd399fd3c99765",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "500000000",
+          "counterparty": "0xfa121dd9cc7c382a620a5d99ba6e309faeb97a40",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "60000000",
+          "counterparty": "0xfad14e74911353728b9bbfd9f0566827790c16c2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1200000",
+          "counterparty": "0xfd50d4d48896e076a02bd5f7534df1244948eaae",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        }
+      ],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "2373385789875000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "2824604762625000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "22499566764666820366411"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "5163998024012166820366411"
+        }
+      }
+    },
+    "133": {
+      "block": 50439017,
+      "block_timestamp": 1788136412,
+      "flows": [
+        {
+          "amount": "4491240000",
+          "counterparty": "0x08698a396418f0c4bdde0d32652c90b405bdd331",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "23083318596",
+          "counterparty": "0x086c58400b8708ef993f256e12e752dcf0ac918e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "taxCollector"
+        },
+        {
+          "amount": "2248430000",
+          "counterparty": "0x092ecba5774b4afbda4a971a986205e251e827e3",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "85000000",
+          "counterparty": "0x0a0f7a65e5642dfa9eca815eba5334ff71aa7ab6",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3988470000",
+          "counterparty": "0x0e10dd174e8906d13ec2e96afd6667503842f197",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "100000000",
+          "counterparty": "0x0e5e4220ba6a1499a64057bb4a69458d45ebb84c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1000000000",
+          "counterparty": "0x0f9f6159c397af90108654c9771d1b66b876af94",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1763280000",
+          "counterparty": "0x11acd401e769c4ea69bd7bfe2599c41f5d689ce2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "623712484",
+          "counterparty": "0x1463e4033c35139650ef824605be7b884764688e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "422610000",
+          "counterparty": "0x1b36020374a7435a07e790fdb7d59446d58602f7",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "307711375",
+          "counterparty": "0x1bf3455da5d571f228d5d2b89b240e536aea53b2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1830000",
+          "counterparty": "0x1d915159aeee1c9d71b4be758301938b26be0966",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "41764714",
+          "counterparty": "0x1dc3109dea30ef4faf12b37ea0131f09150f2767",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "690000",
+          "counterparty": "0x22231bd78d920af1ce5c929bc4fcc925ce7bcee1",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "300000",
+          "counterparty": "0x2374aeb8ded643473fe51d6ebb5b9927bc690ede",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "75000000",
+          "counterparty": "0x2507b8944e105532b7c5ea1fd1ffaa8f5421b098",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1673730963",
+          "counterparty": "0x2831269a3eb964c4dcd574d2be3bfa0553b61ac5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "106414596",
+          "counterparty": "0x2a215bee82f7fdf18b09b370e7e7ee65d7692c84",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2250000",
+          "counterparty": "0x2ccea30c47ebecee5ac15caa26e6f056e6449bc3",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "103120000",
+          "counterparty": "0x2fdeace55913bbd920d1bc2865a51ec23491548e",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1190100",
+          "counterparty": "0x3086f56b5cdbc466bc52f1c5d4ecae01dfe735c2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "3198957945",
+          "counterparty": "0x346e1a31171a0f7ac73909010b5435768d3b5462",
+          "decimals": 6,
+          "direction": "in",
+          "label": "issuance"
+        },
+        {
+          "amount": "25590554",
+          "counterparty": "0x3aae0d6d7a19cec8a0e38fbd86e6e8daf702ba75",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "50000000",
+          "counterparty": "0x3bb7a23316f82c0e984fa2e784846d8928a35f42",
+          "decimals": 6,
+          "direction": "in",
+          "label": "teamMultisig"
+        },
+        {
+          "amount": "288770000",
+          "counterparty": "0x3f0080298bf77062d48bbd26a63a97196416742c",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1000000000",
+          "counterparty": "0x40ee538af02efcda94db59e9d46a295c9ea4a6a8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "55660000",
+          "counterparty": "0x415fc02ac3cb6300c97732fcc22ffd8060f4a0f2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2500000",
+          "counterparty": "0x46c8d1c63ddf0e057431c78998a1f31def926431",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "402491127",
+          "counterparty": "0x496d8e92df64e7396e8257b055978a0242989976",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1500000000",
+          "counterparty": "0x4b86226d59a0f109a731e639a5d8d6239be3d439",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2330400",
+          "counterparty": "0x4f51a751f6edeeb5e9a30fb72bb652cf6b7b5a28",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "70000000",
+          "counterparty": "0x539e4bca25ad8ddd98ddab638bc88fc75ed092ec",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "66952974330",
+          "counterparty": "0x5d5148f8e92452c91c8451d7039f3be963f81fe9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "6500000000",
+          "counterparty": "0x744a26a3e5a56efb7d95119752a63183c236bbd0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "592449065",
+          "counterparty": "0x77b19f5a7080b0c1887dcacbe63a141e9317a0f0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "6715733474",
+          "counterparty": "0x797ad3c073b9fef2a27d4ff718a4b036dea2888f",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2507607886",
+          "counterparty": "0x9d462b330685b2c8852405ee63d32bf3c55be4c2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2929930000",
+          "counterparty": "0xa11a971c0014aad2ecd84e1aac80bd429b81f215",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3718200",
+          "counterparty": "0xa7d7ac8fe7e8693b5599c69cc7d4f6226677845b",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "4767147189",
+          "counterparty": "0xa84efc3136bf1bb89ade9e5be6ab32cb1a04f08d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "rwaDesk"
+        },
+        {
+          "amount": "3974629542",
+          "counterparty": "0xb32842f73c26ad9837f2e4bc7871e0d8e6db80f5",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "390000",
+          "counterparty": "0xb76cfc692c68aee5eb8b662bab6978e0ca454e34",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "25054314101",
+          "counterparty": "0xb7ab37a5cd13a1595aa77426ff0bfeafbe2ddf41",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "2712300",
+          "counterparty": "0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "1224080000",
+          "counterparty": "0xbbb2b9e8a599497c2d41e5fe08139478d4771e5d",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "10000000000",
+          "counterparty": "0xbd9c944dcfb31cd24c81ebf1c974d950f44e42b8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "3001990000",
+          "counterparty": "0xc07c6c363f0d928806144e98a445b782aa639ec9",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1560300",
+          "counterparty": "0xc8fa6fecec828604c860e9418294d8f44466ad00",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "1305000000",
+          "counterparty": "0xccb6481337625d16cf2284faf13840af71467fa2",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "400000000",
+          "counterparty": "0xd3099cc9cd9e0e3f332570afc921b20703d089a8",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1380000",
+          "counterparty": "0xd8d5ac7b8b55f435cd1e1fc697c7416d54b65520",
+          "decimals": 6,
+          "direction": "in",
+          "label": "unlabelled"
+        },
+        {
+          "amount": "1038113293",
+          "counterparty": "0xdd0a20faf5147dc29a16e43e5c0fd4ca9bfb4e36",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "12563176697",
+          "counterparty": "0xdf40a82ef45914fa9f650a85d83185b22ceb540a",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "383240000",
+          "counterparty": "0xe5e021e70042f31d03b7706fbb5ebec8c15190e0",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "5210313888",
+          "counterparty": "0xeea088fe618c9f44bf5b678785a7b74a7925cccc",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "8024000000",
+          "counterparty": "0xf4067fd034521339f8f73e490f09c2d781398c80",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "18711345910",
+          "counterparty": "0xf4f163a7de3a5ea7b1cf5b50e27bfb8593b35693",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "1668968354",
+          "counterparty": "0xf938993466ebc8fa923e0ce331688e37301f0193",
+          "decimals": 6,
+          "direction": "in",
+          "label": "bond"
+        },
+        {
+          "amount": "965383395565",
+          "counterparty": "0xbeeff033f34c046626b8d0a041844c5d1a5409dd",
+          "decimals": 6,
+          "direction": "out",
+          "label": "morphoUsdgVault"
+        }
+      ],
+      "readings": {
+        "Treasury.liquidUsdg": {
+          "decimals": 18,
+          "value_int": "1638253531693000000000000"
+        },
+        "Treasury.morphoAssets": {
+          "decimals": 18,
+          "value_int": "3790085727257000000000000"
+        },
+        "Treasury.polRfv": {
+          "decimals": 18,
+          "value_int": "22541236666033648955073"
+        },
+        "Treasury.rfv": {
+          "decimals": 18,
+          "value_int": "5375078781070893648955073"
+        }
+      }
+    }
+  },
+  "groups": [
+    [
+      118,
+      119,
+      120
+    ],
+    [
+      131,
+      132,
+      133
+    ]
+  ],
+  "provenance": {
+    "flows": "every flow row in the epoch's (previous close block, close block] window, summed per (direction, counterparty, label). The report groups on exactly those three, so its totals are identical to the ones the individual rows would give; only the row count differs.",
+    "readings": "each epoch's closing sample and its four Treasury readings, value_int in wei exactly as the chain returned them",
+    "rebuild": "scripts/capture_project_monitor_haircut_fixture.py",
+    "source": "the operator store: compose service project_monitor_postgres, database project_monitor, 133 backfilled epochs as of 2026-08-31"
+  }
+}

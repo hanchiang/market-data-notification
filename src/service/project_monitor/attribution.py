@@ -169,3 +169,50 @@ def build_flow_rows(
             }
         )
     return rows
+
+
+BOUNDARY_INTERNAL = 'internal'
+BOUNDARY_EXTERNAL = 'external'
+
+# Address keys whose USDG balance is ALREADY counted by `Treasury.rfv()`.
+#
+# The test is the counterparty's place in `rfv()`, NOT who owns the address, and
+# the two disagree in both directions: the Morpho vault is NETNET's and inside
+# `rfv()` (`Treasury.morphoAssets` is one of the three components), while
+# `rwaDesk` and `teamMultisig` are equally NETNET's and outside it. An
+# ownership test would exclude a real payment out of the treasury; this one
+# excludes only a move between two things `rfv()` already adds together.
+#
+# One key today, because `rfv()` has three components and all three are
+# treasury-held: `liquidUsdg` is the treasury's own balance, `polRfv` is its LP
+# share, and `morphoAssets` is the only one held at another address. A second
+# key belongs here only when `rfv()` grows a component measured at a new
+# address. Evidence for the enumeration, over all 133 epochs of the project's
+# history: MARKET-DATA/docs/traces/2026-08-31-netnet-flow-boundary-trace.md.
+RFV_INTERNAL_ADDRESS_KEYS = ('morphoUsdgVault',)
+
+
+def rfv_boundary(counterparty: str, project: ProjectConfig) -> str:
+    """`internal` when the counterparty's balance is already inside `rfv()`.
+
+    Internal moves are excluded from the residual and from nothing else: a
+    treasury-to-vault deposit is a real transfer that belongs in the flow
+    detail, it just changes which `rfv()` component holds the value rather than
+    moving value across the boundary `rfv()` draws.
+
+    **The internal/external split is not exhaustive, and one address sits
+    between them.** `canonicalV2Pair` is only FRACTIONALLY inside `rfv()` --
+    `polRfv` counts the treasury's LP share of the pair, not the pair's whole
+    balance -- so a transfer there is part internal and part external in a ratio
+    that changes with the LP share. It resolves to `external` here, which is the
+    conservative side: the full amount stays in the residual's net, so the first
+    such transfer shows up as a residual the size of the internal fraction
+    rather than being silently dropped. No POL operation appears in the 133
+    epochs measured to 2026-08-31; when one does, the residual is the tripwire
+    and the fraction is what needs modelling.
+    """
+    target = counterparty.lower()
+    for key in RFV_INTERNAL_ADDRESS_KEYS:
+        if project.addresses[key].lower() == target:
+            return BOUNDARY_INTERNAL
+    return BOUNDARY_EXTERNAL

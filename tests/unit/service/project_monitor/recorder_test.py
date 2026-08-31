@@ -14,6 +14,8 @@ from market_data_library.core.onchain.evm import (
 
 from src.service.project_monitor import recorder
 from src.service.project_monitor.attribution import (
+    BOUNDARY_EXTERNAL,
+    BOUNDARY_INTERNAL,
     LABEL_BOND,
     LABEL_ISSUANCE,
     LABEL_UNLABELLED,
@@ -26,6 +28,7 @@ from src.service.project_monitor.attribution import (
     build_flow_rows,
     index_bond_events_by_transaction,
     index_mints_by_transaction,
+    rfv_boundary,
 )
 from src.service.project_monitor.config import NETNET
 
@@ -412,3 +415,36 @@ def test_a_peripheral_batch_failure_retries_individually_and_isolates_the_bad_re
     # And a CORE reading from an earlier batch is untouched -- the peripheral
     # failure must not have propagated backward.
     assert by_name['Treasury.rfv']['state'] == recorder.STATE_OK
+
+
+def test_the_internal_boundary_is_rfv_membership_not_ownership():
+    """The one test that separates this rule from the defect it replaces.
+
+    `rwaDesk` and `teamMultisig` are NETNET's own addresses and sit OUTSIDE
+    `rfv()`, so an ownership-based rule would call them internal and stop
+    counting real payments out of the treasury. The vault is NETNET's and
+    inside `rfv()`. An implementation that passes the vault assertion alone
+    could be either rule; the two below are what make it only one of them.
+    """
+    assert rfv_boundary(NETNET.address('morphoUsdgVault'), NETNET) == BOUNDARY_INTERNAL
+    assert rfv_boundary(NETNET.address('rwaDesk'), NETNET) == BOUNDARY_EXTERNAL
+    assert rfv_boundary(NETNET.address('teamMultisig'), NETNET) == BOUNDARY_EXTERNAL
+    assert rfv_boundary(NETNET.address('taxCollector'), NETNET) == BOUNDARY_EXTERNAL
+    assert rfv_boundary('0xnothing', NETNET) == BOUNDARY_EXTERNAL
+    # Addresses reach this from `Transfer` topics, which are lowercase, while
+    # the registry is checksummed; comparing either as stored would classify
+    # every real vault move as external.
+    assert (
+        rfv_boundary(NETNET.address('morphoUsdgVault').lower(), NETNET)
+        == BOUNDARY_INTERNAL
+    )
+
+
+def test_the_partly_inside_pair_resolves_to_external_deliberately():
+    """`polRfv` counts the treasury's LP SHARE of the pair, not the pair's whole
+    balance, so a transfer there is neither wholly internal nor wholly external.
+    It resolves external so the full amount stays in the residual's net and the
+    first POL operation surfaces as a residual, rather than being dropped
+    silently. Pinned as a test because the reading that makes it internal ("the
+    pair is inside rfv()") is the plausible one."""
+    assert rfv_boundary(NETNET.address('canonicalV2Pair'), NETNET) == BOUNDARY_EXTERNAL

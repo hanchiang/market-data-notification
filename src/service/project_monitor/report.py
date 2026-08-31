@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .attribution import LABEL_UNLABELLED
+from .attribution import BOUNDARY_INTERNAL, LABEL_UNLABELLED, rfv_boundary
 from .config import ProjectConfig
 from .repository import ProjectMonitorRepository
 
@@ -106,8 +106,22 @@ def _flow_key(label: str, counterparty: str) -> str:
     return label if label != LABEL_UNLABELLED else f'{LABEL_UNLABELLED}:{counterparty}'
 
 
-def _bucket_flows(flows: List[Dict[str, Any]], direction: str) -> Dict[str, Decimal]:
+def _bucket_flows(
+    flows: List[Dict[str, Any]], direction: str, project: ProjectConfig
+) -> Tuple[Dict[str, Decimal], List[str]]:
+    """Bucketed totals for one direction, and which of those buckets are internal.
+
+    Internal buckets stay in the totals: `rfv()`'s boundary decides what the
+    residual may count, not what the operator may see, and a treasury-to-vault
+    deposit is a real transfer. The caller drops them from the residual's net
+    and from nothing else.
+
+    A bucket is internal or external as a whole, never a mix: `_flow_key` keys a
+    labelled flow by its label, and a label resolves to exactly one address, so
+    every row under one key shares a counterparty.
+    """
     buckets: Dict[str, Decimal] = {}
+    internal: List[str] = []
     for row in flows:
         if row['direction'] != direction:
             continue
@@ -116,7 +130,12 @@ def _bucket_flows(flows: List[Dict[str, Any]], direction: str) -> Dict[str, Deci
         if amount is None:
             continue
         buckets[key] = buckets.get(key, Decimal(0)) + amount
-    return buckets
+        if (
+            rfv_boundary(str(row['counterparty']), project) == BOUNDARY_INTERNAL
+            and key not in internal
+        ):
+            internal.append(key)
+    return buckets, sorted(internal)
 
 
 def _price_and_premium(
@@ -293,8 +312,13 @@ def _build_row(
         'GROUP BY direction, label, counterparty',
         (project_name, previous_block if previous_block is not None else -1, block),
     )
-    inflows = _bucket_flows(flows, 'in')
-    outflows = _bucket_flows(flows, 'out')
+    # The internal/external split is derived here rather than stored on the
+    # flow row, so it is a property of what `rfv()` counts TODAY. A stored
+    # column would freeze each transfer's classification at the moment it was
+    # swept, and `rfv()` gaining a component would leave every past epoch
+    # classified against the old boundary with no way to notice.
+    inflows, internal_inflow_keys = _bucket_flows(flows, 'in', project)
+    outflows, internal_outflow_keys = _bucket_flows(flows, 'out', project)
 
     liquid = value('Treasury.liquidUsdg')
     morpho_assets = value('Treasury.morphoAssets')
@@ -305,12 +329,26 @@ def _build_row(
 
     previous_rfv = previous.get('rfv') if previous and previous.get('present') else None
     previous_supply = previous.get('supply') if previous and previous.get('present') else None
-    net_inflow = sum((v for v in inflows.values() if v is not None), Decimal(0))
-    net_outflow = sum((v for v in outflows.values() if v is not None), Decimal(0))
+    # Internal buckets are left out of both nets. `out` in this sum has to mean
+    # "value left `rfv()`", and a deposit into the Morpho vault leaves `rfv()`
+    # unchanged -- `morphoAssets` rises by what `liquidUsdg` loses. Counting it
+    # made the residual report the deposit back as unexplained: measured at
+    # epoch 133, a 965,383 USDG deposit produced a residual of 946,213 against
+    # the 7-185 of every epoch without one, burying the genuine signal the
+    # column exists for.
+    net_inflow = sum(
+        (v for k, v in inflows.items() if v is not None and k not in internal_inflow_keys),
+        Decimal(0),
+    )
+    net_outflow = sum(
+        (v for k, v in outflows.items() if v is not None and k not in internal_outflow_keys),
+        Decimal(0),
+    )
     # The residual asks: how much of the rfv move is NOT explained by the USDG
-    # that visibly entered and left? A non-zero residual is a vault re-mark, a
-    # POL move, or something we have not labelled -- it is a prompt to look,
-    # never a number to publish as a category.
+    # that visibly entered and left across `rfv()`'s boundary? A non-zero
+    # residual is a vault re-mark, a POL move, or something we have not
+    # labelled -- it is a prompt to look, never a number to publish as a
+    # category.
     residual = None
     if rfv is not None and previous_rfv is not None:
         residual = (rfv - previous_rfv) - (net_inflow - net_outflow)
@@ -364,6 +402,10 @@ def _build_row(
         ),
         'inflows': {k: str(v) for k, v in inflows.items()},
         'outflows': {k: str(v) for k, v in outflows.items()},
+        # Which of those buckets the residual ignored, so a reader who sees a
+        # six-figure outflow beside an unmoved residual is told why rather than
+        # left to suspect the arithmetic.
+        'internal_flows': {'in': internal_inflow_keys, 'out': internal_outflow_keys},
         'residual': residual,
         'rfv_components': {
             'liquid_usdg': liquid,
@@ -414,6 +456,9 @@ HEADER_NOTES = (
     'Loopback supply APR is derived as borrow rate x utilization x (1 - fee); '
     'it has no on-chain getter',
     'buyback "filled" has no on-chain source and is reported as unavailable',
+    'a flow marked [internal] moves value between two things rfv() already '
+    'counts (today: the Morpho vault) and is excluded from the residual only; '
+    'it is shown in full because the transfer is real',
 )
 
 # AC5's enumerated figures, in AC5's order. Every one of them that has a fixed
@@ -556,13 +601,18 @@ def _render_flow_detail(rows: List[Dict[str, Any]]) -> List[str]:
             lines.append(f'  epoch {row["epoch"]}: no sample')
             continue
         lines.append(f'  epoch {row["epoch"]} (close block {row["block"]})')
+        internal = row.get('internal_flows') or {}
         for direction, key in (('in', 'inflows'), ('out', 'outflows')):
             entries = row.get(key) or {}
             if not entries:
                 lines.append(f'    {direction:3} none')
                 continue
+            internal_keys = internal.get(direction) or []
             for name, amount in sorted(entries.items()):
-                lines.append(f'    {direction:3} {name:<52} {_format_amount(amount)}')
+                marker = ' [internal]' if name in internal_keys else ''
+                lines.append(
+                    f'    {direction:3} {name:<52} {_format_amount(amount)}{marker}'
+                )
     return lines
 
 

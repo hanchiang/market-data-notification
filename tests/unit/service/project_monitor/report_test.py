@@ -219,7 +219,8 @@ def test_the_header_carries_the_notes_that_stop_a_misreading(repository):
     assert 'fees unattributed' in table
     assert 'Sleeve total is NOT part of rfv()' in table
     assert 'do not sum to rfv()' in table
-    assert len(HEADER_NOTES) == 5
+    assert 'excluded from the residual only' in table
+    assert len(HEADER_NOTES) == 6
 
 
 def test_json_and_table_agree_column_for_column(repository):
@@ -671,3 +672,79 @@ def test_a_recorded_buyback_reaches_the_repurchased_and_burned_columns(
 
     # And it survives rendering.
     assert '1.3690' in render_table(rows)
+
+
+VAULT = NETNET.address('morphoUsdgVault').lower()
+
+
+def _seed_boundary_epoch(repository, *, vault_direction: str):
+    """Two epochs, rfv +100, and three flows in the second: one internal move of
+    500 to or from the Morpho vault, plus an external +90 in and -10 out."""
+    run_id = repository.start_run('test')
+    _commit_epoch(repository, run_id, block=100, epoch=10,
+                  rfv=1000 * WAD, backing=80 * WAD, supply=12_500_000_000)
+    _commit_epoch(repository, run_id, block=200, epoch=11,
+                  rfv=1100 * WAD, backing=82 * WAD, supply=13_000_000_000)
+    repository.insert_flows([
+        {'project': PROJECT, 'block': 160, 'tx_hash': '0xb', 'log_index': 2,
+         'direction': 'in', 'counterparty': '0x9', 'amount': 90_000_000,
+         'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated'},
+        {'project': PROJECT, 'block': 165, 'tx_hash': '0xd', 'log_index': 1,
+         'direction': 'out', 'counterparty': '0x8', 'amount': 10_000_000,
+         'decimals': 6, 'label': 'unlabelled', 'rule': 'unlabelled'},
+        {'project': PROJECT, 'block': 170, 'tx_hash': '0xe', 'log_index': 1,
+         'direction': vault_direction, 'counterparty': VAULT, 'amount': 500_000_000,
+         'decimals': 6, 'label': 'morphoUsdgVault', 'rule': 'labelled-counterparty'},
+    ])
+    repository.commit()
+
+
+def test_a_deposit_into_rfv_s_own_vault_leaves_the_residual_alone(repository):
+    """The ticket's acceptance criterion, asserted by VALUE.
+
+    rfv moved +100. The flows that crossed `rfv()`'s boundary were +90 in and
+    -10 out, so 20 of the move is unexplained and that is the residual. The
+    500 moved into the Morpho vault crossed nothing -- `morphoAssets` gained
+    what `liquidUsdg` lost -- and counting it as an outflow would report 520,
+    which is the defect this replaces: at epoch 133 of the real backfill it
+    turned a 965,383 deposit into a 946,213 residual and buried the two- and
+    three-figure signals every other epoch carries.
+    """
+    _seed_boundary_epoch(repository, vault_direction='out')
+    row = load_epoch_rows(repository, NETNET)[1]
+    assert row['residual'] == Decimal(20)
+    # The transfer is real and stays visible in full; only the residual ignores
+    # it. An implementation that dropped the flow instead would pass the
+    # assertion above and lose the operator's view of a 500 USDG move.
+    assert row['outflows']['morphoUsdgVault'] == '500'
+    assert row['internal_flows'] == {'in': [], 'out': ['morphoUsdgVault']}
+
+
+def test_a_withdrawal_from_the_vault_is_internal_in_the_inflow_direction_too(repository):
+    """The same move run backwards. A rule written only for the outflow side
+    would count a vault withdrawal as new value entering the treasury, which is
+    the identical error with the sign flipped: rfv would predict +590 against an
+    actual +100 and the residual would read -480."""
+    _seed_boundary_epoch(repository, vault_direction='in')
+    row = load_epoch_rows(repository, NETNET)[1]
+    assert row['residual'] == Decimal(20)
+    assert row['inflows']['morphoUsdgVault'] == '500'
+    assert row['internal_flows'] == {'in': ['morphoUsdgVault'], 'out': []}
+
+
+def test_the_flow_detail_marks_an_internal_move_rather_than_hiding_it(repository):
+    """A six-figure outflow beside an unmoved residual reads as broken
+    arithmetic unless the line says why it was excluded."""
+    _seed_boundary_epoch(repository, vault_direction='out')
+    table = render_table(load_epoch_rows(repository, NETNET))
+    vault_line = next(
+        line for line in table.splitlines() if 'morphoUsdgVault' in line
+    )
+    assert vault_line.endswith('[internal]')
+    assert '500.0000' in vault_line
+    # The external outflow on the same epoch must NOT be marked -- a marker on
+    # every line would satisfy the assertion above and say nothing.
+    unlabelled_line = next(
+        line for line in table.splitlines() if 'unlabelled:0x8' in line
+    )
+    assert '[internal]' not in unlabelled_line

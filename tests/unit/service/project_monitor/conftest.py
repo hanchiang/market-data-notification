@@ -8,8 +8,15 @@ test would reintroduce exactly that split, one dialect at a time
 
 When Postgres is absent these tests **fail loudly rather than skip**. A skip
 would make the store's coverage invisible in a green run, which is the failure
-mode this whole slice's evidence rules exist to prevent. The compose stack
-(`docker-compose.test.yml`) provides the service in CI and locally.
+mode this whole slice's evidence rules exist to prevent.
+
+Two stacks serve that Postgres and they are not interchangeable. CI runs pytest
+inside `docker-compose.test.yml`, which reaches its own tmpfs server by hostname.
+A local run uses `DEFAULT_TEST_DATABASE_URL` below -- port 55432, the operator
+stack's `project_monitor_postgres`, which hosts `project_monitor_test` beside the
+operator database. The test compose publishes 5432 with a different password, so
+starting it does NOT satisfy the local default; that mismatch is why the failure
+message below names the operator stack.
 """
 import json
 import os
@@ -52,9 +59,11 @@ def repository():
     except psycopg.OperationalError as exc:
         pytest.fail(
             'the project monitor tests require a real Postgres and must never '
-            'fall back to another engine. Start the compose stack '
-            '(`docker compose -f docker-compose.test.yml up -d postgres`) or set '
-            f'PROJECT_MONITOR_TEST_DATABASE_URL. Connection error: {exc}'
+            'fall back to another engine. Start the operator stack '
+            '(`docker compose up -d project_monitor_postgres`), which serves '
+            'this default URL, or set PROJECT_MONITOR_TEST_DATABASE_URL. Note '
+            '`docker-compose.test.yml` is the CI stack on a different port and '
+            f'password and will not satisfy the default. Connection error: {exc}'
         )
     # Truncate rather than drop: the DDL is what the production path runs, so
     # re-running it every test would also re-test it every test and hide a

@@ -116,9 +116,18 @@ def _bucket_flows(
     deposit is a real transfer. The caller drops them from the residual's net
     and from nothing else.
 
-    A bucket is internal or external as a whole, never a mix: `_flow_key` keys a
-    labelled flow by its label, and a label resolves to exactly one address, so
-    every row under one key shares a counterparty.
+    A key is marked internal when ANY row under it is, and the whole bucket then
+    leaves the residual's net. Two kinds of key reach here and only one makes
+    that safe. A registry label resolves to one address; a correlated label does
+    not -- `attribution.py` assigns `bond` and `issuance` by transaction, not by
+    counterparty, and `bond` aggregates 848 distinct senders in the operator's
+    store. Correlated labels exist only on the inflow side: `attribute_outflow`
+    applies no correlation rule, while on the inflow side correlation outranks
+    the registry label rather than yielding to it. Nothing inside `rfv()` reaches
+    a correlated bucket today because no such counterparty has ever sent USDG in
+    -- all 71 vault rows are outflows. A vault withdrawal sharing a transaction
+    with a bond or issuance mint is the case that ends that, and it would drop
+    the epoch's whole bond inflow; classify per row before letting it happen.
     """
     buckets: Dict[str, Decimal] = {}
     internal: List[str] = []

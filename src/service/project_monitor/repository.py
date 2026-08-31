@@ -366,12 +366,17 @@ class ProjectMonitorRepository:
     def insert_backfill_log_raw_responses(
         self, project: str, entries: Iterable[Any]
     ) -> int:
-        """Step 3's raw `eth_getLogs` bodies (R2), keyed by query + block span
-        rather than a sample id -- see `backfill_log_raw_response`'s DDL comment
-        for why. `entries` is `(query_name, RawResponse)` pairs from
-        `recorder.read_log_window`'s `raw_responses_by_query`. Returns the
-        number of rows actually inserted, so a re-run can report "0 new" instead
-        of silently looking like it fetched again.
+        """The backfill's raw `eth_getLogs` bodies (R2), keyed by query + block
+        span rather than a sample id -- see `backfill_log_raw_response`'s DDL
+        comment for why. `entries` is `(query_name, RawResponse)` pairs: step 3
+        passes `recorder.read_log_window`'s `raw_responses_by_query`, step 2
+        pairs its own query name with what `fetch_window` returned.
+
+        Both steps write here and both query `net_mints`, so a span they both
+        read lands on one key and first-write-wins keeps one body. That is
+        intended -- see the decision stated at step 2's call site in
+        `backfill.py`. Returns the number of rows actually inserted, so a re-run
+        can report "0 new" instead of silently looking like it fetched again.
         """
         inserted = 0
         with self.connection.cursor() as cursor:

@@ -169,7 +169,7 @@ def test_a_step_two_segment_that_fails_part_way_writes_none_of_its_own_rows(
         return [
             _rebase_mint_log(from_block + 1),
             _rebase_mint_log(from_block + 2),
-        ], []
+        ], [_FakeRawResponse(hex(from_block), hex(to_block), {'result': []})]
 
     real_upsert = repository.upsert_epoch_boundary
 
@@ -192,6 +192,207 @@ def test_a_step_two_segment_that_fails_part_way_writes_none_of_its_own_rows(
     assert _boundaries(repository) == [1, 2]
     assert repository.get_project_value(
         PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '499999'
+    # The raw response went back with the rows it produced. A stored raw for a
+    # segment that wrote no boundaries would claim a read whose derivations are
+    # not in the store -- the inverse of the R2 gap this storage exists to close.
+    assert _raw_spans(repository) == [(0, 499_999)]
+
+
+def _raw_spans(repository, query_name='net_mints'):
+    return [
+        (int(r['from_block']), int(r['to_block']))
+        for r in repository.fetch_all(
+            'SELECT from_block, to_block FROM backfill_log_raw_response '
+            'WHERE project = %s AND query_name = %s ORDER BY from_block, to_block',
+            (PROJECT, query_name),
+        )
+    ]
+
+
+def test_step_two_stores_the_raw_responses_its_boundaries_were_derived_from(
+    repository, monkeypatch,
+):
+    """R2 on step 2, and the 2026-08-30 ruling's "each `eth_getLogs` response".
+    An `epoch_boundary` row is a figure like any other, and over the range step 2
+    reaches beyond step 3 -- `(live_cursor, head]` -- no other stored read covers
+    it, so without this the boundary is not re-derivable from anything.
+
+    Two raws per segment at DISJOINT narrowed spans, because the stored bounds
+    must come from each call's own `params[0]`, not from the segment: one raw per
+    segment whose span equalled the segment's would pass a version that stored
+    the segment bounds for every row.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def fetch_window(client, query, from_block, to_block):
+        half = (to_block - from_block + 1) // 2
+        return [_rebase_mint_log(from_block + 1)], [
+            _FakeRawResponse(
+                hex(from_block), hex(from_block + half - 1),
+                {'jsonrpc': '2.0', 'result': [f'lower-{from_block}']},
+            ),
+            _FakeRawResponse(
+                hex(from_block + half), hex(to_block),
+                {'jsonrpc': '2.0', 'result': [f'upper-{from_block}']},
+            ),
+        ]
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fetch_window)
+    result = asyncio.run(backfill.step_epoch_boundaries(repository, None, 999_999))
+
+    assert '+4 raw log responses' in result, result
+
+    rows = repository.fetch_all(
+        'SELECT query_name, from_block, to_block, method, params_json, '
+        'body_json, endpoint_kind FROM backfill_log_raw_response '
+        'WHERE project = %s ORDER BY from_block',
+        (PROJECT,),
+    )
+    assert [(int(r['from_block']), int(r['to_block'])) for r in rows] == [
+        (0, 249_999), (250_000, 499_999), (500_000, 749_999), (750_000, 999_999),
+    ]
+    assert {r['query_name'] for r in rows} == {'net_mints'}
+    # Content by value, not presence: a table holding the right count of the
+    # wrong bodies re-derives nothing.
+    assert [r['body_json']['result'][0] for r in rows] == [
+        'lower-0', 'upper-0', 'lower-500000', 'upper-500000',
+    ]
+    assert rows[0]['method'] == 'eth_getLogs'
+    assert rows[0]['endpoint_kind'] == 'public'
+    assert rows[0]['params_json'][0]['fromBlock'] == '0x0'
+
+
+def test_the_two_steps_collide_on_a_shared_span_and_coexist_on_a_different_one(
+    repository, monkeypatch,
+):
+    """The design wrinkle the raw storage opens, pinned rather than left to be
+    inferred from the schema. Both steps query `net_mints` over overlapping
+    ranges into one table keyed on `(project, query_name, from_block, to_block)`.
+
+    SAME span -- the common case, since a fresh run starts both steps at
+    `launch_block` and segments them identically -- collides, and
+    `ON CONFLICT DO NOTHING` keeps whichever ran first. Step 2 runs first, so
+    step 2's body is the one that survives. That is right, not lossy: both steps
+    derived their rows from the same query over the same span, so one body
+    re-derives both.
+
+    DIFFERENT span coexists as its own row, because two reads really did happen
+    at two spans and each holds what it returned.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def fetch_window(client, query, from_block, to_block):
+        return [_rebase_mint_log(from_block + 1)], [
+            _FakeRawResponse(
+                hex(from_block), hex(to_block),
+                {'jsonrpc': '2.0', 'result': ['from-step-2']},
+            ),
+        ]
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fetch_window)
+    asyncio.run(backfill.step_epoch_boundaries(repository, None, 499_999))
+    assert _raw_spans(repository) == [(0, 499_999)]
+
+    async def read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        window = _segment_window(project_name, from_block, to_block)
+        window['raw_responses_by_query'] = [
+            # Exactly step 2's span: collides.
+            ('net_mints', _FakeRawResponse(
+                hex(from_block), hex(to_block),
+                {'jsonrpc': '2.0', 'result': ['from-step-3']},
+            )),
+            # A span step 2 never issued, because step 3 narrowed here: coexists.
+            ('net_mints', _FakeRawResponse(
+                hex(from_block), hex(249_999),
+                {'jsonrpc': '2.0', 'result': ['step-3-narrowed']},
+            )),
+        ]
+        return window
+
+    monkeypatch.setattr(recorder, 'read_log_window', read_log_window)
+    result = asyncio.run(backfill.step_log_history(repository, None, 499_999))
+
+    # One of step 3's two raws was new; the other collided and was dropped.
+    assert '+1 raw log responses' in result, result
+    assert _raw_spans(repository) == [(0, 249_999), (0, 499_999)]
+
+    bodies = {
+        (int(r['from_block']), int(r['to_block'])): r['body_json']['result'][0]
+        for r in repository.fetch_all(
+            'SELECT from_block, to_block, body_json FROM backfill_log_raw_response '
+            'WHERE project = %s',
+            (PROJECT,),
+        )
+    }
+    # First write wins on the shared key, and step 2 ran first.
+    assert bodies[(0, 499_999)] == 'from-step-2'
+    assert bodies[(0, 249_999)] == 'step-3-narrowed'
+
+
+def test_a_segment_whose_raw_storage_fails_advances_neither_rows_nor_watermark(
+    repository, monkeypatch,
+):
+    """The raw and the rows it explains are one unit, for BOTH sweeping steps.
+
+    Found by a surviving mutation: moving the raw insert to after the segment's
+    commit passed every other test here, because the failures they inject land
+    before the raw insert in either ordering. Injecting the failure INTO the raw
+    insert separates them. If the rows and watermark commit first, a segment
+    whose raw storage fails is marked done with its raw missing forever -- the
+    exact R2 gap this whole change closes, reintroduced one line later in the
+    function.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def fetch_window(client, query, from_block, to_block):
+        return [_rebase_mint_log(from_block + 1)], [
+            _FakeRawResponse(hex(from_block), hex(to_block), {'result': []}),
+        ]
+
+    async def read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        return _segment_window(project_name, from_block, to_block)
+
+    real_insert = repository.insert_backfill_log_raw_responses
+
+    def insert_failing_on_the_second_segment(project, entries):
+        prepared = list(entries)
+        if prepared and int(prepared[0][1].params[0]['fromBlock'], 16) == 500_000:
+            raise RuntimeError('the store rejected the raw response')
+        return real_insert(project, prepared)
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fetch_window)
+    monkeypatch.setattr(recorder, 'read_log_window', read_log_window)
+    monkeypatch.setattr(
+        repository, 'insert_backfill_log_raw_responses',
+        insert_failing_on_the_second_segment,
+    )
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(backfill.step_epoch_boundaries(repository, None, 999_999))
+
+    assert _boundaries(repository) == [1], 'segment 2 committed a boundary with no raw'
+    assert repository.get_project_value(
+        PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '499999', 'the watermark passed a segment whose raw was never stored'
+    assert _raw_spans(repository) == [(0, 499_999)]
+
+    # Step 3 has the same ordering and must hold the same way. Its watermark is
+    # separate, so it starts from the launch block regardless of step 2 above.
+    with pytest.raises(RuntimeError):
+        asyncio.run(backfill.step_log_history(repository, None, 999_999))
+
+    assert [r['block'] for r in repository.fetch_all(
+        'SELECT block FROM mint WHERE project = %s ORDER BY block', (PROJECT,)
+    )] == [0]
+    assert repository.get_project_value(
+        PROJECT, backfill.LOG_HISTORY_WATERMARK_KEY
     ) == '499999'
 
 

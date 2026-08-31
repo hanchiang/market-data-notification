@@ -171,15 +171,22 @@ async def step_epoch_boundaries(
 
     Boundaries never span a segment: a rebase mint is a single log at a single
     block, so a segment's rows depend on nothing outside it.
+
+    The raw responses are stored, same as step 3's (R2, and the 2026-08-30
+    ruling that the backfill persists each `eth_getLogs` response verbatim). An
+    `epoch_boundary` row is a figure like any other, and over `(live_cursor,
+    head]` -- step 2's range beyond step 3's -- no other stored read covers it.
     """
     project = NETNET
     from_block = _resume_point(repository, project.name, EPOCH_BOUNDARY_WATERMARK_KEY)
     query = {q.name: q for q in log_plane.build_log_queries(project)}['net_mints']
 
-    found = segments = 0
+    found = raws = segments = 0
     for start, end in _segments(from_block, head, segment_blocks):
         try:
-            entries, _ = await log_plane.fetch_window(client, query, start, end)
+            entries, responses = await log_plane.fetch_window(
+                client, query, start, end
+            )
             rows = log_plane.build_mint_rows(project.name, project, entries, 9)
             boundaries = log_plane.rebase_boundaries(project, rows)
             for boundary in sorted(boundaries, key=lambda b: b['first_block']):
@@ -190,11 +197,34 @@ async def step_epoch_boundaries(
                 repository.upsert_epoch_boundary(
                     project.name, boundary['first_block'], boundary['rebase_tx']
                 )
+            # Step 2 and step 3 both query `net_mints`, over ranges that overlap
+            # wherever step 3 reaches, and they share one table keyed on
+            # `(project, query_name, from_block, to_block)`. Two cases, both
+            # intended:
+            #
+            # - SAME bounds (the common one -- a fresh run of both steps starts
+            #   each at `launch_block` and segments identically, so neither
+            #   narrowing means byte-identical spans). The key collides,
+            #   `ON CONFLICT DO NOTHING` keeps whichever step ran first, and that
+            #   is right rather than lossy: both steps derived their rows from
+            #   the same query over the same span, so one stored body
+            #   re-derives both. What first-write-wins does discard is a genuine
+            #   difference between two reads taken at different times -- a
+            #   reorg, say -- which is the same property already accepted for a
+            #   step-3 re-run.
+            # - DIFFERENT bounds, whenever either step's `fetch_window` narrowed
+            #   where the other did not. Both rows are stored, and that is the
+            #   honest record: two reads happened, at different spans, each
+            #   holding what it returned.
+            raws += repository.insert_backfill_log_raw_responses(
+                project.name, [(query.name, raw) for raw in responses]
+            )
             repository.set_project_value(
                 project.name, EPOCH_BOUNDARY_WATERMARK_KEY, str(end)
             )
         except Exception:
-            # The boundaries and the watermark move together or not at all.
+            # The boundaries, the raws and the watermark move together or not at
+            # all.
             repository.rollback()
             raise
         repository.commit()
@@ -202,8 +232,8 @@ async def step_epoch_boundaries(
         segments += 1
 
     return (
-        f'step 2: {found} epoch boundaries from rebase mints '
-        f'over {segments} segments to block {head}'
+        f'step 2: {found} epoch boundaries from rebase mints, '
+        f'+{raws} raw log responses over {segments} segments to block {head}'
     )
 
 

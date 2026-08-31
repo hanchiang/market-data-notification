@@ -132,13 +132,13 @@ MIN_LOG_WINDOW_BLOCKS = 1000
 # --- Widening after a run of successes -------------------------------------
 #
 # WIDEN_AFTER_SUCCESSES: a widening probe that guesses wrong costs exactly one
-# refused call, and a refusal is cheap (~2.3s, no work done). Four successes
-# per probe therefore caps the probe overhead at 25% of calls in the very worst
-# case -- a region sitting exactly at its serving limit with the ceiling below
-# expired -- and is far cheaper than that in practice, because CEILING_HOLD
-# suppresses repeat probes. Recovery is still quick: climbing the 2026-08-30
-# run's ratchet back, 5,859 -> 750,000, is seven doublings, so 28 successful
-# calls.
+# refused call, and a refusal is cheap (~2.3s, no work done). The worst-case
+# cycle is four successes plus one refused probe, so probes are at most one call
+# in five -- 20% of calls -- and only in a region sitting exactly at its serving
+# limit with the ceiling below expired. It is far cheaper than that in practice,
+# because CEILING_HOLD suppresses repeat probes. Recovery is still quick:
+# climbing the 2026-08-30 run's ratchet back, 5,859 -> 750,000, is seven
+# doublings, so 28 successful calls.
 WIDEN_AFTER_SUCCESSES = 4
 
 # WIDEN_GROWTH exactly inverts the halving, which keeps every window size on
@@ -153,6 +153,17 @@ WIDEN_GROWTH = 2
 # refused in this sweep is not retried "without evidence the density changed" --
 # and the only evidence available mid-sweep is position: a refusal describes the
 # blocks it was issued over, and says nothing about blocks far beyond them.
+#
+# ONLY THE MOST RECENT REFUSAL'S HOLD BINDS. There is one ceiling, not one per
+# refused width, so each refusal in a halving cascade overwrites the one before
+# it -- and the narrowest refusal, which is the last, carries the SHORTEST hold.
+# A wider width from earlier in the same cascade can therefore be re-probed
+# before its own nominal hold would have expired. That is deliberate rather than
+# overlooked: the earlier refusals in a cascade were all issued at the same
+# block, so they are one measurement of one region, and re-probing costs a
+# single ~2.3s refused call which immediately reinstalls the ceiling. Tracking a
+# hold per width would buy a fraction of one call per region and a second piece
+# of state to keep correct.
 #
 # UNMEASURED. We have point measurements near the head, none about how far a
 # dense region extends. 8x the refused width is a judgement, and here is its
@@ -201,7 +212,8 @@ async def fetch_window(
     Widening is bounded by a ceiling so it cannot re-trip the same refusal in a
     loop. The ceiling is positional rather than permanent -- a refusal is
     evidence about the blocks it was issued over -- because a permanent one
-    would simply be the ratchet again, one level shallower.
+    would simply be the ratchet again, one level shallower. It is also singular:
+    the latest refusal's hold is the one that binds.
 
     Returns the logs and every raw response, so the raw bodies are stored beside
     the decoded rows (R2).
@@ -211,9 +223,11 @@ async def fetch_window(
     start = from_block
     window = max_window
     # The largest width we are currently willing to ask for. It drops to the
-    # post-halving width on every refusal -- which is strictly below the width
-    # that was just refused -- so nothing refused in this sweep is re-issued
-    # while its ceiling stands.
+    # post-halving width on every refusal -- strictly below the width just
+    # refused -- so while a ceiling stands, nothing at or above the width that
+    # installed it is re-issued. One ceiling, not one per refused width: see
+    # CEILING_HOLD_MULTIPLE for why an earlier, wider refusal in the same
+    # cascade can be re-probed before its own nominal hold elapses.
     ceiling = max_window
     # The block past which the standing ceiling no longer describes where we
     # are. Initialised to `from_block` so the very first widening (no refusal

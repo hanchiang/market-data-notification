@@ -13,6 +13,7 @@ import pytest
 from market_data_library.core.onchain.evm.types import Endpoint
 
 from src.job.project_monitor import backfill
+from src.service.project_monitor import logs as log_plane
 from src.service.project_monitor import recorder
 from src.service.project_monitor.config import NETNET
 
@@ -73,6 +74,175 @@ def test_an_address_with_no_code_at_head_has_no_deploy_block():
     assert asyncio.run(backfill.find_deploy_block(client, '0xabc', 50_000_000)) is None
     # One call, then it stops: no search is attempted.
     assert client.calls == 1
+
+
+def _rebase_mint_log(block):
+    """A real `Transfer(0x0 -> staking)` log, not a stand-in.
+
+    `step_epoch_boundaries` decodes what `fetch_window` returns through
+    `build_mint_rows` and `rebase_boundaries`, and both stay REAL in the tests
+    below -- only the fetch is faked. A pre-decoded row fixture would leave the
+    step's own attribution path (mint class `rebase` is what makes a log a
+    boundary) unexercised.
+    """
+    def topic_address(address):
+        return '0x' + '0' * 24 + address.lower().removeprefix('0x')
+
+    return {
+        'topics': [
+            log_plane.TRANSFER.topic0,
+            topic_address(log_plane.ZERO_ADDRESS),
+            topic_address(NETNET.address('staking')),
+        ],
+        'data': '0x' + f'{7 * block:064x}',
+        'blockNumber': hex(block),
+        'transactionHash': f'0xrebase{block:x}',
+        'logIndex': '0x0',
+    }
+
+
+def test_step_two_segments_its_sweep_and_resumes_from_its_own_watermark(
+    repository, monkeypatch,
+):
+    """Review finding 1. Step 2 is the same shape of job as step 3 -- one log
+    query over the whole chain, hours long at the pace the public endpoint
+    tolerates -- and it runs FIRST, so an interruption in it discarded
+    everything and restarted at the launch block. The operator's ruling says
+    "the sweep... resumes instead of restarting" and scopes it to `backfill.py`,
+    not to a step.
+
+    Deliberately NOT passing `segment_blocks`: the production default is what
+    the operator's runs will use, so the test drives it. That also makes this
+    substantively red on the parent commit, where the whole range is one call,
+    rather than red merely because a keyword argument did not exist yet.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+    head = 1_200_000
+    seen = []
+
+    def fake_fetch(fail_at_start):
+        async def fetch_window(client, query, from_block, to_block):
+            seen.append((from_block, to_block))
+            if from_block == fail_at_start:
+                raise RuntimeError('the endpoint stopped serving mid-sweep')
+            return [_rebase_mint_log(from_block + 1)], []
+        return fetch_window
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fake_fetch(500_000))
+    with pytest.raises(RuntimeError):
+        asyncio.run(backfill.step_epoch_boundaries(repository, None, head))
+
+    assert seen == [(0, 499_999), (500_000, 999_999)]
+    assert repository.get_project_value(
+        PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '499999'
+    # Segment 1's boundary survived segment 2's failure. Before this change the
+    # single end-of-step commit meant it did not.
+    assert _boundaries(repository) == [1]
+
+    seen.clear()
+    monkeypatch.setattr(log_plane, 'fetch_window', fake_fetch(None))
+    result = asyncio.run(backfill.step_epoch_boundaries(repository, None, head))
+
+    # Resumed at the watermark: segment 1 is not re-fetched.
+    assert seen == [(500_000, 999_999), (1_000_000, 1_200_000)]
+    assert _boundaries(repository) == [1, 500_001, 1_000_001]
+    assert 'over 2 segments' in result, result
+    assert repository.get_project_value(
+        PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '1200000'
+
+
+def test_a_step_two_segment_that_fails_part_way_writes_none_of_its_own_rows(
+    repository, monkeypatch,
+):
+    """AC7 inside the segment, for step 2 as for step 3. The failure is placed
+    BETWEEN two boundary writes of the same segment, because that is the only
+    way a half-written segment can arise -- a failure in `fetch_window`, which
+    the resume test uses, happens before any write and cannot tell a rolled-back
+    segment from one that never started.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def fetch_window(client, query, from_block, to_block):
+        # Two rebase mints per segment, so a segment has an interior.
+        return [
+            _rebase_mint_log(from_block + 1),
+            _rebase_mint_log(from_block + 2),
+        ], []
+
+    real_upsert = repository.upsert_epoch_boundary
+
+    def upsert_failing_inside_the_second_segment(project, first_block, tx, **kwargs):
+        if first_block == 500_002:
+            raise RuntimeError('the store rejected the write')
+        return real_upsert(project, first_block, tx, **kwargs)
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fetch_window)
+    monkeypatch.setattr(
+        repository, 'upsert_epoch_boundary',
+        upsert_failing_inside_the_second_segment,
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(backfill.step_epoch_boundaries(repository, None, 999_999))
+
+    # 500,001 was written before the failure and must be gone with it; segment
+    # 1's two boundaries must not be, or the rollback has swallowed committed
+    # work and reintroduced the loss the watermark exists to prevent.
+    assert _boundaries(repository) == [1, 2]
+    assert repository.get_project_value(
+        PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '499999'
+
+
+def test_step_two_and_step_three_do_not_share_a_watermark(repository, monkeypatch):
+    """The two sweeps cover different ranges -- step 2 runs to `head`, step 3
+    stops at the live cursor -- and `--steps` lets an operator run either alone.
+    One shared key would let step 2's progress carry step 3 past blocks whose
+    flows and events were never read, and the miss would be silent: step 3 would
+    report success having skipped them.
+    """
+    repository.set_project_value(PROJECT, 'launch_block', '0')
+
+    async def fetch_window(client, query, from_block, to_block):
+        return [_rebase_mint_log(from_block + 1)], []
+
+    monkeypatch.setattr(log_plane, 'fetch_window', fetch_window)
+    asyncio.run(backfill.step_epoch_boundaries(repository, None, 600_000))
+
+    assert repository.get_project_value(
+        PROJECT, backfill.EPOCH_BOUNDARY_WATERMARK_KEY
+    ) == '600000'
+    # Step 3 has read nothing, so it must have no watermark of its own.
+    assert repository.get_project_value(
+        PROJECT, backfill.LOG_HISTORY_WATERMARK_KEY
+    ) is None
+
+    seen = []
+
+    async def read_log_window(
+        client, project, project_name, from_block, to_block, *,
+        net_decimals, usdg_decimals,
+    ):
+        seen.append((from_block, to_block))
+        return _segment_window(project_name, from_block, to_block)
+
+    monkeypatch.setattr(recorder, 'read_log_window', read_log_window)
+    asyncio.run(backfill.step_log_history(repository, None, 600_000))
+
+    # Step 3 starts at the launch block, NOT at step 2's watermark.
+    assert seen[0][0] == 0, seen
+
+
+def _boundaries(repository):
+    return [
+        int(row['first_block'])
+        for row in repository.fetch_all(
+            'SELECT first_block FROM epoch_boundary WHERE project = %s '
+            'ORDER BY first_block',
+            (PROJECT,),
+        )
+    ]
 
 
 def _sample(block, epoch):

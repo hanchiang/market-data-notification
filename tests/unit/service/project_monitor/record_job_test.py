@@ -204,20 +204,34 @@ def test_the_window_widens_back_after_a_dense_region_is_behind_it():
         set(widths_after)
     )
 
+    # ONE ceiling, not one hold per refused width -- the property the module
+    # comment now states, pinned here so prose and code cannot drift apart
+    # again. The 200,000 refusal happened at block 1,000,000, so a per-width
+    # hold would run to 1,000,000 + 8 x 200,000 = 2,600,000 and defer this
+    # call. It is issued at 2,100,000 instead, because the cascade's LAST
+    # refusal (50,000, hold to 1,400,000) is the only one that binds.
+    assert next(
+        start for start, w in client.requested if start > 1_100_000 and w == 200_000
+    ) == 2_100_000
 
-def test_a_width_the_endpoint_refused_is_not_retried_while_that_refusal_stands():
+
+def test_the_standing_ceiling_keeps_the_widening_off_a_width_it_just_refused():
     """Ticket scope item 3. Widening without a ceiling turns the recovery into a
     request storm: in a region that stays dense, the window climbs back to a
     width already known to fail, fails, halves, climbs again.
 
-    Here the dense region runs to the end of the sweep, so no evidence ever
-    arrives that the density changed and the three narrowing refusals must be
-    the only refusals of the run.
+    The name is narrow on purpose. There is ONE ceiling, carrying the most
+    recent refusal's hold, so this pins the property in the case where that hold
+    is live -- here the dense region runs to the end of the sweep, so the hold
+    never expires and the three narrowing refusals must be the only refusals of
+    the run. It does NOT claim a per-width guarantee: the sibling widen test
+    above pins the case where an earlier, wider refusal is re-probed before its
+    own nominal hold would have elapsed.
 
-    Honest note: this does NOT redden on the parent commit, because the parent
-    never widens at all and so trivially never retries. It is a guard on the new
-    widening, verified by mutation (removing the ceiling makes it red), not a
-    regression test against the old behaviour.
+    Honest note: this does not redden on either parent commit, because neither
+    widens at all in the way it tests and so neither retries. It is a guard on
+    the widening, verified by mutation (removing `ceiling` from the widen
+    expression makes it red), not a regression test against older behaviour.
     """
     query = build_log_queries(NETNET)[0]
     client = _DenseRegionClient(

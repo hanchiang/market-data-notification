@@ -11,11 +11,12 @@ module docstring for the measurement. One client per endpoint, not one per step:
 a fresh `EvmClient` restarts its budget's rolling window at zero, so a per-step
 client could burst above the intended rate at every step boundary.
 
-Resumable by construction. Step 1 writes what it found before step 2 starts,
-step 4 skips a boundary that already has a backfill sample, and step 3 commits a
-watermark per segment so an interrupted sweep resumes where it stopped rather
-than at block zero -- the 2026-08-30 run lost 36 minutes of work for want of
-that. A backfill that dies halfway is re-run, not unwound.
+Resumable by construction. Step 1 writes what it found before step 2 starts and
+step 4 skips a boundary that already has a backfill sample. The two LOG SWEEPS,
+steps 2 and 3, each commit a watermark per segment under their own key, so an
+interrupted sweep resumes where it stopped rather than at the launch block --
+the 2026-08-30 run lost 36 minutes of work for want of that. A backfill that
+dies halfway is re-run, not unwound.
 
 Usage:
   PYTHONPATH="$(pwd)" poetry run python src/job/project_monitor/backfill.py --steps 1,2,3,4
@@ -47,13 +48,16 @@ logger = logging.getLogger('Project monitor backfill')
 
 JOB_NAME = 'project_monitor.backfill'
 
-# Step 3's resume key. The block through which log history is COMMITTED, so a
-# re-run starts at watermark + 1.
+# Resume keys, one per sweeping step. They are deliberately NOT shared: step 2
+# sweeps to `head` while step 3 stops at the live cursor, and `--steps` lets an
+# operator run either alone, so a single key would let one step's progress skip
+# blocks the other has never read.
+EPOCH_BOUNDARY_WATERMARK_KEY = 'epoch_boundary_watermark'
 LOG_HISTORY_WATERMARK_KEY = 'log_history_watermark'
 
-# How much of the chain one step-3 segment covers. UNMEASURED against a full
-# sweep -- no sweep has ever finished -- so this is a judgement between two
-# costs, stated rather than implied.
+# How much of the chain one segment covers, for both sweeping steps. UNMEASURED
+# against a full sweep -- no sweep has ever finished -- so this is a judgement
+# between two costs, stated rather than implied.
 #
 # Larger segments waste less: a segment narrower than `MAX_LOG_WINDOW_BLOCKS`
 # (1.5M) clips the log window, so where the chain is sparse enough to serve a
@@ -70,7 +74,41 @@ LOG_HISTORY_WATERMARK_KEY = 'log_history_watermark'
 # 500,000 optimises the failure case, because that is the case with evidence:
 # the one real sweep this job has attempted was interrupted. Revisit with a real
 # end-to-end measurement, which is the only thing that settles it.
-LOG_HISTORY_SEGMENT_BLOCKS = 500_000
+#
+# The same size is conservative for step 2, which issues ONE query per segment
+# where step 3 issues nine: its per-segment cost, and so its loss ceiling, is a
+# ninth of step 3's at the same width.
+LOG_SWEEP_SEGMENT_BLOCKS = 500_000
+
+
+def _resume_point(
+    repository: ProjectMonitorRepository, project_name: str, watermark_key: str
+) -> int:
+    """Where a sweeping step starts: after its own watermark, or at launch.
+
+    `max` rather than the watermark alone, because `launch_block` can be written
+    (or corrected) by step 1 AFTER a sweep has already run, and re-reading blocks
+    that predate the contract is pure waste.
+    """
+    launch = repository.get_project_value(project_name, 'launch_block')
+    from_block = int(launch) if launch else 0
+    watermark = repository.get_project_value(project_name, watermark_key)
+    if watermark is not None:
+        from_block = max(from_block, int(watermark) + 1)
+    return from_block
+
+
+def _segments(from_block: int, to_block: int, segment_blocks: int):
+    """The half-open sweep as inclusive `[start, end]` pairs.
+
+    Yields nothing when the range is already covered -- which is what a re-run of
+    a finished step looks like, and is why it is not an error.
+    """
+    start = from_block
+    while start <= to_block:
+        end = min(start + segment_blocks - 1, to_block)
+        yield start, end
+        start = end + 1
 
 
 async def find_deploy_block(client: EvmClient, address: str, head: int) -> Optional[int]:
@@ -112,30 +150,61 @@ async def step_deploy_blocks(
 
 
 async def step_epoch_boundaries(
-    repository: ProjectMonitorRepository, client: EvmClient, head: int
+    repository: ProjectMonitorRepository,
+    client: EvmClient,
+    head: int,
+    *,
+    segment_blocks: int = LOG_SWEEP_SEGMENT_BLOCKS,
 ) -> str:
     """Each rebase mint is one epoch transition at an exact block.
 
     A gap in the boundary sequence is stored as a gap, not smoothed: the
     requirement treats an epoch longer than 8 h as a signal that no rebase
     fired, so a missing boundary is information.
+
+    Segmented and watermarked on the same terms as step 3, because it is the
+    same shape of job: one log query over the whole chain, hours long at the
+    pace the public endpoint tolerates, and it runs FIRST in a combined run --
+    so before this, an interruption anywhere in it discarded everything and the
+    re-run started at the launch block again. The `-32000 log query timed out`
+    that first exposed the ratchet was measured in this step.
+
+    Boundaries never span a segment: a rebase mint is a single log at a single
+    block, so a segment's rows depend on nothing outside it.
     """
     project = NETNET
-    launch = repository.get_project_value(project.name, 'launch_block')
-    from_block = int(launch) if launch else 0
+    from_block = _resume_point(repository, project.name, EPOCH_BOUNDARY_WATERMARK_KEY)
     query = {q.name: q for q in log_plane.build_log_queries(project)}['net_mints']
-    entries, _ = await log_plane.fetch_window(client, query, from_block, head)
-    rows = log_plane.build_mint_rows(project.name, project, entries, 9)
-    boundaries = log_plane.rebase_boundaries(project, rows)
-    for boundary in sorted(boundaries, key=lambda b: b['first_block']):
-        # No epoch number: a rebase log does not carry one, and inventing an
-        # ordinal index here would silently disagree with the chain's counter.
-        # Step 4's sample at that block reads `Staking.epoch()` and fills it in.
-        repository.upsert_epoch_boundary(
-            project.name, boundary['first_block'], boundary['rebase_tx']
-        )
-    repository.commit()
-    return f'step 2: {len(boundaries)} epoch boundaries from rebase mints'
+
+    found = segments = 0
+    for start, end in _segments(from_block, head, segment_blocks):
+        try:
+            entries, _ = await log_plane.fetch_window(client, query, start, end)
+            rows = log_plane.build_mint_rows(project.name, project, entries, 9)
+            boundaries = log_plane.rebase_boundaries(project, rows)
+            for boundary in sorted(boundaries, key=lambda b: b['first_block']):
+                # No epoch number: a rebase log does not carry one, and inventing
+                # an ordinal index here would silently disagree with the chain's
+                # counter. Step 4's sample at that block reads `Staking.epoch()`
+                # and fills it in.
+                repository.upsert_epoch_boundary(
+                    project.name, boundary['first_block'], boundary['rebase_tx']
+                )
+            repository.set_project_value(
+                project.name, EPOCH_BOUNDARY_WATERMARK_KEY, str(end)
+            )
+        except Exception:
+            # The boundaries and the watermark move together or not at all.
+            repository.rollback()
+            raise
+        repository.commit()
+        found += len(boundaries)
+        segments += 1
+
+    return (
+        f'step 2: {found} epoch boundaries from rebase mints '
+        f'over {segments} segments to block {head}'
+    )
 
 
 async def step_log_history(
@@ -143,7 +212,7 @@ async def step_log_history(
     client: EvmClient,
     head: int,
     *,
-    segment_blocks: int = LOG_HISTORY_SEGMENT_BLOCKS,
+    segment_blocks: int = LOG_SWEEP_SEGMENT_BLOCKS,
 ) -> str:
     """Fill logs from launch up to where live coverage already begins.
 
@@ -163,18 +232,12 @@ async def step_log_history(
     The re-run then repeats exactly that segment and nothing already done.
     """
     project = NETNET
-    launch = repository.get_project_value(project.name, 'launch_block')
-    from_block = int(launch) if launch else 0
-    watermark = repository.get_project_value(project.name, LOG_HISTORY_WATERMARK_KEY)
-    if watermark is not None:
-        from_block = max(from_block, int(watermark) + 1)
+    from_block = _resume_point(repository, project.name, LOG_HISTORY_WATERMARK_KEY)
     live_cursor = repository.get_live_cursor(project.name)
     to_block = live_cursor if live_cursor is not None else head
 
     mints = flows = events = raws = segments = 0
-    start = from_block
-    while start <= to_block:
-        end = min(start + segment_blocks - 1, to_block)
+    for start, end in _segments(from_block, to_block, segment_blocks):
         try:
             window = await recorder.read_log_window(
                 client, project, project.name, start, end,
@@ -201,7 +264,6 @@ async def step_log_history(
             raise
         repository.commit()
         segments += 1
-        start = end + 1
 
     repository.set_project_value(project.name, 'cursor_origin', str(to_block))
     repository.commit()

@@ -10,6 +10,9 @@ import asyncio
 
 import pytest
 
+from market_data_library.core.onchain.evm.budget import (
+    PUBLIC_MIN_REQUEST_INTERVAL_SECONDS,
+)
 from market_data_library.core.onchain.evm.types import Endpoint
 
 from src.job.project_monitor import backfill
@@ -1018,6 +1021,16 @@ def test_backfill_main_splits_the_state_and_log_planes_across_two_endpoints(
     assert seen['step1'] is seen['step4']
     assert seen['step2'] is seen['step3']
     assert seen['step1'] is not seen['step2']
+    # The log client is paced SLOWER than the shared public default, which is
+    # sized for the live job's short bursts. Asserted as a value rather than
+    # "is not None": the default 1.0s is a real number too, and every other
+    # assertion in this test passes while it is in force -- which is exactly
+    # the state three failed sweeps on 2026-08-31 ran in.
+    assert (
+        seen['step3'].budget.limiter.min_request_interval_seconds
+        == backfill.BACKFILL_MIN_REQUEST_INTERVAL_SECONDS
+    )
+    assert backfill.BACKFILL_MIN_REQUEST_INTERVAL_SECONDS > PUBLIC_MIN_REQUEST_INTERVAL_SECONDS
 
 
 def test_backfill_main_returns_early_when_the_archive_endpoint_is_unconfigured(

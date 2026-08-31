@@ -25,6 +25,7 @@ unaccounted inflow, and the header says so rather than letting a reader treat it
 as one.
 """
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -344,6 +345,7 @@ def _build_row(
         'present': True,
         'block': block,
         'block_timestamp': int(sample['block_timestamp']),
+        'block_time_utc': _iso8601_utc(int(sample['block_timestamp'])),
         'kind': sample['kind'],
         'endpoint_kind': sample['endpoint_kind'],
         'backing_per_token': backing,
@@ -425,6 +427,7 @@ HEADER_NOTES = (
 COLUMNS = (
     ('epoch', 'epoch'),
     ('block', 'close block'),
+    ('block_time_utc', 'close time (UTC)'),
     ('backing_per_token', 'backing/token'),
     ('backing_change_pct', 'd backing %'),
     ('rfv', 'rfv()'),
@@ -507,6 +510,20 @@ def _cell(row: Dict[str, Any], key: str) -> str:
             return f'{value:.4g}'
         return f'{value:,.4f}'
     return str(value)
+
+
+def _iso8601_utc(block_timestamp: int) -> str:
+    """The chain's own block timestamp as ISO 8601 UTC.
+
+    Derived from `block_timestamp`, never from the sample's `read_at`: one says
+    when the epoch closed on chain, the other when we happened to read it, and
+    for a backfilled sample those differ by weeks. Rendered with a `Z` and no
+    offset so two runs on machines in different timezones produce byte-identical
+    output -- the report is diffed between runs.
+    """
+    return datetime.fromtimestamp(block_timestamp, tz=timezone.utc).strftime(
+        '%Y-%m-%dT%H:%M:%SZ'
+    )
 
 
 def render_table(rows: List[Dict[str, Any]]) -> str:

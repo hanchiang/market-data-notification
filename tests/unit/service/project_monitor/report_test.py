@@ -4,6 +4,7 @@ Rows are built from committed store rows only -- the report never touches the
 chain, which is what makes it runnable on a `pg_dump` restored locally.
 """
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from src.service.project_monitor import recorder
@@ -87,6 +88,37 @@ def test_three_epochs_produce_three_rows_in_order(repository):
     assert [r['epoch'] for r in rows] == [10, 11, 12]
     assert all(r['present'] for r in rows)
     assert [r['block'] for r in rows] == [100, 200, 300]
+
+
+def test_each_epoch_carries_the_chain_s_own_close_time_not_the_read_time(repository):
+    """The timestamp is the block's, rendered ISO 8601 UTC.
+
+    Asserted as exact strings against `block_timestamp = 1788000000 + block`,
+    because the failure this guards is a plausible-looking wrong time: reading
+    `read_at` instead would render a valid ISO string on every row, and for a
+    backfilled sample it is the moment we swept, weeks after the epoch closed.
+    Only comparing against the chain's value separates them, which is why the
+    second assertion pins the two apart rather than checking the format.
+    """
+    _seed_three_epochs(repository)
+    rows = load_epoch_rows(repository, NETNET)
+    assert [r['block_time_utc'] for r in rows] == [
+        '2026-08-29T10:41:40Z', '2026-08-29T10:43:20Z', '2026-08-29T10:45:00Z',
+    ]
+    # Same instant the row already carries, so the column can never drift from
+    # `block_timestamp` while still looking like a time.
+    assert all(
+        r['block_time_utc']
+        == datetime.fromtimestamp(r['block_timestamp'], tz=timezone.utc).strftime(
+            '%Y-%m-%dT%H:%M:%SZ'
+        )
+        for r in rows
+    )
+    # The rendered table carries it too -- a row key nothing renders is not the
+    # ask, and `COLUMNS` is a separate list that can be forgotten.
+    table = render_table(rows)
+    assert 'close time (UTC)' in table
+    assert '2026-08-29T10:41:40Z' in table
 
 
 def test_growth_and_dilution_are_measured_against_the_previous_close(repository):

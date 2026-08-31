@@ -48,6 +48,15 @@ logger = logging.getLogger('Project monitor backfill')
 
 JOB_NAME = 'project_monitor.backfill'
 
+# Unmeasured against a completed sweep: three runs on 2026-08-31 all ended on
+# rate limiting at the shared 1.0s default, so this is slower than a rate known
+# to fail rather than a rate known to work. The bet is that absorbed-429
+# territory sits below whatever threshold escalates to bot protection; a
+# completed sweep is what settles it. Ticket item 4 replaces this with the
+# request count that sweep reports.
+BACKFILL_MIN_REQUEST_INTERVAL_SECONDS = 3.0
+
+
 # Resume keys, one per sweeping step. They are deliberately NOT shared: step 2
 # sweeps to `head` while step 3 stops at the live cursor, and `--steps` lets an
 # operator run either alone, so a single key would let one step's progress skip
@@ -390,8 +399,24 @@ async def main(
             # `EvmClient` restarts its budget's rolling window at zero, so the
             # step boundary is exactly where a burst above the intended rate
             # would slip through unaccounted for.
+            #
+            # The backfill paces itself slower than the shared default. That
+            # default (1 request/s) was frozen from a 2026-08-29 burst probe
+            # -- 20 hour-wide `eth_getLogs`, 12 of them back to back, no 429
+            # (`budget.py`) -- which measures what a SHORT burst survives. A
+            # sweep sustains the rate for tens of minutes, and that is a
+            # different question: 2026-08-31 run 1 drew 25 429s in 12 minutes
+            # and then a Cloudflare interstitial, runs 2 and 3 ended on
+            # `EvmRateLimitError`, all three at 1 request/s. Passed here
+            # rather than changed in `public_rpc_budget` because the live
+            # job's per-sample burst is short and bounded and so does not
+            # need the slowdown -- prospective, not a claim about its
+            # operational history, which does not exist yet.
             async with EvmClient(archive, alchemy_budget()) as state_client, EvmClient(
-                get_public_endpoint(supports_batch=True), public_rpc_budget()
+                get_public_endpoint(supports_batch=True),
+                public_rpc_budget(
+                    min_request_interval_seconds=BACKFILL_MIN_REQUEST_INTERVAL_SECONDS
+                ),
             ) as log_client:
                 head, _ = await state_client.block_number()
                 if 1 in steps:

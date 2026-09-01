@@ -282,21 +282,23 @@ async def fetch_window(
         if len(window_logs) in SUSPECTED_RESULT_CAPS:
             # Treated exactly like a refusal at this width, ceiling included:
             # the call did return, but not provably all of it. The body is
-            # DROPPED rather than stored -- the only body discarded before it
-            # ever reaches the store, against the 2026-08-30 ruling that the
-            # backfill persists each response verbatim (`kb/decisions.md`).
-            # (The store drops one other way: `ON CONFLICT DO NOTHING` on the
-            # span key discards a second read of the same span. That one is
-            # deliberate too and documented at its own site.) A truncated
+            # DROPPED rather than stored -- the only `eth_getLogs` body
+            # discarded while the sweep CONTINUES, against the 2026-08-30
+            # ruling that the backfill persists each response verbatim
+            # (`kb/decisions.md`). Scoped to `eth_getLogs` deliberately:
+            # `get_code` and `block_number` bodies are discarded at their call
+            # sites too, and the ruling never covered them. A truncated
             # body under a span-keyed table would poison exactly the
             # re-derivation R2 wants it for. The info line below is then the
             # only record that the cap event happened.
-            # Halved off the ISSUED width, not off `window`. The refusal path
-            # above halves `window`, which is fine there because a refusal
-            # carries no body -- but here `end` is clipped to `to_block` on the
-            # first call of every backfill segment, so halving `window` would
-            # re-issue a byte-identical request and get the identical count
-            # back, twice, before the width actually moved.
+            # Halved off the ISSUED width, not off `window`. `end` is clipped
+            # to `to_block` on the first call of every backfill segment, so
+            # halving `window` would re-issue a byte-identical request and get
+            # the identical count back, twice, before the width actually moved.
+            # The refusal path above still halves `window` and still pays that
+            # cost -- measured at 12 identical refused calls on a 1-block span.
+            # It costs only cheap canned refusals there, never a duplicated
+            # body, which is why this side was fixed first and not both.
             capped_width = end - start + 1
             if capped_width <= MIN_LOG_WINDOW_BLOCKS:
                 raise TruncatedLogResponseError(

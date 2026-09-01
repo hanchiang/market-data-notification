@@ -11,6 +11,7 @@ from src.runtime.runtime_mode import RuntimeMode
 from src.service.project_monitor import recorder
 from src.service.project_monitor.logs import (
     MIN_LOG_WINDOW_BLOCKS,
+    TruncatedLogResponseError,
     _is_window_too_wide,
     build_log_queries,
     fetch_window,
@@ -545,3 +546,72 @@ def test_a_failed_peripheral_read_is_named_on_the_run_row(
     assert 'Mark.NVDA.latestRoundData' in run['notes']
     assert 'Morpho.market' in run['notes']
     assert sent == [], 'a run that committed its sample must not alert'
+
+
+class _CappingClient:
+    """Truncates silently: any window wider than `serves` comes back HTTP 200
+    with exactly `cap` logs and no error at all, which is how a provider result
+    cap presents. Narrower windows return an ordinary count."""
+
+    def __init__(self, serves: int, cap: int = 10_000, honest: int = 7):
+        self.serves = serves
+        self.cap = cap
+        self.honest = honest
+        self.requested = []
+
+    async def get_logs(self, log_filter):
+        width = log_filter.to_block - log_filter.from_block + 1
+        self.requested.append(width)
+        count = self.cap if width > self.serves else self.honest
+        return [{'width': width}] * count, object()
+
+
+def test_an_exactly_capped_count_narrows_instead_of_being_committed():
+    """The narrowing path fires only on an error, so without this guard a
+    truncated window is indistinguishable from a sparse one -- and the backfill
+    then advances its per-segment watermark past a range it half read."""
+    client = _CappingClient(serves=200_000)
+    query = build_log_queries(NETNET)[0]
+    logs, _ = asyncio.run(
+        fetch_window(client, query, 0, 400_000, max_window=1_500_000)
+    )
+
+    # Not one log from a capped response survived into the result.
+    assert logs
+    assert all(entry['width'] <= 200_000 for entry in logs)
+    assert len(logs) < 10_000
+
+
+def test_a_cap_at_the_narrowest_window_raises_rather_than_writing_a_hole():
+    """At the floor there is no narrower re-read left. Committing here would
+    write a gap that no later run revisits, so the sweep stops instead."""
+    client = _CappingClient(serves=1, cap=1_000)
+    query = build_log_queries(NETNET)[0]
+    with pytest.raises(TruncatedLogResponseError):
+        asyncio.run(fetch_window(client, query, 0, 10_000, max_window=1_500_000))
+
+
+def test_an_ordinary_count_near_a_cap_is_not_treated_as_truncation():
+    """The guard keys on the exact round value. A count one short of it is a
+    real measurement, and narrowing on it would cost every sweep extra calls."""
+    client = _CappingClient(serves=1_500_000, honest=999)
+    query = build_log_queries(NETNET)[0]
+    logs, _ = asyncio.run(
+        fetch_window(client, query, 0, 100_000, max_window=1_500_000)
+    )
+    assert client.requested == [100_001]
+    assert len(logs) == 999
+
+
+def test_a_capped_window_narrows_off_the_issued_width_not_the_nominal_one():
+    """`end` is clipped to `to_block` on the first call of every backfill
+    segment, so halving the nominal window would re-issue a byte-identical
+    request and get the identical count back before the width moved."""
+    client = _CappingClient(serves=200_000)
+    query = build_log_queries(NETNET)[0]
+    asyncio.run(fetch_window(client, query, 0, 400_000, max_window=1_500_000))
+
+    # The first request is the clipped 400,001; the retry must be strictly
+    # narrower, not a repeat of it.
+    assert client.requested[0] == 400_001
+    assert client.requested[1] < 400_001

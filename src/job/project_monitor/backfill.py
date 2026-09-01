@@ -48,12 +48,15 @@ logger = logging.getLogger('Project monitor backfill')
 
 JOB_NAME = 'project_monitor.backfill'
 
-# Unmeasured against a completed sweep: three runs on 2026-08-31 all ended on
-# rate limiting at the shared 1.0s default, so this is slower than a rate known
-# to fail rather than a rate known to work. The bet is that absorbed-429
-# territory sits below whatever threshold escalates to bot protection; a
-# completed sweep is what settles it. Ticket item 4 replaces this with the
-# request count that sweep reports.
+# LIGHTLY measured, and weaker evidence than it looks. Three runs died on rate
+# limiting at the shared 1.0s default on 2026-08-31; a fourth at THIS interval
+# finished the remaining work without dying. But that run was `--steps 3,4` and
+# covered 13 of step 3's 79 segments -- LESS sustained public-RPC pressure than
+# run 1 survived at 1.0s before dying, not more, and only ~6 of its 16 minutes
+# were public-RPC traffic (step 4 runs on the Alchemy client, which this
+# constant does not pace). Timings are in `backfill_log_raw_response`: ~30s per
+# nine-call segment against ~10s for the runs before it. A sweep from the launch
+# block at this interval is what would actually settle it.
 BACKFILL_MIN_REQUEST_INTERVAL_SECONDS = 3.0
 
 
@@ -64,9 +67,10 @@ BACKFILL_MIN_REQUEST_INTERVAL_SECONDS = 3.0
 EPOCH_BOUNDARY_WATERMARK_KEY = 'epoch_boundary_watermark'
 LOG_HISTORY_WATERMARK_KEY = 'log_history_watermark'
 
-# How much of the chain one segment covers, for both sweeping steps. UNMEASURED
-# against a full sweep -- no sweep has ever finished -- so this is a judgement
-# between two costs, stated rather than implied.
+# How much of the chain one segment covers, for both sweeping steps. Chosen
+# before any sweep had finished, as a judgement between two costs stated below.
+# One sweep has since completed (2026-08-31), which revises the cost side --
+# see the closing paragraph.
 #
 # Larger segments waste less: a segment narrower than `MAX_LOG_WINDOW_BLOCKS`
 # (1.5M) clips the log window, so where the chain is sparse enough to serve a
@@ -80,9 +84,13 @@ LOG_HISTORY_WATERMARK_KEY = 'log_history_watermark'
 # the ~36 minutes the 2026-08-30 run threw away, and the ceiling on what any
 # single interruption can now cost.
 #
-# 500,000 optimises the failure case, because that is the case with evidence:
-# the one real sweep this job has attempted was interrupted. Revisit with a real
-# end-to-end measurement, which is the only thing that settles it.
+# 500,000 optimises the failure case, because that was the case with evidence
+# when it was chosen: every sweep attempted so far had been interrupted. The
+# completed run since then does NOT confirm the waste arithmetic above -- 700 of
+# its 714 stored responses are full 500,000-block spans, one call per query per
+# segment, including at the head, where these lines assume ~20. The trade still
+# looks right (the completion only happened because the interrupted runs'
+# watermarks survived) but the cost side is now known to be overstated.
 #
 # The same size is conservative for step 2, which issues ONE query per segment
 # where step 3 issues nine: its per-segment cost, and so its loss ceiling, is a

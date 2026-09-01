@@ -175,6 +175,28 @@ WIDEN_GROWTH = 2
 CEILING_HOLD_MULTIPLE = 8
 
 
+# --- Silent truncation ------------------------------------------------------
+#
+# An endpoint that caps a result set and returns 200 with a short list carries
+# no truncation flag, so the narrowing above -- which fires only on an ERROR --
+# never sees it, and `backfill.py`'s sweep then commits its per-segment
+# watermark past a range it only partly read. Nothing revisits it.
+#
+# An exactly-round count is the only signal available, and the asymmetry sets
+# the policy: a false positive costs re-reading that span in two or more
+# narrower calls, while a false negative loses those logs for good. These are
+# the common provider caps, not values observed on this endpoint -- a guard,
+# not a measurement.
+SUSPECTED_RESULT_CAPS = frozenset({1_000, 2_000, 5_000, 10_000})
+
+
+class TruncatedLogResponseError(RuntimeError):
+    """A window hit a suspected cap at MIN_LOG_WINDOW_BLOCKS, where it cannot
+    be re-read any narrower. Raised rather than accepted: near the busy head
+    1,000 blocks measured 32 logs, so a round 1,000 at that width is far more
+    likely a silent cap than a real count."""
+
+
 def _is_window_too_wide(exc: EvmRpcError) -> bool:
     """Does this JSON-RPC error mean "ask for fewer blocks"?
 
@@ -257,6 +279,43 @@ async def fetch_window(
                 )
                 continue
             raise
+        if len(window_logs) in SUSPECTED_RESULT_CAPS:
+            # Treated exactly like a refusal at this width, ceiling included:
+            # the call did return, but not provably all of it. The body is
+            # DROPPED rather than stored -- the only body discarded before it
+            # ever reaches the store, against the 2026-08-30 ruling that the
+            # backfill persists each response verbatim (`kb/decisions.md`).
+            # (The store drops one other way: `ON CONFLICT DO NOTHING` on the
+            # span key discards a second read of the same span. That one is
+            # deliberate too and documented at its own site.) A truncated
+            # body under a span-keyed table would poison exactly the
+            # re-derivation R2 wants it for. The info line below is then the
+            # only record that the cap event happened.
+            # Halved off the ISSUED width, not off `window`. The refusal path
+            # above halves `window`, which is fine there because a refusal
+            # carries no body -- but here `end` is clipped to `to_block` on the
+            # first call of every backfill segment, so halving `window` would
+            # re-issue a byte-identical request and get the identical count
+            # back, twice, before the width actually moved.
+            capped_width = end - start + 1
+            if capped_width <= MIN_LOG_WINDOW_BLOCKS:
+                raise TruncatedLogResponseError(
+                    f'{query.name} returned exactly {len(window_logs)} logs over '
+                    f'blocks {start}-{end} at the narrowest window'
+                )
+            window = max(MIN_LOG_WINDOW_BLOCKS, capped_width // 2)
+            ceiling = window
+            ceiling_holds_until = start + CEILING_HOLD_MULTIPLE * capped_width
+            successes = 0
+            logger.info(
+                'narrowing %s log window to %s blocks at %s: exactly %s logs '
+                'looks like a silent result cap',
+                query.name,
+                window,
+                start,
+                len(window_logs),
+            )
+            continue
         logs.extend(window_logs)
         raws.append(raw)
         start = end + 1

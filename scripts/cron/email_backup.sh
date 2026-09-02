@@ -23,14 +23,17 @@ BACKUP_TZ="America/New_York"
 if [ "${EMAIL_BACKUP_IGNORE_SCHEDULE:-false}" != "true" ]; then
     # Check the offset the zone actually produces, not that a file exists: glibc
     # honours TZDIR, so absent tzdata, a hostile TZDIR or a typo yield a silent UTC
-    # with exit status 0. Assert the offset is one New York really uses rather than
-    # merely not +0000, so a zone carrying stale DST rules -- which still parses and
-    # still returns -0400/-0500, just on the wrong dates -- is caught too.
+    # with exit status 0. The allowlist catches TZ collapsing to UTC or to some other
+    # zone -- it does NOT catch stale DST rules, which still return -0400/-0500 and
+    # so pass, just on the wrong dates. Nothing here detects that.
     #
-    # Fail OPEN, not closed. Skipping both runs would turn duplicate backups into no
-    # backups at all, silently and indefinitely. A duplicate is recoverable; a
-    # missing backup is not. Do not read this as "a duplicate gets noticed" -- seven
-    # days of them went unnoticed in 2026-08, which is why this gate exists.
+    # Fail OPEN, not closed, on an implausible offset. Skipping both runs would turn
+    # duplicate backups into no backups at all, silently and indefinitely. A duplicate
+    # is recoverable; a missing backup is not. Do not read this as "a duplicate gets
+    # noticed" -- seven days of them went unnoticed in 2026-08, which is why this gate
+    # exists. The bare assignment below is the one path that still fails closed: under
+    # set -e a failing `date` aborts the whole script. Left as is -- a host where date
+    # itself is broken has larger problems than a missed backup.
     tz_offset=$(TZ="$BACKUP_TZ" date +%z)
     if [ "$tz_offset" != "-0400" ] && [ "$tz_offset" != "-0500" ]; then
         echo "WARNING: $BACKUP_TZ resolved to $tz_offset, not -0400/-0500; running ungated, expect a duplicate" >&2

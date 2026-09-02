@@ -23,10 +23,12 @@ BACKUP_TZ="America/New_York"
 if [ "${EMAIL_BACKUP_IGNORE_SCHEDULE:-false}" != "true" ]; then
     # Check the offset the zone actually produces, not that a file exists: glibc
     # honours TZDIR, so absent tzdata, a hostile TZDIR or a typo yield a silent UTC
-    # with exit status 0. This compares the CURRENT offset and nothing else: a wrong
-    # zone or a stale DST rule set that happens to read -0400/-0500 today passes
-    # unwarned and runs an hour off. A warning proves the zone is wrong; silence
-    # proves nothing.
+    # with exit status 0. This compares the CURRENT offset and nothing else, so a
+    # warning proves the zone is wrong while silence proves only that the offset is
+    # plausible. Silence is usually harmless -- the hour below is read from the same
+    # zone at the same instant, so a zone merely sharing New York's offset shares its
+    # hour too. The bad case is a zone reading -0400/-0500 while New York is on the
+    # other: stale DST rules, or non-US transition dates, on the days they disagree.
     #
     # Fail OPEN, not closed, on an implausible offset. Skipping both runs would turn
     # duplicate backups into no backups at all, silently and indefinitely. A duplicate

@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Tuple, List
@@ -7,6 +8,20 @@ from dotenv import load_dotenv
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 
 load_dotenv()
+
+# python-telegram-bot puts the bot token in the request URL, and httpx logs every
+# request URL at INFO -- so an un-silenced httpx writes `api.telegram.org/bot<TOKEN>`
+# into stocks.log, crypto.log and the container log, none of which rotate.
+# Ticket: MARKET-DATA docs/tickets/todo/2026-09-02-library-http-client-logs-request-credentials.md
+#
+# This lives at config import, not in each entrypoint, because
+# notification_destination/telegram_notification.py imports this module: no telegram
+# Bot can be constructed without this having already run. A per-entrypoint call would
+# be one forgotten line away from leaking again.
+#
+# It suppresses httpx's INFO request line everywhere, including calls that carry no
+# credential. Raise it back deliberately when debugging HTTP, never as a default.
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 def get_env():
     return os.getenv('ENV', 'dev')

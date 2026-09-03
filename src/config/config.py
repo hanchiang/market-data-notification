@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Tuple, List
 from urllib.parse import urlparse
@@ -10,7 +11,7 @@ from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 load_dotenv()
 
 # python-telegram-bot puts the bot token in the request URL, and httpx logs every
-# request URL at INFO -- so an un-silenced httpx writes `api.telegram.org/bot<TOKEN>`
+# request URL at INFO -- so an unfiltered httpx writes `api.telegram.org/bot<TOKEN>`
 # into stocks.log, crypto.log and the container log, none of which rotate.
 # Ticket: MARKET-DATA docs/tickets/todo/2026-09-02-library-http-client-logs-request-credentials.md
 #
@@ -19,9 +20,29 @@ load_dotenv()
 # Bot can be constructed without this having already run. A per-entrypoint call would
 # be one forgotten line away from leaking again.
 #
-# It suppresses httpx's INFO request line everywhere, including calls that carry no
-# credential. Raise it back deliberately when debugging HTTP, never as a default.
-logging.getLogger('httpx').setLevel(logging.WARNING)
+# A filter rather than a level drop: the request line stays at INFO with the token
+# replaced, so a future httpx consumer keeps its trace and raising the level for
+# debugging cannot bring the secret back. Matched on the token's shape, not the URL
+# position, so an httpx message-format change does not bypass it.
+_TELEGRAM_BOT_TOKEN = re.compile(r'bot\d+:[A-Za-z0-9_-]+')
+
+
+class _RedactTelegramBotToken(logging.Filter):
+    # Identity marker for the install guard below. Not the class: a module reload
+    # (tests do it) makes a new class, and isinstance against it misses the old
+    # instance -- the filter then stacks once per reload.
+    marker = 'redact-telegram-bot-token'
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # httpx passes the URL as a %-arg, so format first, then scrub the result.
+        record.msg = _TELEGRAM_BOT_TOKEN.sub('bot<redacted>', record.getMessage())
+        record.args = ()
+        return True
+
+
+_httpx_logger = logging.getLogger('httpx')
+if not any(getattr(f, 'marker', None) == _RedactTelegramBotToken.marker for f in _httpx_logger.filters):
+    _httpx_logger.addFilter(_RedactTelegramBotToken())
 
 def get_env():
     return os.getenv('ENV', 'dev')

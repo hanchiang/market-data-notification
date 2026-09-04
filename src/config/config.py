@@ -44,7 +44,7 @@ class _RedactingLogRecord(logging.LogRecord):
     # second factory per reload.
     marker = 'redact-telegram-bot-token'
 
-    def getMessage(self) -> str:
+    def getMessage(self) -> str:  # noqa: N802 -- stdlib override, name is not ours to choose
         # %-args are applied here (httpx passes the URL as one), so scrub the result.
         return _redact_telegram_bot_token(super().getMessage())
 

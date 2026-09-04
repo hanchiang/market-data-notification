@@ -20,29 +20,37 @@ load_dotenv()
 # Bot can be constructed without this having already run. A per-entrypoint call would
 # be one forgotten line away from leaking again.
 #
-# A filter rather than a level drop: the request line stays at INFO with the token
-# replaced, so a future httpx consumer keeps its trace and raising the level for
-# debugging cannot bring the secret back. Matched on the token's shape, not the URL
-# position, so an httpx message-format change does not bypass it.
-_TELEGRAM_BOT_TOKEN = re.compile(r'bot\d+:[A-Za-z0-9_-]+')
+# Scrubbed at the LogRecord, not on one library's logger: the threat is token-shaped
+# text on any logger. A filter on `httpx` alone missed two routes -- PTB wraps httpx
+# errors as NetworkError(str(err)), which our senders log on their own logger, and
+# Bot.initialize() raises InvalidToken with the bare token, no `bot` prefix. Every
+# record from every logger passes through getMessage(), so this covers both, plus
+# httpcore at DEBUG, and raising a level for debugging cannot bring the secret back.
+# Not covered: a traceback rendered from exc_info (we log str(e), not exc_info) and an
+# uncaught exception printed by the interpreter.
+_TELEGRAM_BOT_TOKEN_IN_URL = re.compile(r'bot\d+:[A-Za-z0-9_-]+')
+# A bare token is <bot id>:<35 chars>; the length floors keep `12:34` timestamps out.
+_TELEGRAM_BOT_TOKEN_BARE = re.compile(r'(?<![A-Za-z0-9_-])\d{6,}:[A-Za-z0-9_-]{30,}')
 
 
-class _RedactTelegramBotToken(logging.Filter):
+def _redact_telegram_bot_token(text: str) -> str:
+    text = _TELEGRAM_BOT_TOKEN_IN_URL.sub('bot<redacted>', text)
+    return _TELEGRAM_BOT_TOKEN_BARE.sub('<redacted-token>', text)
+
+
+class _RedactingLogRecord(logging.LogRecord):
     # Identity marker for the install guard below. Not the class: a module reload
-    # (tests do it) makes a new class, and isinstance against it misses the old
-    # instance -- the filter then stacks once per reload.
+    # (tests do it) makes a new class, and an `is` check against it would install a
+    # second factory per reload.
     marker = 'redact-telegram-bot-token'
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        # httpx passes the URL as a %-arg, so format first, then scrub the result.
-        record.msg = _TELEGRAM_BOT_TOKEN.sub('bot<redacted>', record.getMessage())
-        record.args = ()
-        return True
+    def getMessage(self) -> str:
+        # %-args are applied here (httpx passes the URL as one), so scrub the result.
+        return _redact_telegram_bot_token(super().getMessage())
 
 
-_httpx_logger = logging.getLogger('httpx')
-if not any(getattr(f, 'marker', None) == _RedactTelegramBotToken.marker for f in _httpx_logger.filters):
-    _httpx_logger.addFilter(_RedactTelegramBotToken())
+if getattr(logging.getLogRecordFactory(), 'marker', None) != _RedactingLogRecord.marker:
+    logging.setLogRecordFactory(_RedactingLogRecord)
 
 def get_env():
     return os.getenv('ENV', 'dev')

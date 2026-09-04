@@ -44,15 +44,20 @@ PAGE = Path(dashboard.STATIC_DIR) / 'index.html'
 # -- harness ---------------------------------------------------------------
 
 
-def _loopback_client(app, host='127.0.0.1'):
-    """A `TestClient` whose requests arrive from `host`.
+def _loopback_client(app, host='127.0.0.1', host_header=b'127.0.0.1:8765'):
+    """A `TestClient` whose requests arrive from `host` carrying `host_header`.
 
     The shim is the smallest thing that satisfies the middleware without
     weakening it: the app, its middleware and every route are the real ones.
+    Both halves have to be set -- `TestClient` presents `client.host ==
+    'testclient'` and sends `Host: testserver`, and the middleware refuses each
+    of those on its own.
     """
     async def shim(scope, receive, send):
         if scope['type'] == 'http':
-            scope = dict(scope, client=(host, 50000))
+            headers = [(k, v) for k, v in scope['headers'] if k != b'host']
+            headers.append((b'host', host_header))
+            scope = dict(scope, client=(host, 50000), headers=headers)
         await app(scope, receive, send)
 
     return TestClient(shim)
@@ -434,8 +439,12 @@ def test_the_route_reports_freshness_against_the_latest_present_epoch(
 
 
 class _DummyRequest:
+    """Varies the client address only; `Host` is held at a local name so these
+    cases isolate the address check from the rebinding check below."""
+
     def __init__(self, host):
         self.client = SimpleNamespace(host=host) if host is not None else None
+        self.headers = {'host': '127.0.0.1:8765'}
 
 
 @pytest.mark.asyncio
@@ -472,6 +481,53 @@ def test_a_public_client_is_refused_through_the_whole_stack(repository):
     public = _loopback_client(build_app(), host='203.0.113.10')
     assert public.get('/project-monitor/netnet/report').status_code == 403
     assert public.get('/project-monitor/').status_code == 403
+
+
+class _HostRequest:
+    """Loopback client address, arbitrary `Host` -- the DNS-rebinding shape."""
+
+    def __init__(self, host_header):
+        self.client = SimpleNamespace(host='127.0.0.1')
+        self.headers = {'host': host_header} if host_header is not None else {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'host_header',
+    ['attacker.example', 'attacker.example:8765', 'netnet.local', '', None,
+     '[::1', '127.0.0.1.attacker.example'],
+)
+async def test_a_rebound_host_is_refused_even_from_a_loopback_client(host_header):
+    """DNS rebinding: the operator's own browser makes the request, so the
+    client address IS loopback. The attacker's domain in `Host` is the only
+    thing that distinguishes it, which is why this check exists beside the
+    address one rather than instead of it."""
+    async def call_next(_):
+        raise AssertionError('the request should not have reached the route')
+
+    response = await dashboard.loopback_only(_HostRequest(host_header), call_next)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'host_header',
+    ['127.0.0.1', '127.0.0.1:8765', 'localhost', 'localhost:8765', '[::1]:8765'],
+)
+async def test_the_names_a_local_browser_actually_sends_are_allowed(host_header):
+    """The other half of the check: it must not refuse the operator. Every form
+    a browser puts in `Host` for this server, with and without the port."""
+    async def call_next(_):
+        return SimpleNamespace(status_code=200)
+
+    response = await dashboard.loopback_only(_HostRequest(host_header), call_next)
+    assert response.status_code == 200
+
+
+def test_a_rebound_host_is_refused_through_the_whole_stack(repository):
+    rebound = _loopback_client(build_app(), host_header=b'attacker.example')
+    assert rebound.get('/project-monitor/netnet/report').status_code == 403
+    assert rebound.get('/project-monitor/').status_code == 403
 
 
 # -- AC-D10: no egress -----------------------------------------------------

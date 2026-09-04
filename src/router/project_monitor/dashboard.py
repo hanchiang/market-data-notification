@@ -12,7 +12,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
 
 import psycopg
 from fastapi import APIRouter, Request, Response
@@ -30,6 +30,26 @@ router = APIRouter(prefix='/project-monitor')
 STATIC_DIR = Path(__file__).resolve().parents[2] / 'static' / 'project_monitor'
 
 LOOPBACK_HOSTS = frozenset({'127.0.0.1', '::1'})
+# The names a local browser puts in `Host` for this server. Checked as well as
+# the client address because the two catch different attacks: the address stops
+# a remote client, and this stops DNS rebinding, where a page on an attacker's
+# domain resolves that domain to 127.0.0.1 and the operator's OWN browser makes
+# the request -- loopback client address and all -- letting the attacker's
+# origin read the body back.
+LOOPBACK_HOST_NAMES = frozenset({'127.0.0.1', 'localhost', '::1'})
+
+
+def _host_name(header: Optional[str]) -> Optional[str]:
+    """The host out of a `Host` header, port and IPv6 brackets removed.
+
+    Returns None for anything it cannot parse, so the caller fails closed: an
+    unrecognised Host is refused rather than waved through.
+    """
+    if not header:
+        return None
+    if header.startswith('['):
+        return header[1:header.index(']')] if ']' in header else None
+    return header.rsplit(':', 1)[0] if ':' in header else header
 
 
 async def loopback_only(
@@ -39,11 +59,14 @@ async def loopback_only(
 
     Redundant with the loopback bind, and deliberately so: the bind is what
     makes the port unreachable, this is what still holds if the router is ever
-    mounted on an app that binds elsewhere. A missing `client` is refused rather
-    than trusted -- an unknown origin is not a local one.
+    mounted on an app that binds elsewhere. A missing `client` or an
+    unparseable `Host` is refused rather than trusted -- an unknown origin is
+    not a local one.
     """
     client = request.client
     if client is None or client.host not in LOOPBACK_HOSTS:
+        return JSONResponse(status_code=403, content={'error': 'local requests only'})
+    if _host_name(request.headers.get('host')) not in LOOPBACK_HOST_NAMES:
         return JSONResponse(status_code=403, content={'error': 'local requests only'})
     return await call_next(request)
 

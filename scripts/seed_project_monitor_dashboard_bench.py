@@ -37,17 +37,35 @@ WAD = 10 ** 18
 
 TABLES = ('reading', 'sample', 'mint', 'flow', 'event', 'run')
 
-# rfv() = liquidUsdg + 0.98 x morphoAssets + polRfv. Held exactly, so the
-# synthetic fill produces no identity alert and the measurement times the same
-# code path a healthy store takes.
+# rfv() = liquidUsdg + 0.98 x morphoAssets + polRfv, held exactly in wei, so the
+# fill raises no identity alert.
 POL_WEI = 100 * WAD
 MORPHO_WEI = 500 * WAD
+# The vault position has to GROW, not sit still. A constant `morphoAssets` makes
+# every epoch's accrual zero, which is outside the 10-95 ppm tolerance and put an
+# alert line on 1,094 of 1,095 epochs -- so the measurement timed a store in
+# permanent alarm rather than a healthy one. 28 ppm per epoch is the median rate
+# observed over the backfill. Linear rather than compounded: over 1,095 epochs
+# the position grows 3%, so the realised rate drifts 28 -> 27.2 ppm and stays
+# well inside the band. Kept a multiple of 10^15 so `morphoAssets x 98` stays
+# divisible by 100 and the identity holds in exact integers.
+MORPHO_GROWTH_PPM = 28
+MORPHO_STEP_WEI = MORPHO_WEI * MORPHO_GROWTH_PPM // 10 ** 6
 
 
 def _reading_template(project_name: str) -> List[Dict[str, Any]]:
-    """One real closing sample's readings, from the operator store, read-only."""
+    """One real closing sample's readings, from the operator store, read-only.
+
+    `autocommit=False` is what makes `read_only` mean anything. psycopg 3 applies
+    transaction parameters when it OPENS a transaction, and an autocommit
+    connection opens none -- so `read_only = True` beside `autocommit=True` is
+    inert, and a write on it goes through. Verified on the `_test` database
+    (2026-09-04): the autocommit shape accepted an INSERT; this one raises
+    `ReadOnlySqlTransaction`. This is the operator's only copy of the record, so
+    the guard here has to be the server's, not the author's discipline.
+    """
     url = get_project_monitor_database_url(RuntimeMode(is_test_mode=False))
-    with psycopg.connect(url, autocommit=True, row_factory=dict_row) as connection:
+    with psycopg.connect(url, autocommit=False, row_factory=dict_row) as connection:
         connection.read_only = True
         with connection.cursor() as cursor:
             cursor.execute(
@@ -126,11 +144,12 @@ def _copy_readings(cursor, template: List[Dict[str, Any]], sample_ids: List[int]
 
 def _moving_values(epoch: int) -> Dict[str, int]:
     liquid = (1_000_000 + epoch * 1_000) * WAD
-    rfv = liquid + MORPHO_WEI * 98 // 100 + POL_WEI
+    morpho = MORPHO_WEI + epoch * MORPHO_STEP_WEI
+    rfv = liquid + morpho * 98 // 100 + POL_WEI
     return {
         'Treasury.rfv': rfv,
         'Treasury.liquidUsdg': liquid,
-        'Treasury.morphoAssets': MORPHO_WEI,
+        'Treasury.morphoAssets': morpho,
         'Treasury.polRfv': POL_WEI,
         'Treasury.backingPerToken': (100 + epoch) * WAD // 10,
         'NET.totalSupply': (12_500_000_000 + epoch * 1_000_000),

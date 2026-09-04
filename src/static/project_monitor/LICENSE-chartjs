@@ -1,0 +1,28 @@
+Chart.js, vendored (DR11: the page loads no resource from any host but the
+local server, so the charting library ships in this repo).
+
+version:  4.4.1
+file:     chart.umd.js  (UMD build, 205,125 bytes)
+upstream: https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js
+sha256:   74401d738dd3e03ee5dfb3b6841210fe2c4ead8a960c4011ca4ba0b78a9fd8f3
+verified: the same sha256 from a second, independent mirror
+          (https://unpkg.com/chart.js@4.4.1/dist/chart.umd.js), 2026-09-04.
+
+The file is byte-identical to upstream, which is why its trailing
+`//# sourceMappingURL=chart.umd.js.map` comment is left in place: stripping it
+would break the checksum above, and the map is a same-origin path that only a
+browser with source maps enabled ever requests. The map file itself is not
+vendored, so nothing on the page reaches another host either way.
+
+Licence text below is upstream's LICENSE.md at tag v4.4.1
+(https://github.com/chartjs/Chart.js/blob/v4.4.1/LICENSE.md).
+
+The MIT License (MIT)
+
+Copyright (c) 2014-2022 Chart.js Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

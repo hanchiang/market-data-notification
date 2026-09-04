@@ -236,12 +236,29 @@ class ProjectMonitorRepository:
     here: the failure the store must survive is a half-written sample.
     """
 
-    def __init__(self, database_url: str, *, connect_timeout: int = 10) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        connect_timeout: int = 10,
+        read_only: bool = False,
+    ) -> None:
         self.database_url = database_url
+        self.read_only = read_only
         self.connection = psycopg.connect(
             database_url, autocommit=False, connect_timeout=connect_timeout,
             row_factory=dict_row,
         )
+        if read_only:
+            # psycopg 3 turns this into `BEGIN READ ONLY` on each implicit
+            # transaction, so the SERVER refuses a write on this connection --
+            # not a convention a future edit can forget. It only holds while the
+            # connection stays `autocommit=False`, which is fixed above. The DDL
+            # is skipped for the same reason: a read-only session cannot run it,
+            # so a caller that opens read-only against a fresh database gets an
+            # `UndefinedTable` error rather than silently creating the schema.
+            self.connection.read_only = True
+            return
         self.create_schema()
 
     def close(self) -> None:

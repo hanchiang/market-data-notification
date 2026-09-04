@@ -34,9 +34,10 @@ exactly what the column exists to surface: a polRfv drain or a vault re-mark
 would land inside the predicted terms and disappear.
 """
 import json
+from bisect import bisect_right
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .attribution import (
     BOUNDARY_INTERNAL,
@@ -74,6 +75,21 @@ INTEREST_PPM_TOLERANCE = (Decimal('10'), Decimal('95'))
 INTEREST_OK = 'ok'
 INTEREST_OUTSIDE_ENVELOPE = 'outside_envelope'
 INTEREST_UNAVAILABLE = 'unavailable'
+
+SIGN_AGREE = 'agree'
+SIGN_DISAGREE = 'disagree'
+SIGN_UNAVAILABLE = 'unavailable'
+
+# The record is stale once two epochs could have been missed: an epoch closes
+# every eight hours, so 16 h without a newer close is the first moment a stopped
+# `record` job is distinguishable from a slow one. Frozen in the requirement
+# (Constraints, Operational); changing it is an amendment there, not here.
+STALE_AFTER_HOURS = 16
+
+# The only event name the epoch table reads. `_EpochSources` prefetches exactly
+# these, so a name added to a column without a matching entry here raises rather
+# than summing an empty window into a confident zero.
+EVENT_NAMES_READ = ('InverseBonded',)
 
 
 def _scaled(value: Optional[Any], decimals: Optional[int]) -> Optional[Decimal]:
@@ -117,6 +133,8 @@ def load_epoch_rows(
     previous: Optional[Dict[str, Any]] = None
     epoch_numbers = [int(s['epoch_number']) for s in closing_samples]
 
+    sources = _EpochSources(repository, project, [s['id'] for s in closing_samples])
+
     by_epoch = {int(s['epoch_number']): s for s in closing_samples}
     # Missing epochs render as a row of dashes with the epoch number, never
     # interpolated: an epoch with no sample is a gap in the record, and drawing
@@ -126,12 +144,122 @@ def load_epoch_rows(
         if sample is None:
             rows.append({'epoch': epoch, 'present': False})
             continue
-        row = _build_row(repository, project, sample, previous)
+        row = _build_row(sources, project, sample, previous)
         rows.append(row)
         previous = row
     return rows
 
 
+class _EpochSources:
+    """Every store row the epoch table reads, fetched in five statements.
+
+    Replaces a per-epoch query pattern: five statements per epoch is 690 round
+    trips over the operator's 138 epochs, measured at 2.5-2.6 s and
+    extrapolating to about 23 s at a year of history -- past the 6 s bound the
+    requirement freezes. Whole-project reads plus a bisect per window answer the
+    same questions once. The event read is filtered to `EVENT_NAMES_READ`
+    because the table holds 76,151 rows of which 71,680 are pair and
+    tax-collector transfers no column reads.
+
+    Each list is ordered by block and carries a parallel list of blocks, so an
+    epoch's `(previous_block, block]` window is two bisections.
+    """
+
+    def __init__(
+        self,
+        repository: ProjectMonitorRepository,
+        project: ProjectConfig,
+        sample_ids: Sequence[int],
+    ) -> None:
+        self.readings: Dict[int, Dict[str, Any]] = {
+            int(sample_id): {} for sample_id in sample_ids
+        }
+        for reading in repository.fetch_all(
+            'SELECT sample_id, name, value_int, value_json, decimals, state, '
+            'error_class FROM reading WHERE sample_id = ANY(%s)',
+            (list(sample_ids),),
+        ):
+            self.readings[int(reading['sample_id'])][reading['name']] = reading
+
+        self.mints, self.mint_blocks = _by_block(
+            repository.fetch_all(
+                'SELECT block, class, amount, decimals FROM mint '
+                'WHERE project = %s ORDER BY block',
+                (project.name,),
+            )
+        )
+        self.flows, self.flow_blocks = _by_block(
+            repository.fetch_all(
+                'SELECT block, direction, label, counterparty, amount, decimals '
+                'FROM flow WHERE project = %s ORDER BY block',
+                (project.name,),
+            )
+        )
+        self.events: Dict[str, Tuple[List[Dict[str, Any]], List[int]]] = {
+            name: _by_block(
+                repository.fetch_all(
+                    'SELECT block, fields_json FROM event '
+                    'WHERE project = %s AND name = %s ORDER BY block',
+                    (project.name, name),
+                )
+            )
+            for name in EVENT_NAMES_READ
+        }
+
+
+def _by_block(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[int]]:
+    ordered = sorted(rows, key=lambda row: int(row['block']))
+    return ordered, [int(row['block']) for row in ordered]
+
+
+def _window(
+    rows: List[Dict[str, Any]],
+    blocks: List[int],
+    from_block: Optional[int],
+    to_block: int,
+) -> List[Dict[str, Any]]:
+    """The rows of one epoch's window, `(from_block, to_block]`.
+
+    Half-open at the low end exactly as the SQL was: a block belongs to the
+    epoch that closed on or after it, and counting it twice would double an
+    epoch's emission.
+    """
+    low = bisect_right(blocks, from_block if from_block is not None else -1)
+    return rows[low:bisect_right(blocks, to_block)]
+
+
+def _group_mints(rows: List[Dict[str, Any]]) -> Dict[str, Optional[Decimal]]:
+    """`GROUP BY class` with `sum(amount)`, `max(decimals)`, in Python."""
+    totals: Dict[str, Decimal] = {}
+    decimals: Dict[str, int] = {}
+    for row in rows:
+        mint_class = row['class']
+        totals[mint_class] = totals.get(mint_class, Decimal(0)) + Decimal(row['amount'])
+        decimals[mint_class] = max(decimals.get(mint_class, 0), int(row['decimals']))
+    return {
+        mint_class: _scaled(total, decimals[mint_class])
+        for mint_class, total in totals.items()
+    }
+
+
+def _group_flows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """`GROUP BY direction, label, counterparty`, same aggregates as the SQL."""
+    grouped: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    for row in rows:
+        key = (row['direction'], row['label'], row['counterparty'])
+        group = grouped.get(key)
+        if group is None:
+            grouped[key] = {
+                'direction': row['direction'],
+                'label': row['label'],
+                'counterparty': row['counterparty'],
+                'total': Decimal(row['amount']),
+                'decimals': int(row['decimals']),
+            }
+            continue
+        group['total'] += Decimal(row['amount'])
+        group['decimals'] = max(group['decimals'], int(row['decimals']))
+    return list(grouped.values())
 
 
 def _flow_key(label: str, counterparty: str) -> str:
@@ -362,20 +490,12 @@ def _sleeve(
 
 
 def _build_row(
-    repository: ProjectMonitorRepository,
+    sources: '_EpochSources',
     project: ProjectConfig,
     sample: Dict[str, Any],
     previous: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    project_name = project.name
-    readings = {
-        r['name']: r
-        for r in repository.fetch_all(
-            'SELECT name, value_int, value_json, decimals, state, error_class '
-            'FROM reading WHERE sample_id = %s',
-            (sample['id'],),
-        )
-    }
+    readings = sources.readings[int(sample['id'])]
 
     def value(name: str) -> Optional[Decimal]:
         reading = readings.get(name)
@@ -395,14 +515,9 @@ def _build_row(
     backing = value('Treasury.backingPerToken')
     supply = value('NET.totalSupply')
 
-    mints = repository.fetch_all(
-        'SELECT class, sum(amount) AS total, max(decimals) AS decimals FROM mint '
-        'WHERE project = %s AND block > %s AND block <= %s GROUP BY class',
-        (project_name, previous_block if previous_block is not None else -1, block),
+    emission = _group_mints(
+        _window(sources.mints, sources.mint_blocks, previous_block, block)
     )
-    emission = {
-        row['class']: _scaled(row['total'], row['decimals']) for row in mints
-    }
     total_emission = sum((v for v in emission.values() if v is not None), Decimal(0))
 
     # Grouped by counterparty as well as label, because R6 says an unlabelled
@@ -410,12 +525,8 @@ def _build_row(
     # RECIPIENT. Grouping on the label alone collapses every unknown recipient
     # into one `unlabelled` bucket -- which reads as a single counterparty and
     # is the one shape that makes an unrecognised drain look ordinary.
-    flows = repository.fetch_all(
-        'SELECT direction, label, counterparty, sum(amount) AS total, '
-        'max(decimals) AS decimals '
-        'FROM flow WHERE project = %s AND block > %s AND block <= %s '
-        'GROUP BY direction, label, counterparty',
-        (project_name, previous_block if previous_block is not None else -1, block),
+    flows = _group_flows(
+        _window(sources.flows, sources.flow_blocks, previous_block, block)
     )
     # The internal/external split is derived here rather than stored on the
     # flow row, so it is a property of what `rfv()` counts TODAY. A stored
@@ -513,13 +624,20 @@ def _build_row(
         # Reported as unavailable rather than derived from a rule we invented.
         'filled': None,
         'filled_state': 'no_onchain_source',
-        'repurchased': _sum_event_field(repository, project_name, previous_block, block,
+        'repurchased': _sum_event_field(sources, previous_block, block,
                                         'InverseBonded', 'netBurned', 9),
         # The dapp sets bought and burned to the same sum, so a buyback burns
         # exactly what it repurchases; both come from `InverseBonded.netBurned`.
-        'burned': _sum_event_field(repository, project_name, previous_block, block,
+        'burned': _sum_event_field(sources, previous_block, block,
                                    'InverseBonded', 'netBurned', 9),
     }
+
+    backing_change_pct = _pct_change(
+        backing, previous.get('backing_per_token') if previous else None
+    )
+    treasury_growth_pct = _pct_change(rfv, previous_rfv)
+    dilution_pct = total_emission / previous_supply * 100 if previous_supply else None
+    growth_minus_dilution_pct = _growth_minus_dilution(treasury_growth_pct, dilution_pct)
 
     return {
         'epoch': epoch,
@@ -530,25 +648,32 @@ def _build_row(
         'kind': sample['kind'],
         'endpoint_kind': sample['endpoint_kind'],
         'backing_per_token': backing,
-        'backing_change_pct': _pct_change(
-            backing, previous.get('backing_per_token') if previous else None
-        ),
+        'backing_change_pct': backing_change_pct,
         'rfv': rfv,
-        'treasury_growth_pct': _pct_change(rfv, previous_rfv),
+        'treasury_growth_pct': treasury_growth_pct,
         'supply': supply,
         'emission_rebase': emission.get('rebase'),
         'emission_bond': emission.get('bond'),
         'emission_issuance': emission.get('issuance'),
         'emission_other': emission.get('other'),
-        'dilution_pct': (
-            total_emission / previous_supply * 100 if previous_supply else None
-        ),
+        'dilution_pct': dilution_pct,
+        # DR14, additive: the D2 view compares growth against dilution, and the
+        # difference plus its agreement with the backing move are derived here
+        # rather than on the page so the CLI and the page cannot disagree about
+        # a figure neither of them is the source of.
+        'growth_minus_dilution_pct': growth_minus_dilution_pct,
+        'sign_agreement': _sign_agreement(growth_minus_dilution_pct, backing_change_pct),
         'inflows': {k: str(v) for k, v in inflows.items()},
         'outflows': {k: str(v) for k, v in outflows.items()},
         # Which of those buckets the residual ignored, so a reader who sees a
         # six-figure outflow beside an unmoved residual is told why rather than
         # left to suspect the arithmetic.
         'internal_flows': {'in': internal_inflow_keys, 'out': internal_outflow_keys},
+        # DR14, additive: the per-address `unlabelled:<addr>` keys above are 220
+        # one-epoch series on the real data, which is unreadable as a stacked
+        # bar. Folded into one bucket HERE, so the flow detail keeps the
+        # per-address attribution and D3 draws one unlabelled series.
+        'inflows_chart': _inflows_chart(inflows, internal_inflow_keys),
         'residual': residual,
         # The modelled part of the residual, reported beside it so a reader can
         # see how large a correction was applied rather than inferring it from
@@ -583,20 +708,72 @@ def _build_row(
     }
 
 
+def _growth_minus_dilution(
+    treasury_growth_pct: Optional[Decimal], dilution_pct: Optional[Decimal]
+) -> Optional[Decimal]:
+    """DR14. Null if either side is, never a subtraction against an assumed 0."""
+    if treasury_growth_pct is None or dilution_pct is None:
+        return None
+    return treasury_growth_pct - dilution_pct
+
+
+def _sign(value: Decimal) -> int:
+    return (value > 0) - (value < 0)
+
+
+def _sign_agreement(
+    growth_minus_dilution_pct: Optional[Decimal],
+    backing_change_pct: Optional[Decimal],
+) -> str:
+    """Whether the two figures point the same way, three-way including zero.
+
+    The identity G5 states is that backing rises exactly when treasury growth
+    outruns emission, so a disagreement is a burn, a re-mark or a data gap and
+    is the one thing on D2 worth marking. Compared as signs and not as
+    magnitudes: the two are percentages of different denominators.
+    """
+    if growth_minus_dilution_pct is None or backing_change_pct is None:
+        return SIGN_UNAVAILABLE
+    same = _sign(growth_minus_dilution_pct) == _sign(backing_change_pct)
+    return SIGN_AGREE if same else SIGN_DISAGREE
+
+
+def _inflows_chart(
+    inflows: Dict[str, Decimal], internal_keys: List[str]
+) -> Dict[str, Any]:
+    """DR14's chart aggregate: per-address unlabelled keys folded into one.
+
+    A chart key is internal when ANY of the source keys folded into it is, so a
+    single internal address inside `unlabelled` cannot lose its marker by being
+    summed with external ones -- an internal flow shown as ordinary is the
+    failure this marker exists to prevent, and over-marking is only noisier.
+    """
+    buckets: Dict[str, Decimal] = {}
+    internal: List[str] = []
+    for key, amount in inflows.items():
+        chart_key = LABEL_UNLABELLED if key.startswith(f'{LABEL_UNLABELLED}:') else key
+        buckets[chart_key] = buckets.get(chart_key, Decimal(0)) + amount
+        if key in internal_keys and chart_key not in internal:
+            internal.append(chart_key)
+    return {
+        'buckets': {k: str(v) for k, v in buckets.items()},
+        'internal': sorted(internal),
+    }
+
+
 def _sum_event_field(
-    repository: ProjectMonitorRepository,
-    project_name: str,
+    sources: '_EpochSources',
     from_block: Optional[int],
     to_block: int,
     event_name: str,
     field: str,
     decimals: int,
 ) -> Optional[Decimal]:
-    rows = repository.fetch_all(
-        'SELECT fields_json FROM event WHERE project = %s AND name = %s '
-        'AND block > %s AND block <= %s',
-        (project_name, event_name, from_block if from_block is not None else -1, to_block),
-    )
+    # KeyError, not an empty window, when a column asks for an event name the
+    # prefetch did not read: a missing name would otherwise sum to a confident
+    # zero that looks like "no buybacks happened".
+    event_rows, event_blocks = sources.events[event_name]
+    rows = _window(event_rows, event_blocks, from_block, to_block)
     if not rows:
         return Decimal(0)
     total = sum(Decimal(row['fields_json'][field]) for row in rows)
@@ -857,3 +1034,127 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, list):
         return [_jsonable(v) for v in value]
     return value
+
+
+def freshness(rows: List[Dict[str, Any]], now: datetime) -> Dict[str, Any]:
+    """D5/DR9: how old the newest close is, and whether that is stale.
+
+    `now` is an argument rather than read here so a test can pin it and so two
+    views rendered from one request agree on the time. An empty store is stale:
+    no record is the stalest record, and reporting it as fresh would let a store
+    that was never written look like a market that never moved.
+    """
+    present = [row for row in rows if row.get('present')]
+    if not present:
+        return {
+            'latest_epoch': None,
+            'latest_block_time_utc': None,
+            'age_hours': None,
+            'stale': True,
+            'threshold_hours': STALE_AFTER_HOURS,
+        }
+    latest = present[-1]
+    age_seconds = Decimal(int(now.timestamp()) - int(latest['block_timestamp']))
+    age_hours = (age_seconds / 3600).quantize(Decimal('0.01'))
+    return {
+        'latest_epoch': latest['epoch'],
+        'latest_block_time_utc': latest['block_time_utc'],
+        'age_hours': age_hours,
+        'stale': age_hours > STALE_AFTER_HOURS,
+        'threshold_hours': STALE_AFTER_HOURS,
+    }
+
+
+# The row keys each view draws, in the order the page stacks them. Kept as data
+# so the charts <-> rows invariant test can walk them instead of restating the
+# mapping a second time.
+D1_KEYS = ('backing_per_token', 'pair_price')
+D2_KEYS = (
+    'treasury_growth_pct',
+    'dilution_pct',
+    'backing_change_pct',
+    'growth_minus_dilution_pct',
+    'sign_agreement',
+)
+
+
+def chart_series(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The same values as `rows`, transposed into per-series arrays.
+
+    Reshaping only -- no arithmetic, no rounding, no filtering (DR3). A gap row
+    contributes `null` at its index in every series rather than being dropped,
+    which is what makes `spanGaps: false` break the line at exactly the epoch
+    that has no sample instead of drawing through it.
+
+    Done here rather than on the page because the CI image has no JS runtime, so
+    a mapping written in the page could not be tested at all.
+    """
+    epochs = [row['epoch'] for row in rows]
+    bucket_keys = sorted(
+        {
+            key
+            for row in rows
+            for key in ((row.get('inflows_chart') or {}).get('buckets') or {})
+        }
+    )
+    return {
+        'd1': {
+            'epochs': epochs,
+            **{key: [_series_value(row, key) for row in rows] for key in D1_KEYS},
+        },
+        'd2': {
+            'epochs': epochs,
+            **{key: [_series_value(row, key) for row in rows] for key in D2_KEYS},
+        },
+        'd3': {
+            'epochs': epochs,
+            'buckets': {
+                key: [
+                    ((row.get('inflows_chart') or {}).get('buckets') or {}).get(key)
+                    for row in rows
+                ]
+                for key in bucket_keys
+            },
+            'internal': [
+                list((row.get('inflows_chart') or {}).get('internal') or [])
+                for row in rows
+            ],
+        },
+        'points': [
+            {
+                'epoch': row['epoch'],
+                'block': row.get('block'),
+                'block_time_utc': row.get('block_time_utc'),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _series_value(row: Dict[str, Any], key: str) -> Any:
+    return row.get(key) if row.get('present') else None
+
+
+def report_payload(
+    rows: List[Dict[str, Any]],
+    project: ProjectConfig,
+    *,
+    now: datetime,
+) -> Dict[str, Any]:
+    """The whole page's input: the CLI's rows plus what the CLI prints around them.
+
+    `rows` goes through the same `_jsonable` as `render_json`, so a value the
+    route serves is the string the CLI prints (DR1, AC-D1). `charts` is applied
+    to the same objects before that conversion, so the two representations of a
+    figure in one body cannot differ in the last decimal place.
+    """
+    return {
+        'project': project.name,
+        'generated_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'rows': [_jsonable(row) for row in rows],
+        'notes': list(HEADER_NOTES),
+        'alerts': render_alerts(rows),
+        'identity_broken_epochs': identity_breaks(rows),
+        'freshness': _jsonable(freshness(rows, now)),
+        'charts': _jsonable(chart_series(rows)),
+    }

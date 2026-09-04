@@ -1,0 +1,345 @@
+<!doctype html>
+<!--
+  The NETNET treasury dashboard. Everything drawn here comes from
+  /project-monitor/netnet/report and nothing else (DR3): the page places arrays
+  the route already shaped into Chart.js options and computes no figure.
+
+  Inline CSS and JS, one vendored script, a `data:` icon: four is the whole
+  resource list and three of them are requests, all to this server (DR11).
+-->
+<title>NETNET treasury</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0 auto; padding: 1.5rem; max-width: 1100px;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  #identity-band:not(:empty) {
+    background: #b00020; color: #fff; padding: .75rem 1rem;
+    border-radius: 4px; font-weight: 600; margin-bottom: 1rem;
+  }
+  #freshness { margin-bottom: 1rem; color: #444; }
+  .stale {
+    background: #b00020; color: #fff; border-radius: 3px;
+    padding: 0 .4rem; margin-left: .5rem; font-weight: 600;
+  }
+  #alerts:not(:empty) {
+    border-left: 4px solid #b00020; background: #fff4f4;
+    padding: .5rem 1rem; margin-bottom: 1rem;
+  }
+  #notes { color: #555; font-size: 13px; margin-bottom: 1.5rem; }
+  #notes li, #alerts li { margin: .25rem 0; }
+  #error:not(:empty) {
+    border: 1px solid #b00020; padding: 1rem; border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  figure { margin: 0 0 2.5rem; }
+  figcaption { font-weight: 600; margin-bottom: .5rem; }
+  canvas { max-width: 100%; }
+</style>
+
+<h1>NETNET treasury, by epoch</h1>
+
+<!-- Above every canvas in document order, on purpose: DR8 says a caveat the
+     table prints must be read before the picture it qualifies, not after. -->
+<div id="identity-band"></div>
+<div id="freshness"></div>
+<div id="error"></div>
+<ul id="alerts"></ul>
+<ul id="notes"></ul>
+
+<figure>
+  <figcaption>D1 &mdash; backing per token, against pair price</figcaption>
+  <canvas id="d1" height="120"></canvas>
+</figure>
+<figure>
+  <figcaption>D2 &mdash; treasury growth % against dilution %</figcaption>
+  <canvas id="d2" height="120"></canvas>
+</figure>
+<figure>
+  <figcaption>D3 &mdash; reserve inflows by bucket</figcaption>
+  <canvas id="d3" height="120"></canvas>
+</figure>
+
+<script src="static/chart.umd.js"></script>
+<script>
+// The route sends every figure as a decimal STRING, so no value loses places on
+// its way here. Chart.js plots numbers, so `num` converts for the geometry
+// only; every figure the operator reads -- the tooltips -- prints the original
+// string, which is why `raw` and `num` are separate.
+function num(value) { return value === null || value === undefined ? null : Number(value); }
+function nums(values) { return values.map(num); }
+
+// One tooltip title for all three views (DR7, AC-D6): epoch, close block and
+// close time come from `charts.points`, which is indexed the same as every
+// series, so a point can always be traced to the sample it was read at.
+function pointTitle(charts, index) {
+  const point = charts.points[index];
+  if (!point) { return ''; }
+  if (point.block === null) { return 'epoch ' + point.epoch + ' — no sample'; }
+  return 'epoch ' + point.epoch + ' — block ' + point.block + ' — ' + point.block_time_utc;
+}
+
+function titleCallback(charts) {
+  return function (items) { return items.length ? pointTitle(charts, items[0].dataIndex) : ''; };
+}
+
+function configD1(charts) {
+  return {
+    type: 'line',
+    data: {
+      labels: charts.d1.epochs,
+      datasets: [
+        {
+          label: 'backing per token',
+          data: nums(charts.d1.backing_per_token),
+          yAxisID: 'y',
+          borderColor: '#1b6ac9',
+          backgroundColor: '#1b6ac9',
+          // A missing epoch is a null in the series and the line must BREAK
+          // there rather than draw a segment across a treasury figure nobody
+          // observed (AC-D3, parent AC5).
+          spanGaps: false,
+        },
+        {
+          label: 'pair price',
+          data: nums(charts.d1.pair_price),
+          yAxisID: 'y2',
+          borderColor: '#c96a1b',
+          backgroundColor: '#c96a1b',
+          spanGaps: false,
+        },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { type: 'linear', position: 'left', title: { display: true, text: 'backing/token' } },
+        y2: {
+          type: 'linear', position: 'right',
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'pair price' },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: titleCallback(charts),
+            label: function (item) {
+              const series = item.datasetIndex === 0
+                ? charts.d1.backing_per_token : charts.d1.pair_price;
+              return item.dataset.label + ': ' + rawOrNa(series[item.dataIndex]);
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+function configD2(charts) {
+  const signColours = charts.d2.backing_change_pct.map(signColour);
+  const styles = charts.d2.sign_agreement.map(function (state) {
+    // A disagreement gets its own point shape as well as the tooltip line: it
+    // is the one thing on this view worth spotting without hovering.
+    return state === 'disagree' ? 'rectRot' : 'circle';
+  });
+  const pointSize = charts.d2.sign_agreement.map(function (state) {
+    return state === 'disagree' ? 6 : 3;
+  });
+  return {
+    type: 'line',
+    data: {
+      labels: charts.d2.epochs,
+      datasets: [
+        {
+          label: 'treasury growth %',
+          data: nums(charts.d2.treasury_growth_pct),
+          borderColor: '#1b8f4a',
+          pointBackgroundColor: signColours,
+          pointStyle: styles,
+          pointRadius: pointSize,
+          spanGaps: false,
+        },
+        {
+          label: 'dilution %',
+          data: nums(charts.d2.dilution_pct),
+          borderColor: '#8f1b4a',
+          pointBackgroundColor: signColours,
+          pointStyle: styles,
+          pointRadius: pointSize,
+          spanGaps: false,
+        },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      scales: { y: { type: 'linear', title: { display: true, text: 'percent' } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: titleCallback(charts),
+            label: function (item) {
+              const series = item.datasetIndex === 0
+                ? charts.d2.treasury_growth_pct : charts.d2.dilution_pct;
+              return item.dataset.label + ': ' + rawOrNa(series[item.dataIndex]);
+            },
+            afterBody: function (items) {
+              if (!items.length) { return []; }
+              const i = items[0].dataIndex;
+              return [
+                'growth - dilution: ' + rawOrNa(charts.d2.growth_minus_dilution_pct[i]),
+                'backing change %: ' + rawOrNa(charts.d2.backing_change_pct[i])
+                  + ' (' + signWord(charts.d2.backing_change_pct[i]) + ')',
+                'sign: ' + (charts.d2.sign_agreement[i] || 'unavailable'),
+              ];
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+function configD3(charts) {
+  const keys = Object.keys(charts.d3.buckets);
+  const datasets = keys.map(function (key, index) {
+    const values = charts.d3.buckets[key];
+    return {
+      label: key,
+      data: nums(values),
+      backgroundColor: bucketColour(index),
+      // Per BAR, not per dataset: a bucket can be internal in one epoch and not
+      // in another, and marking the whole series would claim more than the data
+      // says. Chart.js has no pattern fill without a plugin, so the marker is a
+      // heavy dark border plus the tooltip's "(internal)".
+      borderColor: charts.d3.internal.map(function (rowKeys) {
+        return rowKeys.indexOf(key) === -1 ? 'transparent' : '#111';
+      }),
+      borderWidth: charts.d3.internal.map(function (rowKeys) {
+        return rowKeys.indexOf(key) === -1 ? 0 : 3;
+      }),
+    };
+  });
+  return {
+    type: 'bar',
+    data: { labels: charts.d3.epochs, datasets: datasets },
+    options: {
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, title: { display: true, text: 'USDG in' } },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: titleCallback(charts),
+            label: function (item) {
+              const key = item.dataset.label;
+              const internal = (charts.d3.internal[item.dataIndex] || []).indexOf(key) !== -1;
+              const value = charts.d3.buckets[key][item.dataIndex];
+              return key + ': ' + rawOrNa(value) + (internal ? ' (internal)' : '');
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+function rawOrNa(value) { return value === null || value === undefined ? 'n/a' : value; }
+
+function signWord(value) {
+  if (value === null || value === undefined) { return 'unavailable'; }
+  const n = Number(value);
+  if (n > 0) { return 'rising'; }
+  if (n < 0) { return 'falling'; }
+  return 'flat';
+}
+
+function signColour(value) {
+  if (value === null || value === undefined) { return '#999'; }
+  const n = Number(value);
+  if (n > 0) { return '#1b8f4a'; }
+  if (n < 0) { return '#b00020'; }
+  return '#666';
+}
+
+const BUCKET_COLOURS = [
+  '#1b6ac9', '#c96a1b', '#1b8f4a', '#8f1b4a', '#6a1bc9', '#c9a01b',
+  '#1bc9c0', '#c91b6a', '#4a8f1b', '#8f6a1b',
+];
+function bucketColour(index) { return BUCKET_COLOURS[index % BUCKET_COLOURS.length]; }
+
+function list(node, items) {
+  node.innerHTML = '';
+  items.forEach(function (text) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    node.appendChild(li);
+  });
+}
+
+function renderHeader(body) {
+  const fresh = body.freshness;
+  const node = document.getElementById('freshness');
+  if (fresh.latest_epoch === null) {
+    node.textContent = 'no epoch recorded';
+  } else {
+    node.textContent = 'latest epoch ' + fresh.latest_epoch + ', closed '
+      + fresh.latest_block_time_utc + ', ' + fresh.age_hours + ' h ago';
+  }
+  if (fresh.stale) {
+    const badge = document.createElement('span');
+    badge.className = 'stale';
+    badge.textContent = 'stale';
+    badge.title = 'no epoch closed within ' + fresh.threshold_hours + ' hours';
+    node.appendChild(badge);
+  }
+
+  // Keyed to `identity_broken_epochs`, not to alert text: a broken rfv()
+  // identity invalidates the deposit haircut in every later epoch, and the CLI
+  // exits 2 on it. Matching on a string would go quiet the day the wording
+  // changes.
+  if (body.identity_broken_epochs.length) {
+    document.getElementById('identity-band').textContent =
+      'rfv() IDENTITY BROKEN at epoch(s) ' + body.identity_broken_epochs.join(', ')
+      + ' — every residual after it models a coefficient the chain has stopped honouring.';
+  }
+  list(document.getElementById('alerts'), body.alerts);
+  list(document.getElementById('notes'), body.notes.map(function (n) { return 'note: ' + n; }));
+}
+
+function render(body) {
+  // Caveats first, charts second. A fetch that failed shows the error and NO
+  // chart: an empty chart reads as a flat market, which is the one wrong
+  // picture this page must never draw.
+  renderHeader(body);
+  new Chart(document.getElementById('d1'), configD1(body.charts));
+  new Chart(document.getElementById('d2'), configD2(body.charts));
+  new Chart(document.getElementById('d3'), configD3(body.charts));
+}
+
+function reportUrl() {
+  // The page's own ?test_mode=1 is forwarded to the route, so one URL selects
+  // the _test database for both halves.
+  const testMode = new URLSearchParams(window.location.search).get('test_mode');
+  return 'netnet/report' + (testMode ? '?test_mode=' + encodeURIComponent(testMode) : '');
+}
+
+fetch(reportUrl())
+  .then(function (response) {
+    return response.json().then(function (body) {
+      if (!response.ok) {
+        throw new Error('the store could not be read (' + response.status + ': '
+          + (body.error || 'unknown') + ')');
+      }
+      return body;
+    });
+  })
+  .then(render)
+  .catch(function (err) {
+    document.getElementById('error').textContent = String(err.message || err);
+  });
+</script>

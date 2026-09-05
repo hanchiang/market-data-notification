@@ -1,0 +1,315 @@
+{
+  "pre_slice_rev": "1cf2f66",
+  "rows": [
+    {
+      "backing_change_pct": null,
+      "backing_per_token": "80",
+      "block": 100,
+      "block_time_utc": "2026-08-29T10:41:40Z",
+      "block_timestamp": 1788000100,
+      "buyback": {
+        "burned": "0",
+        "capacity": null,
+        "capacity_state": "absent",
+        "filled": null,
+        "filled_state": "no_onchain_source",
+        "repurchased": "0"
+      },
+      "deposit_haircut": "0.00",
+      "dilution_pct": null,
+      "emission_bond": null,
+      "emission_issuance": null,
+      "emission_other": null,
+      "emission_rebase": null,
+      "endpoint_kind": "public",
+      "epoch": 10,
+      "inflows": {},
+      "internal_flows": {
+        "in": [],
+        "out": []
+      },
+      "kind": "live",
+      "loopback": {
+        "state": "absent"
+      },
+      "lp_total_supply": null,
+      "lp_treasury_share_pct": null,
+      "outflows": {},
+      "pair_price": "1573.947868456616081762688816",
+      "premium_x": "19.6743483557077010220336102",
+      "present": true,
+      "reading_states": {
+        "NET.decimals": "ok",
+        "NET.totalSupply": "ok",
+        "Treasury.backingPerToken": "ok",
+        "Treasury.liquidUsdg": "ok",
+        "Treasury.morphoAssets": "ok",
+        "Treasury.polRfv": "ok",
+        "Treasury.rfv": "ok",
+        "USDG.decimals": "ok",
+        "pair.getReserves": "ok",
+        "pair.token0": "ok"
+      },
+      "residual": null,
+      "rfv": "1000",
+      "rfv_components": {
+        "liquid_usdg": "1000",
+        "morpho_assets": "0",
+        "pol_rfv": "0",
+        "pol_rfv_delta": null,
+        "sum": "1000",
+        "sum_minus_rfv": "0"
+      },
+      "rfv_identity": {
+        "diff_wei": "0",
+        "state": "ok"
+      },
+      "sleeve_mark_stale": false,
+      "sleeve_state": "partial",
+      "sleeve_total_usd": "0",
+      "supply": "12.5",
+      "treasury_growth_pct": null,
+      "vault_interest": {
+        "amount": null,
+        "rate_ppm": null,
+        "state": "unavailable"
+      },
+      "vault_net_deposit": "0"
+    },
+    {
+      "epoch": 11,
+      "present": false
+    },
+    {
+      "backing_change_pct": "5.00",
+      "backing_per_token": "84",
+      "block": 300,
+      "block_time_utc": "2026-08-29T10:45:00Z",
+      "block_timestamp": 1788000300,
+      "buyback": {
+        "burned": "0",
+        "capacity": null,
+        "capacity_state": "absent",
+        "filled": null,
+        "filled_state": "no_onchain_source",
+        "repurchased": "0"
+      },
+      "deposit_haircut": "-0.10",
+      "dilution_pct": "3.600",
+      "emission_bond": "0.2",
+      "emission_issuance": null,
+      "emission_other": null,
+      "emission_rebase": "0.25",
+      "endpoint_kind": "public",
+      "epoch": 12,
+      "inflows": {
+        "bond": "90",
+        "unlabelled:0xBeEff033F34C046626B8D0A041844C5d1A5409dd": "5",
+        "unlabelled:0xaaa": "1",
+        "unlabelled:0xbbb": "2"
+      },
+      "internal_flows": {
+        "in": [
+          "unlabelled:0xBeEff033F34C046626B8D0A041844C5d1A5409dd"
+        ],
+        "out": []
+      },
+      "kind": "live",
+      "loopback": {
+        "state": "absent"
+      },
+      "lp_total_supply": null,
+      "lp_treasury_share_pct": null,
+      "outflows": {},
+      "pair_price": "1573.947868456616081762688816",
+      "premium_x": "18.73747462448352478288915257",
+      "present": true,
+      "reading_states": {
+        "NET.decimals": "ok",
+        "NET.totalSupply": "ok",
+        "Treasury.backingPerToken": "ok",
+        "Treasury.liquidUsdg": "ok",
+        "Treasury.morphoAssets": "ok",
+        "Treasury.polRfv": "ok",
+        "Treasury.rfv": "ok",
+        "USDG.decimals": "ok",
+        "pair.getReserves": "ok",
+        "pair.token0": "ok"
+      },
+      "residual": "116.90",
+      "rfv": "1210",
+      "rfv_components": {
+        "liquid_usdg": "1062",
+        "morpho_assets": "100",
+        "pol_rfv": "50",
+        "pol_rfv_delta": "50",
+        "sum": "1212",
+        "sum_minus_rfv": "2"
+      },
+      "rfv_identity": {
+        "diff_wei": "0",
+        "state": "ok"
+      },
+      "sleeve_mark_stale": false,
+      "sleeve_state": "partial",
+      "sleeve_total_usd": "0",
+      "supply": "13.5",
+      "treasury_growth_pct": "21.00",
+      "vault_interest": {
+        "amount": null,
+        "rate_ppm": null,
+        "state": "unavailable"
+      },
+      "vault_net_deposit": "-5"
+    },
+    {
+      "backing_change_pct": "2.380952380952380952380952381",
+      "backing_per_token": "86",
+      "block": 400,
+      "block_time_utc": "2026-08-29T10:46:40Z",
+      "block_timestamp": 1788000400,
+      "buyback": {
+        "burned": "0",
+        "capacity": null,
+        "capacity_state": "absent",
+        "filled": null,
+        "filled_state": "no_onchain_source",
+        "repurchased": "0"
+      },
+      "deposit_haircut": "0.00",
+      "dilution_pct": "0E+1",
+      "emission_bond": null,
+      "emission_issuance": null,
+      "emission_other": null,
+      "emission_rebase": null,
+      "endpoint_kind": "public",
+      "epoch": 13,
+      "inflows": {},
+      "internal_flows": {
+        "in": [],
+        "out": []
+      },
+      "kind": "live",
+      "loopback": {
+        "state": "absent"
+      },
+      "lp_total_supply": null,
+      "lp_treasury_share_pct": null,
+      "outflows": {
+        "unlabelled:0xddd": "3"
+      },
+      "pair_price": null,
+      "premium_x": null,
+      "present": true,
+      "reading_states": {
+        "NET.totalSupply": "ok",
+        "Treasury.backingPerToken": "ok",
+        "Treasury.liquidUsdg": "ok",
+        "Treasury.morphoAssets": "ok",
+        "Treasury.polRfv": "ok",
+        "Treasury.rfv": "ok"
+      },
+      "residual": "93.00",
+      "rfv": "1300",
+      "rfv_components": {
+        "liquid_usdg": "1150.04",
+        "morpho_assets": "102",
+        "pol_rfv": "50",
+        "pol_rfv_delta": "0",
+        "sum": "1302.04",
+        "sum_minus_rfv": "2.04"
+      },
+      "rfv_identity": {
+        "diff_wei": "0",
+        "state": "ok"
+      },
+      "sleeve_mark_stale": false,
+      "sleeve_state": "partial",
+      "sleeve_total_usd": "0",
+      "supply": "14",
+      "treasury_growth_pct": "7.438016528925619834710743802",
+      "vault_interest": {
+        "amount": "2",
+        "rate_ppm": "20000.00",
+        "state": "outside_envelope"
+      },
+      "vault_net_deposit": "0"
+    },
+    {
+      "backing_change_pct": "2.325581395348837209302325581",
+      "backing_per_token": "88",
+      "block": 500,
+      "block_time_utc": "2026-08-29T10:48:20Z",
+      "block_timestamp": 1788000500,
+      "buyback": {
+        "burned": "0",
+        "capacity": null,
+        "capacity_state": "absent",
+        "filled": null,
+        "filled_state": "no_onchain_source",
+        "repurchased": "0"
+      },
+      "deposit_haircut": "0.00",
+      "dilution_pct": "0",
+      "emission_bond": null,
+      "emission_issuance": null,
+      "emission_other": null,
+      "emission_rebase": null,
+      "endpoint_kind": "public",
+      "epoch": 14,
+      "inflows": {},
+      "internal_flows": {
+        "in": [],
+        "out": []
+      },
+      "kind": "live",
+      "loopback": {
+        "state": "absent"
+      },
+      "lp_total_supply": null,
+      "lp_treasury_share_pct": null,
+      "outflows": {},
+      "pair_price": "1573.947868456616081762688816",
+      "premium_x": "17.88577123246154638366691836",
+      "present": true,
+      "reading_states": {
+        "NET.decimals": "ok",
+        "NET.totalSupply": "ok",
+        "Treasury.backingPerToken": "ok",
+        "Treasury.liquidUsdg": "ok",
+        "Treasury.morphoAssets": "ok",
+        "Treasury.polRfv": "ok",
+        "Treasury.rfv": "ok",
+        "USDG.decimals": "ok",
+        "pair.getReserves": "ok",
+        "pair.token0": "ok"
+      },
+      "residual": "100.00",
+      "rfv": "1400",
+      "rfv_components": {
+        "liquid_usdg": "1248.081",
+        "morpho_assets": "104",
+        "pol_rfv": "50",
+        "pol_rfv_delta": "0",
+        "sum": "1402.081",
+        "sum_minus_rfv": "2.081"
+      },
+      "rfv_identity": {
+        "diff_wei": "-1000000000000000",
+        "state": "broken"
+      },
+      "sleeve_mark_stale": false,
+      "sleeve_state": "partial",
+      "sleeve_total_usd": "0",
+      "supply": "14.5",
+      "treasury_growth_pct": "7.692307692307692307692307692",
+      "vault_interest": {
+        "amount": "2",
+        "rate_ppm": "19607.84313725490196078431373",
+        "state": "outside_envelope"
+      },
+      "vault_net_deposit": "0"
+    }
+  ],
+  "seed": "dashboard_route_test.seed_golden"
+}

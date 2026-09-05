@@ -376,6 +376,18 @@ mkdir -p secret
 printf '%s' "$GITHUB_TOKEN_WITH_REPO_ACCESS" > secret/github_token
 ```
 
+Create the project monitor's store volume, once per machine:
+
+```bash
+docker volume create market-data-notification-backend_project_monitor_data
+```
+
+It is declared `external` so that `docker compose down -v` cannot delete the backfilled
+chain history it holds, and compose does not create external volumes itself. Compose
+validates every declared external volume before starting anything, so until this exists
+`docker compose up -d` fails for *all* services, redis and chrome included. The error
+names the volume.
+
 Start the local stack:
 
 ```bash

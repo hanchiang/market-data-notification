@@ -41,6 +41,44 @@ services:
       - redis_data:/data
     ports:
       - 6379:6379
+  project_monitor_postgres:
+    # The project monitor's OPERATOR store -- 133 backfilled epochs and every
+    # raw JSON-RPC response behind them. It also hosts `project_monitor_test`
+    # beside it (created by the init script below), because that is where
+    # `conftest.py` looks by default: one server, two databases, per
+    # `get_project_monitor_database_url`. The tmpfs Postgres in
+    # `docker-compose.test.yml` is the CI copy of the test database and is
+    # thrown away on every run -- a separate server, not this one.
+    #
+    # Port 55432, not 5432: it is what `get_project_monitor_database_url`
+    # defaults to, and holding the default off the standard port keeps this
+    # store from being the one a stray `psql` lands in.
+    #
+    # 16-alpine because the store was created by PostgreSQL 16.2 -- a dump
+    # restores across a major-version gap but the named volume below does not,
+    # so the pin is load-bearing rather than cosmetic.
+    image: postgres:16-alpine
+    container_name: project_monitor_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: project_monitor
+    ports:
+      # Bound to loopback explicitly. The bare "55432:5432" form publishes a
+      # password-`devpass` server on every interface the host has.
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - project_monitor_data:/var/lib/postgresql/data
+      # Runs only on an empty data directory, which is exactly right: it
+      # bootstraps the test database on a fresh machine and is inert on the
+      # existing volume, where that database already exists.
+      - ./scripts/project_monitor_initdb.sh:/docker-entrypoint-initdb.d/10-test-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d project_monitor"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
   chrome:
     # https://github.com/SeleniumHQ/docker-selenium
     image: selenium/standalone-chromium:145.0.7632.109-20260222
@@ -55,6 +93,21 @@ services:
 
 volumes:
   redis_data:
+  # Named, not a bind mount: the store must outlive the checkout, which is the
+  # lesson the chain-heat series taught when removing a worktree took 46 lines
+  # of it (`MARKET-DATA/kb/decisions.md`, 2026-08-30).
+  #
+  # `external` so `docker compose down -v` cannot take it. That flag is the
+  # normal clean-slate reflex for the other services in this file, and compose
+  # does not remove external volumes -- without it one habitual command deletes
+  # 133 backfilled epochs recoverable only by re-running a metered sweep. The
+  # explicit `name` is the project-prefixed one the volume already carries, so
+  # every worktree resolves to the same store rather than minting its own.
+  # Create once on a new machine:
+  #   docker volume create market-data-notification-backend_project_monitor_data
+  project_monitor_data:
+    external: true
+    name: market-data-notification-backend_project_monitor_data
 
 secrets:
   github_token:

@@ -1,7 +1,7 @@
 # Dockerfile
 
 # pull the official docker image
-FROM python:3.12-slim-bullseye AS base
+FROM python:3.12-slim-bookworm AS base
 
 ARG TARGETPLATFORM
 ARG TARGETARCH

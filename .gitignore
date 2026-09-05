@@ -242,3 +242,6 @@ my_readme.txt
 local-build-push-dockerfile.sh
 pinescript/
 sample-data/
+# Poetry is authoritative here (kb/decisions.md). Any `uv` invocation in this tree
+# recreates an empty uv.lock; ignoring it stops a second lock file returning silently.
+uv.lock

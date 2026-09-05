@@ -1,4 +1,6 @@
+import logging
 import os
+import re
 from pathlib import Path
 from typing import Tuple, List
 from urllib.parse import urlparse
@@ -7,6 +9,48 @@ from dotenv import load_dotenv
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 
 load_dotenv()
+
+# python-telegram-bot puts the bot token in the request URL, and httpx logs every
+# request URL at INFO -- so an unfiltered httpx writes `api.telegram.org/bot<TOKEN>`
+# into stocks.log, crypto.log and the container log, none of which rotate.
+# Ticket: MARKET-DATA docs/tickets/todo/2026-09-02-library-http-client-logs-request-credentials.md
+#
+# This lives at config import, not in each entrypoint, because
+# notification_destination/telegram_notification.py imports this module: no telegram
+# Bot can be constructed without this having already run. A per-entrypoint call would
+# be one forgotten line away from leaking again.
+#
+# Scrubbed at the LogRecord, not on one library's logger: the threat is token-shaped
+# text on any logger. A filter on `httpx` alone missed two routes -- PTB wraps httpx
+# errors as NetworkError(str(err)), which our senders log on their own logger, and
+# Bot.initialize() raises InvalidToken with the bare token, no `bot` prefix. Every
+# record from every logger passes through getMessage(), so this covers both, plus
+# httpcore at DEBUG, and raising a level for debugging cannot bring the secret back.
+# Not covered: a traceback rendered from exc_info (we log str(e), not exc_info) and an
+# uncaught exception printed by the interpreter.
+_TELEGRAM_BOT_TOKEN_IN_URL = re.compile(r'bot\d+:[A-Za-z0-9_-]+')
+# A bare token is <bot id>:<35 chars>; the length floors keep `12:34` timestamps out.
+_TELEGRAM_BOT_TOKEN_BARE = re.compile(r'(?<![A-Za-z0-9_-])\d{6,}:[A-Za-z0-9_-]{30,}')
+
+
+def _redact_telegram_bot_token(text: str) -> str:
+    text = _TELEGRAM_BOT_TOKEN_IN_URL.sub('bot<redacted>', text)
+    return _TELEGRAM_BOT_TOKEN_BARE.sub('<redacted-token>', text)
+
+
+class _RedactingLogRecord(logging.LogRecord):
+    # Identity marker for the install guard below. Not the class: a module reload
+    # (tests do it) makes a new class, and an `is` check against it would install a
+    # second factory per reload.
+    marker = 'redact-telegram-bot-token'
+
+    def getMessage(self) -> str:  # noqa: N802 -- stdlib override, name is not ours to choose
+        # %-args are applied here (httpx passes the URL as one), so scrub the result.
+        return _redact_telegram_bot_token(super().getMessage())
+
+
+if getattr(logging.getLogRecordFactory(), 'marker', None) != _RedactingLogRecord.marker:
+    logging.setLogRecordFactory(_RedactingLogRecord)
 
 def get_env():
     return os.getenv('ENV', 'dev')

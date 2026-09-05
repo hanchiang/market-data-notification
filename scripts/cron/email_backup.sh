@@ -2,6 +2,59 @@
 
 set -euo pipefail
 
+# The crontab fires this at both 20:05 and 21:05 UTC because only one of them is
+# 16:05 New York local, and which one flips with US daylight saving. On a
+# continuously-up host nothing else discards the wrong half: unlike the
+# notification jobs, this script has no delay tolerance.
+# BACKUP_LOCAL_HOUR and the crontab hours are one setting split across two files --
+# the cron line is installed by .github/workflows/deploy-email-backup-cron.yml.
+# Change one without the other and the failure is seasonal, not immediate: an hour
+# that matches in EST stops matching in EDT, so backups can run correctly for
+# months and then stop at a DST flip with no edit that day to blame.
+# The override is an exact match on the string "true" -- TRUE, True, 1 and yes all
+# leave the gate armed.
+# To run off-schedule by hand, prefix the invocation:
+#   EMAIL_BACKUP_IGNORE_SCHEDULE=true EMAIL_BACKUP_ENV_FILE=... /bin/bash email_backup.sh
+# Setting it inside the env file does not work -- that file is sourced below, after
+# this gate has already run.
+BACKUP_LOCAL_HOUR=16
+BACKUP_TZ="America/New_York"
+
+if [ "${EMAIL_BACKUP_IGNORE_SCHEDULE:-false}" != "true" ]; then
+    # Check the offset the zone actually produces, not that a file exists: glibc
+    # honours TZDIR, so absent tzdata, a hostile TZDIR or a typo yield a silent UTC
+    # with exit status 0. This compares the CURRENT offset and nothing else, so a
+    # warning proves the zone is wrong while silence proves only that the offset is
+    # plausible. Silence is usually harmless -- the hour below is read from the same
+    # zone at the same instant, so a zone merely sharing New York's offset shares its
+    # hour too. The bad case is a zone reading -0400/-0500 while New York is on the
+    # other: stale DST rules, or non-US transition dates, on the days they disagree.
+    #
+    # Fail OPEN, not closed, on an implausible offset. Skipping both runs would turn
+    # duplicate backups into no backups at all, silently and indefinitely. A duplicate
+    # is recoverable; a missing backup is not. Do not read this as "a duplicate gets
+    # noticed" -- 2026-08-26 to 09-01 went unnoticed, which is why this gate exists.
+    #
+    # Fail-open covers an implausible offset only. The bare assignments below take
+    # date's exit status, so under set -e a failing `date` aborts the whole script.
+    # Left as is: a host where date itself is broken has larger problems than a
+    # missed backup.
+    tz_offset=$(TZ="$BACKUP_TZ" date +%z)
+    if [ "$tz_offset" != "-0400" ] && [ "$tz_offset" != "-0500" ]; then
+        echo "WARNING: $BACKUP_TZ resolved to $tz_offset, not -0400/-0500; running ungated, expect a duplicate" >&2
+    else
+        # 10# forces base 10 -- an unpadded constant compared against a zero-padded
+        # %H would never match, and 08/09 are invalid octal, which aborts under set -e.
+        current_local_hour=$(TZ="$BACKUP_TZ" date +%H)
+        if [ "$((10#$current_local_hour))" -ne "$BACKUP_LOCAL_HOUR" ]; then
+            # Full date, not just the time: the log never rotates, so a bare clock
+            # time gives an operator no day boundary to count runs within.
+            echo "Skipping: $(date -u +%FT%H:%MZ) is local hour $current_local_hour, not $BACKUP_LOCAL_HOUR ($BACKUP_TZ)"
+            exit 0
+        fi
+    fi
+fi
+
 EMAIL_BACKUP_ENV_FILE=${EMAIL_BACKUP_ENV_FILE:-}
 REDIS_DATA_PATH="/var/lib/redis"
 REDIS_BACKUP_FILE_NAME="redis_backup_$(date "+%Y-%m-%dT%H:%M:%S%:z").zip"

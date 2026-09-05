@@ -20,7 +20,7 @@
       "emission_bond": null,
       "emission_issuance": null,
       "emission_other": null,
-      "emission_rebase": null,
+      "emission_rebase": "0.111",
       "endpoint_kind": "public",
       "epoch": 10,
       "inflows": {},
@@ -103,7 +103,7 @@
       "endpoint_kind": "public",
       "epoch": 12,
       "inflows": {
-        "bond": "90",
+        "bond": "97",
         "unlabelled:0xBeEff033F34C046626B8D0A041844C5d1A5409dd": "5",
         "unlabelled:0xaaa": "1",
         "unlabelled:0xbbb": "2"
@@ -136,7 +136,7 @@
         "pair.getReserves": "ok",
         "pair.token0": "ok"
       },
-      "residual": "116.90",
+      "residual": "109.90",
       "rfv": "1210",
       "rfv_components": {
         "liquid_usdg": "1062",
@@ -257,7 +257,9 @@
       "emission_rebase": null,
       "endpoint_kind": "public",
       "epoch": 14,
-      "inflows": {},
+      "inflows": {
+        "bond": "8"
+      },
       "internal_flows": {
         "in": [],
         "out": []
@@ -284,7 +286,7 @@
         "pair.getReserves": "ok",
         "pair.token0": "ok"
       },
-      "residual": "100.00",
+      "residual": "92.00",
       "rfv": "1400",
       "rfv_components": {
         "liquid_usdg": "1248.081",

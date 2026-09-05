@@ -26,7 +26,19 @@ DEFAULT_PORT = 8765
 
 
 def build_app() -> FastAPI:
-    app = FastAPI(title='NETNET treasury dashboard')
+    # No `/docs`, `/redoc` or `/openapi.json`. FastAPI mounts them by default,
+    # and both pages load Swagger UI or ReDoc from cdn.jsdelivr.net -- ReDoc
+    # also fonts from Google. The requirement's Local-first constraint is that
+    # opening this server sends nothing anywhere, and it is about the server,
+    # not about index.html: the operator opening `/docs` on a FastAPI app is a
+    # normal thing to do. There is no API to document here anyway -- one JSON
+    # route for one page.
+    app = FastAPI(
+        title='NETNET treasury dashboard',
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     app.middleware('http')(dashboard.loopback_only)
     app.include_router(dashboard.router)
     return app

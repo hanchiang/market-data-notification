@@ -162,8 +162,10 @@ def seed_golden(repository):
 
     Deliberately broad, because the baseline is only as strong as the row
     surface it covers: a gap row, a haircut epoch with mints and every inflow
-    bucket shape, an epoch with no pair readings (null price), and an epoch
-    whose rfv() identity is broken. Public rather than `_`-prefixed because
+    bucket shape, an epoch with no pair readings (null price), an epoch whose
+    rfv() identity is broken, and -- added in test round 2 -- rows sitting
+    exactly ON three closing blocks, which is the only way the `(previous,
+    close]` window boundary is at stake at all. Public rather than `_`-prefixed because
     `scripts/capture_dashboard_row_baseline.py` imports it -- the baseline and
     the test have to seed the same store or the comparison means nothing.
 
@@ -188,6 +190,13 @@ def seed_golden(repository):
          'recipient': '0x1', 'amount': 250_000_000, 'decimals': 9, 'class': 'rebase'},
         {'project': PROJECT, 'block': 260, 'tx_hash': '0xb', 'log_index': 1,
          'recipient': '0x2', 'amount': 200_000_000, 'decimals': 9, 'class': 'bond'},
+        # ON epoch 10's closing block. An epoch's window is `(previous, close]`,
+        # so this mint belongs to epoch 10 and to nothing else; widening the low
+        # bound to include it would ALSO count it in epoch 12, silently doubling
+        # an emission figure. Nothing pins that boundary unless a row sits
+        # exactly on it.
+        {'project': PROJECT, 'block': 100, 'tx_hash': '0xc', 'log_index': 1,
+         'recipient': '0x3', 'amount': 111_000_000, 'decimals': 9, 'class': 'rebase'},
     ])
     repository.insert_flows([
         {'project': PROJECT, 'block': 250, 'tx_hash': '0xb', 'log_index': 2,
@@ -205,6 +214,16 @@ def seed_golden(repository):
         {'project': PROJECT, 'block': 350, 'tx_hash': '0xo1', 'log_index': 1,
          'direction': 'out', 'counterparty': '0xddd', 'amount': 3_000_000,
          'decimals': 6, 'label': 'unlabelled', 'rule': 'unlabelled'},
+        # ON epoch 12's and epoch 14's closing blocks, for the other half of the
+        # boundary: narrowing the high bound would drop these two inflows out of
+        # every epoch, and a treasury inflow that belongs to no epoch is
+        # invisible rather than misplaced.
+        {'project': PROJECT, 'block': 300, 'tx_hash': '0xb2', 'log_index': 1,
+         'direction': 'in', 'counterparty': '0x9', 'amount': 7_000_000,
+         'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated'},
+        {'project': PROJECT, 'block': 500, 'tx_hash': '0xb3', 'log_index': 1,
+         'direction': 'in', 'counterparty': '0x9', 'amount': 8_000_000,
+         'decimals': 6, 'label': 'bond', 'rule': 'bond:BondCreated'},
     ])
     repository.commit()
     return run_id
@@ -407,6 +426,19 @@ def test_the_page_marks_a_disagreeing_epoch_with_its_own_point_style():
     assert "'disagree' ? 'rectRot'" in PAGE.read_text()
 
 
+def test_the_page_takes_the_epoch_s_sign_from_the_backing_change():
+    """AC-D4's other half: the sign shown per epoch is the sign of
+    `backing_change_pct`, which is the identity G5's table asserts. Taking it
+    from `growth_minus_dilution_pct` instead would make the disagreement
+    marker tautological -- the two would agree by construction, and the one
+    shape on this view worth spotting would never appear."""
+    page = PAGE.read_text()
+    d2 = page[page.index('function configD2'):page.index('function configD3')]
+    assert 'charts.d2.backing_change_pct.map(signColour)' in d2
+    assert 'signWord(charts.d2.backing_change_pct[i])' in d2
+    assert 'signColour(charts.d2.growth_minus_dilution_pct' not in page
+
+
 # -- AC-D5: buckets from data ----------------------------------------------
 
 
@@ -478,6 +510,17 @@ def test_the_page_stacks_d3(repository):
     page = PAGE.read_text()
     d3 = page[page.index('function configD3'):page.index('function rawOrNa')]
     assert d3.count('stacked: true') == 2
+
+
+def test_the_page_labels_an_internal_bucket_internal():
+    """AC-D5's last clause, the configuration half. The mapping half
+    (`inflows_chart.internal` surviving the fold) is tested above; this is the
+    literal that puts the marker in front of the operator, and an internal flow
+    drawn as an ordinary inflow is exactly what the marker exists to prevent."""
+    page = PAGE.read_text()
+    d3 = page[page.index('function configD3'):page.index('function rawOrNa')]
+    assert 'charts.d3.internal[item.dataIndex]' in d3
+    assert "' (internal)'" in d3
 
 
 # -- AC-D6: traceable point ------------------------------------------------
@@ -588,6 +631,19 @@ def test_freshness_is_not_stale_just_under_the_threshold():
 def test_freshness_is_stale_just_over_the_threshold():
     now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
     assert freshness(_rows_closed_hours_ago(now, 16, 1), now)['stale'] is True
+
+
+def test_exactly_the_threshold_is_not_yet_stale():
+    """The requirement says stale at "more than 16 hours", so 16:00 is fresh.
+
+    Not a measure-zero point: `age_hours` is quantised to 0.01, which makes the
+    equal case a real 36-second window, and `>` vs `>=` is a one-character
+    difference nothing else in the suite notices.
+    """
+    now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
+    state = freshness(_rows_closed_hours_ago(now, 16, 0), now)
+    assert state['age_hours'] == STALE_AFTER_HOURS
+    assert state['stale'] is False
 
 
 def test_an_empty_store_is_stale_not_fresh():
@@ -1005,20 +1061,39 @@ def test_the_entrypoint_binds_loopback_and_offers_no_host_flag():
 
 
 def test_the_dashboard_app_carries_only_the_read_routes_and_no_startup_hook():
-    """DQ1's answer, pinned. The reason this is a second entrypoint rather than
-    a route on `src/server.py` is that the main app's startup builds the
-    Telegram bots and the Redis client and binds `0.0.0.0`. Including this
-    router there, or copying a startup handler in, would put those credentials
-    back on a path that needs none of them."""
+    """DQ1's answer, pinned, over EVERY route the app mounts.
+
+    The reason this is a second entrypoint rather than a route on
+    `src/server.py` is that the main app's startup builds the Telegram bots and
+    the Redis client and binds `0.0.0.0`. Including this router there, or
+    copying a startup handler in, would put those credentials back on a path
+    that needs none of them.
+
+    Asserted on the whole route set rather than the `/project-monitor` prefix
+    because FastAPI mounts `/docs`, `/redoc` and `/openapi.json` by default, and
+    those pages load script, style and fonts from three external hosts. A prefix
+    filter here would have declared the app local-only while the server offered
+    a page that reaches the network -- which is what test round 1 did, until the
+    reviewer listed the routes.
+    """
     app = build_app()
-    paths = {route.path for route in app.routes if route.path.startswith('/project-monitor')}
-    assert paths == {
+    assert {route.path for route in app.routes} == {
         '/project-monitor/',
         '/project-monitor/static/chart.umd.js',
         '/project-monitor/netnet/report',
     }
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []
+
+
+@pytest.mark.parametrize('path', ['/docs', '/redoc', '/openapi.json'])
+def test_the_generated_api_pages_are_not_served(repository, client, path):
+    """AC-D10 in the shape the page scan cannot see. `/docs` pulls Swagger UI
+    from `cdn.jsdelivr.net` and `/redoc` also pulls fonts from Google; the AC-D10
+    scan reads `index.html` only, so an egress on a sibling route of the same
+    server is invisible to it. The requirement's Local-first constraint is about
+    the server, not about one file."""
+    assert client.get(path).status_code == 404
 
 
 def test_test_mode_selects_the_test_database(monkeypatch, repository):

@@ -1,0 +1,58 @@
+{
+  "chains": [
+    {
+      "chain_id": 4663,
+      "key": "robinhood",
+      "display_name": "Robinhood Chain",
+      "dexscreener_slug": "robinhood",
+      "explorer_api": "https://robinhoodchain.blockscout.com/api/v2/",
+      "uniswap": {
+        "v3_factory": "0x1f7d7550b1b028f7571e69a784071f0205fd2efa",
+        "v3_position_manager": "0x73991a25c818bf1f1128deaab1492d45638de0d3",
+        "v4_pool_manager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+        "v4_position_manager": "0x58daec3116aae6d93017baaea7749052e8a04fa7",
+        "v4_state_view": "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b"
+      },
+      "lockers": []
+    }
+  ],
+  "projects": [
+    {
+      "key": "touch-grass",
+      "display_name": "Touch Grass",
+      "chain_id": 4663,
+      "archetype": "launchpad-fixed-supply",
+      "pool_ref": "0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77",
+      "sources": [
+        {"class": "web", "url": "https://www.touchgrass.family"},
+        {"class": "web", "url": "https://www.touchgrass.family/app"},
+        {"class": "web", "url": "https://www.touchgrass.family/docs"},
+        {"class": "x", "url": "https://x.com/TouchGrassRWA"}
+      ]
+    },
+    {
+      "key": "not-a-website",
+      "display_name": "Not A Website",
+      "chain_id": 4663,
+      "archetype": "launchpad-fixed-supply",
+      "pool_ref": "0x6d489e07d7fe2b4bc5749f75d56337888b68a34a",
+      "sources": []
+    },
+    {
+      "key": "predict-fwa",
+      "display_name": "Predict FWA",
+      "chain_id": 4663,
+      "archetype": "launchpad-fixed-supply",
+      "pool_ref": "0x5313a71595178721e1d58fd4cb459e4981aae441",
+      "sources": []
+    },
+    {
+      "key": "zzz",
+      "display_name": "ZZZ",
+      "chain_id": 4663,
+      "archetype": "launchpad-fixed-supply",
+      "pool_ref": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
+      "sources": []
+    }
+  ]
+}

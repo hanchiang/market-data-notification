@@ -239,6 +239,15 @@ def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
     return UNRECOGNISED
 
 
+# One wording for both suppression paths -- the flag caught here before the bot
+# init, and a send the sender withheld -- because to the operator reading the log
+# they are the same event and should grep as one.
+_SUPPRESSED = (
+    'onchain run alert was suppressed by the sender (DISABLE_TELEGRAM); '
+    'the run row still holds the record'
+)
+
+
 async def send_run_alert(
     run_id: Optional[int], job: str, failed_units: Sequence[Any]
 ) -> bool:
@@ -250,15 +259,28 @@ async def send_run_alert(
     bot map `send_message_to_admin` indexes, so it has to run first or the alert
     path raises KeyError and swallows itself.
 
-    `DISABLE_TELEGRAM` is honoured by the sender, not here. A suppressed send
-    comes back as None, and that is logged rather than returned silently: an
+    `DISABLE_TELEGRAM` is honoured by the sender for the SEND. The check below
+    is not a second copy of that: it guards the INIT. `init_telegram_bots()`
+    raises when credentials are absent, and the environment the flag targets is
+    usually exactly that one -- a local or CI process with no bot token -- so
+    without it a disabled run reports "alert could not be sent" where the
+    operator should read "alert suppressed". The monitor's `_alert` does not
+    need this because `main()` wraps its own `init_telegram_bots()` in
+    try/except; this job has no such entrypoint step.
+
+    A send the sender suppresses comes back as None, and that is logged too: an
     operator reading this job's log must be able to tell an alert that was
     withheld from a run that never tried to alert.
     """
     try:
+        from src.config.config import get_disable_telegram
         from src.notification_destination import telegram_notification
         from src.type.market_data_type import MarketDataType
         from src.util.my_telegram import escape_markdown
+
+        if get_disable_telegram():
+            logger.info(_SUPPRESSED)
+            return False
 
         telegram_notification.init_telegram_bots()
         # Resolved through the module rather than imported by name so a test
@@ -268,10 +290,7 @@ async def send_run_alert(
             MarketDataType.CRYPTO,
         )
         if delivered is None:
-            logger.info(
-                'onchain run alert was suppressed by the sender '
-                '(DISABLE_TELEGRAM); the run row still holds the record'
-            )
+            logger.info(_SUPPRESSED)
             return False
         return True
     except Exception:

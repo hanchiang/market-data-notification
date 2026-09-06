@@ -173,13 +173,27 @@ async def test_send_message_to_admin_is_disabled_by_the_flag(monkeypatch, caplog
     that every caller inherits it instead of two jobs carrying private copies.
 
     The check has to precede the client lookup, not just the send: a disabled
-    process is one that never initialised its bots, and a lookup-then-check
-    order would raise KeyError there instead of returning quietly. The empty
-    client map below is exactly that process.
+    process is normally one that never initialised its bots, and a
+    lookup-then-check order would raise KeyError there instead of returning
+    quietly. That ordering is pinned by the job-level suppression tests, which
+    run this sender against an unpopulated map; here the map IS populated, so
+    that the "nothing was sent" assertion has something it could catch.
     """
     crypto_admin_client = AsyncMock()
     crypto_admin_client.send_message = AsyncMock()
-    monkeypatch.setattr(telegram_notification, 'chat_id_to_telegram_client', {})
+    # Registered under the id the sender actually resolves, so `assert_not_awaited`
+    # below can fail: with an empty map the mock is unreachable and the assertion
+    # would hold under any mutation, including the guard being deleted.
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {'crypto-admin-chat': crypto_admin_client},
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-admin-chat',
+    )
     monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
 
     with caplog.at_level(logging.INFO):

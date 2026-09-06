@@ -426,30 +426,28 @@ class TestAlertBoundary:
         ]
         assert lines and lines[0]['exc_class'] == 'RuntimeError'
 
-    def test_the_alert_is_suppressed_when_telegram_is_disabled(
+    def test_a_disabled_run_reports_suppression_even_with_no_credentials(
         self, job_log, monkeypatch
     ):
-        """`DISABLE_TELEGRAM` is the operator's explicit switch, honoured inside
-        `send_message_to_admin` since 2026-09-06 rather than at each call site.
+        """The environment `DISABLE_TELEGRAM` actually targets is usually one
+        with no bot token at all, and `init_telegram_bots()` raises there. If the
+        flag were only checked by the sender, the init would raise first, the
+        broad except would catch it, and the operator would read "alert could not
+        be sent" for a run whose alert was deliberately withheld -- a real
+        failure and a suppression telling the same story.
 
-        So the REAL sender runs here -- only `init_telegram_bots` is stubbed.
-        That is safe and is the point: the sender's check precedes its client
-        lookup, so a disabled process needs no bots and can reach no network. If
-        the check were removed, the empty client map raises KeyError, the alert
-        path swallows it, and both assertions below go red for that reason.
-
-        What is asserted is what the code now guarantees -- no message is SENT --
-        and not the old call-site property that no bot is built. Bot construction
-        does no I/O (`telegram.Bot.__init__` only builds `HTTPXRequest`
-        objects), so it was never the property worth pinning.
+        So the stub raises the way the real init does, rather than being a
+        harmless recorder that could never expose the ordering.
         """
         import src.notification_destination.telegram_notification as telegram_notification
         import src.service.onchain.observability as obs
 
-        built = []
+        def no_credentials():
+            raise RuntimeError('telegram stocks bot token is missing')
+
         monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
         monkeypatch.setattr(
-            telegram_notification, 'init_telegram_bots', lambda: built.append('init')
+            telegram_notification, 'init_telegram_bots', no_credentials
         )
 
         async def run():
@@ -458,9 +456,40 @@ class TestAlertBoundary:
 
         assert asyncio.run(run()) is False
         messages = [line['message'] for line in _read_lines(job_log)]
-        # The suppression is observable in THIS job's log: an operator must be
-        # able to tell a withheld alert from a run that never tried to alert.
         assert any('suppressed by the sender' in message for message in messages)
-        # And it was suppressed, not failed: no exception reached the handler.
         assert not any('could not be sent' in message for message in messages)
-        assert built == ['init']
+
+    def test_a_send_the_sender_withholds_is_reported_as_suppressed(
+        self, job_log, monkeypatch
+    ):
+        """The other half: the flag is off here, so the job hands the message to
+        the sender, and the sender is the one that withholds it -- which it
+        reports by returning None instead of a Message. The job must read that
+        as suppression rather than delivery, or `send_run_alert` returns True for
+        an alert nobody received.
+
+        What is asserted is what the code guarantees -- no message is SENT -- and
+        not the old call-site property that no bot is built. Bot construction
+        does no I/O (`telegram.Bot.__init__` only builds `HTTPXRequest`
+        objects), so it was never the property worth pinning.
+        """
+        import src.notification_destination.telegram_notification as telegram_notification
+        import src.service.onchain.observability as obs
+
+        async def withhold(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+        monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
+        monkeypatch.setattr(
+            telegram_notification, 'send_message_to_admin', withhold
+        )
+
+        async def run():
+            with run_context(7, 'onchain.build'):
+                return await obs.send_run_alert(7, 'onchain.build', [])
+
+        assert asyncio.run(run()) is False
+        messages = [line['message'] for line in _read_lines(job_log)]
+        assert any('suppressed by the sender' in message for message in messages)
+        assert not any('could not be sent' in message for message in messages)

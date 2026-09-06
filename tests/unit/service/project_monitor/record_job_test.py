@@ -23,7 +23,13 @@ from src.notification_destination.telegram_notification import (
 from src.service.project_monitor.config import NETNET
 
 
-def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch):
+# What `send_message_to_admin` returns on a delivered send: any non-None value.
+# `None` is reserved for a send the sender withheld under DISABLE_TELEGRAM, and
+# both jobs branch on exactly that.
+_DELIVERED = object()
+
+
+def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch, caplog):
     """The operator asked for alerts so failures are not swallowed; the payload
     is deliberately run id + class name only, because an exception's MESSAGE can
     carry the keyed URL and this send is not on the redacting path."""
@@ -31,18 +37,28 @@ def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch):
 
     async def fake_send(message, market_data_type):
         sent.append((message, market_data_type))
+        # A stand-in for the Message the real sender returns. None is how it
+        # reports a send it withheld, so a recorder returning None would drive
+        # `_alert` down the suppressed branch while this test believed it had
+        # asserted a delivery.
+        return _DELIVERED
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
-    # Pinned, not inherited: `_alert` returns early when DISABLE_TELEGRAM is set,
-    # so a developer running with the flag on would see this test pass for the
-    # wrong reason. The stub above -- not the flag -- is what keeps it off the wire.
+    # Pinned, not inherited. The stub -- not the flag -- is what keeps this off
+    # the wire; the pin is here so the test reads the same in an environment
+    # that sets the flag, since `send_message_to_admin` is the authority now and
+    # a future test that stops stubbing it would silently stop asserting.
     monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
-    asyncio.run(
-        record_job._alert(
-            run_id=7, error_class='EvmRateLimitError', endpoint_kind='alchemy'
+    with caplog.at_level(logging.INFO, logger='Project monitor record'):
+        asyncio.run(
+            record_job._alert(
+                run_id=7, error_class='EvmRateLimitError', endpoint_kind='alchemy'
+            )
         )
-    )
 
+    # Delivered, and logged as delivered: a recorder returning None would put a
+    # suppression line here for a message the list below records as sent.
+    assert 'suppressed by the sender' not in caplog.text
     assert len(sent) == 1
     message, _ = sent[0]
     assert 'EvmRateLimitError' in message
@@ -448,14 +464,16 @@ def _patch_entrypoint(monkeypatch, repository, database_url):
         record_job, 'get_project_monitor_database_url', lambda mode: database_url
     )
     monkeypatch.setattr(record_job, 'init_telegram_bots', lambda: None)
-    # Pinned so the returned `sent` list means what its callers assert about it:
-    # with DISABLE_TELEGRAM on, `_alert` returns before the stub and every
-    # "an alert was sent" assertion would pass vacuously.
+    # Pinned so this reads the same in an environment that sets the flag. The
+    # stub below is what keeps it off the wire.
     monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
     sent = []
 
     async def fake_send(message, market_data_type):
         sent.append(message)
+        # See `_DELIVERED`: returning None would make `_alert` log a suppression
+        # for a message this list records as delivered.
+        return _DELIVERED
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
     return sent

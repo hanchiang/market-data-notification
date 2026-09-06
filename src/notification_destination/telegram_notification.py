@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 
 import telegram
 import src.config.config as config
@@ -142,18 +142,18 @@ async def send_message_to_channel(
         except Exception as fallback_error:
             logger.error(get_exception_message(fallback_error))
 
-async def send_message_to_admin(message: str, market_data_type: MarketDataType):
-    # The operator's global off switch, checked here rather than at each caller.
-    # It used to be absent from this one sender while both public senders had
-    # it, so two jobs grew private copies of the check and the other three
-    # callers kept posting to the live admin chat with the flag on. Ruled by the
-    # operator on 2026-09-06: one check, in the sender, accepting that the crypto
-    # digest, the crypto signal digest and the event emitter are silenced too.
-    #
+async def send_message_to_admin(
+    message: str, market_data_type: MarketDataType
+) -> Optional[telegram.Message]:
+    """Send to the admin chat. None means DISABLE_TELEGRAM withheld the send.
+
+    A delivered message -- including one delivered by the error fallback below --
+    always comes back, so `is None` is the callers' test for suppression and
+    every other path must keep returning the Message.
+    """
     # Before the client lookup, so a disabled process needs no initialised bots
-    # and can reach no network at all. Returning None (rather than a Message) is
-    # how a caller distinguishes "suppressed" from "delivered" -- both jobs' run
-    # alerts log that distinction.
+    # and can reach no network at all -- which is the state that process is
+    # normally in.
     if config.get_disable_telegram():
         logger.info('Telegram is disabled')
         return None

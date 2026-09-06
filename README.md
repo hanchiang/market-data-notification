@@ -165,6 +165,14 @@ CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL=1hour
 # Historical window to request; intraday intervals are capped by retained datapoints.
 CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS=30
 
+# Mutes user-facing Telegram output only. A deployed secret in production.
+DISABLE_TELEGRAM=false
+# Mutes admin and error alerts, and only those. Defaults to false because an
+# alert channel fails safe by firing, so a failing local job does reach the
+# admin chat. Set it true only if you do not want that. The pytest session
+# already defaults it true, so tests cannot post to the real chat.
+DISABLE_TELEGRAM_ADMIN=false
+
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
 CNN_PAGE_LOAD_TIMEOUT_SECONDS=45

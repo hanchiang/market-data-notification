@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from src.notification_destination.telegram_notification import send_message_to_channel, \
-    market_data_type_to_admin_chat_id, market_data_type_to_chat_id
+    send_message_to_admin, market_data_type_to_chat_id
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.util.exception import get_exception_message
 from src.util.my_telegram import format_messages_to_telegram
@@ -34,9 +34,20 @@ class MessageSenderWrapper(ABC):
             logger.error(get_exception_message(e, cls=self.__class__.__name__))
             messages = [f"{get_exception_message(e, cls=self.__class__.__name__, should_escape_markdown=True)}"]
             message = format_messages_to_telegram(messages)
-            await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
-                                          market_data_type=self.market_data_type,
-                                          runtime_mode=self.runtime_mode)
+            # `send_message_to_admin`, not `send_message_to_channel`: this handler
+            # swallows the exception and returns None, so this alert is the only
+            # notice the failure ever gets. `DISABLE_TELEGRAM` is a deployed
+            # secret and must not be able to silence it.
+            try:
+                await send_message_to_admin(message=message,
+                                            market_data_type=self.market_data_type,
+                                            runtime_mode=self.runtime_mode)
+            except Exception as alert_error:
+                # A dead Telegram must not replace the failure being reported.
+                logger.error(
+                    'failed to alert the admin: '
+                    f'{get_exception_message(alert_error, cls=self.__class__.__name__)}'
+                )
             return None
 
     @abstractmethod

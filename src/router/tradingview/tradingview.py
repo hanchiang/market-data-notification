@@ -40,7 +40,7 @@ async def tradingview_daily_stocks_data(request: Request):
         logger.error(get_exception_message(e))
         messages.append(f"JSON body error: {get_exception_message(e, should_escape_markdown=True)}")
         message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+        async_ee.emit('send_alert_to_telegram', message=message, market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
 
     request_test_mode = body.get('test_mode', 'false') == 'true'
@@ -52,9 +52,8 @@ async def tradingview_daily_stocks_data(request: Request):
             f'{format_tradingview_alert_context(filtered_body)}'
         )
         async_ee.emit(
-            'send_to_telegram',
+            'send_alert_to_telegram',
             message=format_messages_to_telegram(messages),
-            channel=config.get_telegram_stocks_admin_id(),
             market_data_type=MarketDataType.STOCKS,
         )
         return {"data": None}
@@ -63,7 +62,7 @@ async def tradingview_daily_stocks_data(request: Request):
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Incorrect tradingview webhook secret{escape_markdown('.')}*\n*Request ip:* {escape_markdown(request.client.host)}\n{format_tradingview_alert_context(filtered_body)}")
         message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+        async_ee.emit('send_alert_to_telegram', message=message, market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
 
     trading_view_ips = config.get_trading_view_ips()
@@ -72,31 +71,57 @@ async def tradingview_daily_stocks_data(request: Request):
         messages.append(
             f"*[Potential malicious request warning]‼️*\n*Request ip {escape_markdown(request.client.host)} is not from a configured TradingView source or whitelist{escape_markdown('.')}*\n{format_tradingview_alert_context(filtered_body)}")
         message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=message, channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+        async_ee.emit('send_alert_to_telegram', message=message, market_data_type=MarketDataType.STOCKS)
         return {"data": "OK"}
 
-    tradingview_service = Dependencies.get_tradingview_service()
-    # Save to redis
     now = get_current_date()
-    key = tradingview_service.get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
     json_data = {}
-    timestamp = get_tradingview_score(filtered_body, fallback=now)
-    [add_res, remove_res] = await tradingview_service.save_tradingview_data(
-        data=json.dumps(filtered_body),
-        key=key,
-        score=timestamp,
-        test_mode=request_test_mode,
-    )
+    # The guard covers everything from resolving the service to the save, not
+    # the save alone: `TradingViewDataType(...)` raises on an unrecognised
+    # `type`, which a hand-edited alert template supplies, and that failure
+    # loses the payload exactly like a dead Redis does.
+    try:
+        tradingview_service = Dependencies.get_tradingview_service()
+        key = tradingview_service.get_redis_key_for_stocks(type=TradingViewDataType(filtered_body.get('type')))
+        timestamp = get_tradingview_score(filtered_body, fallback=now)
+        [add_res, remove_res] = await tradingview_service.save_tradingview_data(
+            data=json.dumps(filtered_body),
+            key=key,
+            score=timestamp,
+            test_mode=request_test_mode,
+        )
+    except Exception as e:
+        # The webhook is fire-and-forget, so a failed save loses the payload for
+        # good, and until 2026-09-06 nothing told the operator: it returned 500
+        # with a log line on a box nobody watches.
+        logger.error(get_exception_message(e))
+        async_ee.emit(
+            'send_alert_to_telegram',
+            message=format_messages_to_telegram(
+                [
+                    f'*Failed to save TradingView data{escape_markdown(".")}* '
+                    f'The payload is lost{escape_markdown(".")}\n'
+                    f'{get_exception_message(e, should_escape_markdown=True)}\n'
+                    f'{format_tradingview_alert_context(filtered_body)}'
+                ]
+            ),
+            market_data_type=MarketDataType.STOCKS,
+        )
+        # Still a 500: the alert is for the operator, and external monitoring
+        # reads the status code.
+        raise
 
     if add_res == 0 and remove_res == 0:
         messages.append(f'trading view data for {now}, score: *{timestamp}* already exist. skip saving to redis')
         message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+        # Idempotency chatter, not an alarm: a notice so DISABLE_TELEGRAM can
+        # quiet it without also silencing the warnings above.
+        async_ee.emit('send_notice_to_telegram', message=escape_markdown(message), market_data_type=MarketDataType.STOCKS)
         return {"data": None}
     if add_res == 0:
         messages.append(f'0 element is added for *{now}*, score: *{timestamp}*. Please check redis')
         message = format_messages_to_telegram(messages)
-        async_ee.emit('send_to_telegram', message=escape_markdown(message), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+        async_ee.emit('send_alert_to_telegram', message=escape_markdown(message), market_data_type=MarketDataType.STOCKS)
         return {"data": None}
     if remove_res > 0:
         messages.append(f'*{remove_res}* elements of type *{escape_markdown(filtered_body.get("type"))}* is removed from redis, maximum number of records to store in redis: *{config.get_trading_view_days_to_store()}*')
@@ -106,7 +131,8 @@ async def tradingview_daily_stocks_data(request: Request):
     logger.info(f'Successfully saved trading view data for {str(now)}, key: {key}, score: {timestamp}, days to store: {config.get_trading_view_days_to_store()}, data: {json_data}')
     # sleep for a bit, telegram client will timeout if concurrent requests come in
     # await sleep()
-    async_ee.emit('send_to_telegram', message=format_messages_to_telegram(messages), channel=config.get_telegram_stocks_admin_id(), market_data_type=MarketDataType.STOCKS)
+    # The success path. A notice, not an alarm.
+    async_ee.emit('send_notice_to_telegram', message=format_messages_to_telegram(messages), market_data_type=MarketDataType.STOCKS)
     return {
         'data': {
             'num_added': add_res,

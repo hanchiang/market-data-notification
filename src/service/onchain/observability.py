@@ -38,6 +38,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
+from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain.config import (  # noqa: F401  (forces the redacting factory)
     LOG_RETENTION_DAYS,
     get_log_dir,
@@ -251,7 +252,10 @@ _SUPPRESSED = (
 
 
 async def send_run_alert(
-    run_id: Optional[int], job: str, failed_units: Sequence[Any]
+    run_id: Optional[int],
+    job: str,
+    failed_units: Sequence[Any],
+    runtime_mode: Optional[RuntimeMode] = None,
 ) -> bool:
     """One admin-chat message per job per run. Returns whether it was DELIVERED.
 
@@ -289,9 +293,12 @@ async def send_run_alert(
         telegram_notification.init_telegram_bots()
         # Resolved through the module rather than imported by name so a test
         # can stub the transport without the send having already been bound.
+        # Threaded through so a `--test_mode 1` entrypoint alerts the dev
+        # channel; without it the run posts to the live crypto admin chat.
         delivered = await telegram_notification.send_message_to_admin(
             escape_markdown(format_alert(run_id, job, failed_units)),
             MarketDataType.CRYPTO,
+            runtime_mode=runtime_mode,
         )
         if delivered is None:
             logger.info(_SUPPRESSED)

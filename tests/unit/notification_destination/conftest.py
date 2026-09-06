@@ -1,7 +1,7 @@
 """Restore the telegram module's global maps around every test in this package.
 
-`init_telegram_bots()` mutates `chat_id_to_telegram_client` and the two
-`market_data_type_to_*` maps IN PLACE, and rebinds six bot globals.
+`init_telegram_bots()` mutates `chat_id_to_telegram_client` and
+`market_data_type_to_chat_id` IN PLACE, and rebinds six bot globals.
 `monkeypatch.setattr` undoes a rebinding it performed, not either of these, so a
 test that calls the real init leaves both behind for the rest of the session --
 and any later test reaching a real sender would find a live-looking client under
@@ -19,7 +19,6 @@ from src.notification_destination import telegram_notification
 # Mutated in place, so restoring means clear()/update(), not setattr.
 _GLOBAL_MAPS = (
     'chat_id_to_telegram_client',
-    'market_data_type_to_admin_chat_id',
     'market_data_type_to_chat_id',
 )
 # Rebound by `init_telegram_bots`, so plain attributes restore them.

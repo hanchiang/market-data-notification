@@ -8,17 +8,16 @@ services:
         - source: github_token
           mode: 0600
     working_dir: /app
+    # Tracked, contrary to what the comment below claimed until 2026-09-06
+    # (`.gitignore` lists `.env`, which does not match it). It holds dummy
+    # values and is meant to stay tracked: CI loads it straight off a bare
+    # checkout. One reader took "untracked" at face value and staged its
+    # deletion, which would have failed `unit_tests` at container start.
     env_file: .env.test
     environment:
       # Set here rather than in `.env.test`: the host is the compose service
       # name, which resolves only inside this network. That is the point, since
       # CI runs pytest in the `backend` container.
-      # `.env.test` is tracked, contrary to what this comment claimed until
-      # 2026-09-06 (`.gitignore` lists `.env`, which does not match it). It
-      # holds dummy values and is meant to stay tracked: CI loads it via the
-      # `env_file` above straight off a bare checkout. One reader took
-      # "untracked" at face value and staged its deletion, which would have
-      # failed the `unit_tests` job at container start.
       PROJECT_MONITOR_TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/project_monitor_test
     command: pytest tests/unit
     depends_on:

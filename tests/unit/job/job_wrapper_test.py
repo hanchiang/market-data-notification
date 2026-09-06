@@ -88,3 +88,55 @@ async def test_job_wrapper_start_skips_work_when_not_scheduled(monkeypatch):
     init_telegram_bots.assert_not_called()
     start_redis.assert_not_awaited()
     build_dependencies.assert_not_awaited()
+
+
+class CrashingSender:
+    async def start(self):
+        raise RuntimeError('sender exploded')
+
+
+class CrashingJob(DummyJob):
+    @property
+    def message_senders(self):
+        return [CrashingSender()]
+
+
+@pytest.mark.asyncio
+async def test_job_failure_alert_survives_disable_telegram(monkeypatch):
+    """A job's own crash report must not be muted by `DISABLE_TELEGRAM`.
+
+    It used to go through `send_message_to_channel` addressed to the admin
+    chat, and that returns early on `DISABLE_TELEGRAM` -- a deployed secret, so
+    muting public output in production silenced every job crash with it.
+    Operator ruling 2026-09-06: errors in production must surface. Revert the
+    call to `send_message_to_channel` and this test goes red.
+    """
+    job = CrashingJob()
+    sent = []
+
+    async def _record(**kwargs):
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        'src.job.job_wrapper.argparse.ArgumentParser.parse_args',
+        lambda _self: SimpleNamespace(force_run=0, test_mode=1),
+    )
+    monkeypatch.setattr(
+        'src.job.job_wrapper.TimeTrackerContext',
+        lambda _label: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr('src.job.job_wrapper.init_telegram_bots', Mock())
+    monkeypatch.setattr('src.job.job_wrapper.Redis.start_redis', AsyncMock())
+    monkeypatch.setattr('src.job.job_wrapper.Redis.stop_redis', AsyncMock())
+    monkeypatch.setattr('src.job.job_wrapper.Dependencies.build', AsyncMock())
+    monkeypatch.setattr('src.job.job_wrapper.Dependencies.cleanup', AsyncMock())
+    monkeypatch.setattr('src.job.job_wrapper.send_message_to_admin', _record)
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+
+    result = await job.start()
+
+    assert result is None
+    assert len(sent) == 1
+    assert sent[0]['market_data_type'] is MarketDataType.STOCKS
+    assert sent[0]['runtime_mode'] == RuntimeMode.from_test_mode(True)
+    assert 'sender exploded' in sent[0]['message']

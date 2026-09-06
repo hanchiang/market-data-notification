@@ -7,8 +7,8 @@ from src.job.message_sender_wrapper import MessageSenderWrapper
 from src.config import config
 from src.db.redis import Redis
 from src.dependencies import Dependencies
-from src.notification_destination.telegram_notification import send_message_to_channel, \
-    market_data_type_to_admin_chat_id, init_telegram_bots
+from src.notification_destination.telegram_notification import send_message_to_admin, \
+    init_telegram_bots
 from src.runtime.runtime_mode import DEFAULT_RUNTIME_MODE, RuntimeMode
 from src.util.context_manager import TimeTrackerContext
 from src.util.exception import get_exception_message
@@ -62,9 +62,22 @@ class JobWrapper(ABC):
                 logger.error(get_exception_message(e, cls=self.__class__.__name__))
                 messages.append(f"{get_exception_message(e, cls=self.__class__.__name__, should_escape_markdown=True)}")
                 message = format_messages_to_telegram(messages)
-                await send_message_to_channel(message=message, chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
-                                              market_data_type=self.market_data_type,
-                                              runtime_mode=self.runtime_mode)
+                # `send_message_to_admin`, not `send_message_to_channel`: this is
+                # the job's own crash report, and `DISABLE_TELEGRAM` is a deployed
+                # secret, so muting public output must not also mute this. Gated
+                # on DISABLE_TELEGRAM_ADMIN instead, which defaults to false.
+                try:
+                    await send_message_to_admin(message=message,
+                                                market_data_type=self.market_data_type,
+                                                runtime_mode=self.runtime_mode)
+                except Exception as alert_error:
+                    # A dead Telegram must not replace the failure being reported.
+                    # Prefixed so the operator can tell this line from the
+                    # primary failure logged above, which has the same shape.
+                    logger.error(
+                        'failed to alert the admin: '
+                        f'{get_exception_message(alert_error, cls=self.__class__.__name__)}'
+                    )
                 return None
             finally:
                 await Redis.stop_redis()

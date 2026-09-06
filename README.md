@@ -165,17 +165,20 @@ CRYPTO_SIGNAL_MARKET_REGIME_INTERVAL=1hour
 # Historical window to request; intraday intervals are capped by retained datapoints.
 CRYPTO_SIGNAL_MARKET_REGIME_BACKFILL_DAYS=30
 
-# Mutes user-facing Telegram output only. A deployed secret in production.
-DISABLE_TELEGRAM=false
-# Mutes admin and error alerts, and only those. Defaults to false because an
-# alert channel fails safe by firing, so a failing local job does reach the
-# admin chat. Set it true only if you do not want that. The pytest session
-# already defaults it true, so tests cannot post to the real chat.
-DISABLE_TELEGRAM_ADMIN=false
-
 API_AUTH_TOKEN=...
 TRADING_VIEW_WEBHOOK_SECRET=...
 CNN_PAGE_LOAD_TIMEOUT_SECONDS=45
+# Mutes user-facing Telegram output. A deployed secret in production, so it
+# must not reach an alert path: job and sender crash reports go through
+# `send_message_to_admin` and are not affected by this flag.
+DISABLE_TELEGRAM=false
+# Mutes alerts sent through `send_message_to_admin`, and only those. Defaults
+# to false because an alert channel fails safe by firing, so a failure on that
+# path does reach the admin chat locally. Set it true if you do not want that.
+# The pytest session defaults it true, so a test that neither overrides the
+# flag nor stubs the sender cannot post to the real chat.
+DISABLE_TELEGRAM_ADMIN=false
+
 TELEGRAM_CONNECT_TIMEOUT_SECONDS=20
 TELEGRAM_READ_TIMEOUT_SECONDS=20
 TELEGRAM_WRITE_TIMEOUT_SECONDS=20
@@ -512,7 +515,10 @@ docker logs redis
 ### Telegram
 
 - Verify bot tokens and chat IDs
-- Check the admin Telegram channel for runtime error notifications
+- Check the admin Telegram channel for runtime error notifications. Job and
+  sender crashes and the webhook warnings alert there; an unhandled error in a
+  route does not, because the app registers no exception handler, so check the
+  server log too before concluding nothing failed.
 - Confirm whether the job was started with `--test_mode=1` when you expect dev-channel routing
 
 ### Jobs

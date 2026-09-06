@@ -357,7 +357,7 @@ class TestAlertBoundary:
         # make this assert the suppressed path instead of the delivered one.
         sent_message = object()
 
-        async def record_send(message, market_data_type):
+        async def record_send(message, market_data_type, runtime_mode=None):
             calls.append(('send', message, market_data_type))
             return sent_message
 
@@ -494,3 +494,38 @@ class TestAlertBoundary:
         messages = [line['message'] for line in _read_lines(job_log)]
         assert any('was suppressed (DISABLE_TELEGRAM_ADMIN)' in message for message in messages)
         assert not any('could not be sent' in message for message in messages)
+
+    def test_the_alert_forwards_its_runtime_mode_to_the_sender(
+        self, job_log, monkeypatch
+    ):
+        """A dev-channel redirect is only available to a caller that passes one.
+
+        `send_message_to_admin` reads `runtime_mode.use_dev_telegram` and has no
+        other way to learn that the run was a `--test_mode 1` one, so dropping
+        the argument here sends a test run's alert to the LIVE crypto admin
+        chat. Nothing else in this suite would notice: the alert still delivers.
+        """
+        import src.notification_destination.telegram_notification as telegram_notification
+        import src.service.onchain.observability as obs
+        from src.runtime.runtime_mode import RuntimeMode
+
+        seen = []
+
+        async def record(*_args, **kwargs):
+            seen.append(kwargs.get('runtime_mode'))
+            return object()
+
+        monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
+        monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
+        monkeypatch.setattr(telegram_notification, 'send_message_to_admin', record)
+
+        async def run():
+            with run_context(8, 'onchain.build'):
+                return await obs.send_run_alert(
+                    8, 'onchain.build', [], runtime_mode=RuntimeMode.from_test_mode(True)
+                )
+
+        assert asyncio.run(run()) is True
+        assert len(seen) == 1
+        assert seen[0] is not None, 'the runtime mode was dropped before the sender'
+        assert seen[0].use_dev_telegram is True

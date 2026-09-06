@@ -120,12 +120,20 @@ class CryptoDigestMessageSender(MessageSenderWrapper):
         )
         persistence_failure_message = self._persist_signal_snapshot(snapshot=snapshot)
         if persistence_failure_message is not None:
-            await send_message_to_admin(
-                message=format_messages_to_telegram(
-                    [persistence_failure_message]
-                ),
-                market_data_type=MarketDataType.CRYPTO,
-            )
+            try:
+                await send_message_to_admin(
+                    message=format_messages_to_telegram(
+                        [persistence_failure_message]
+                    ),
+                    market_data_type=MarketDataType.CRYPTO,
+                    runtime_mode=self.runtime_mode,
+                )
+            except Exception as alert_error:
+                # The digest is still buildable without the persisted snapshot,
+                # so an alert failure must not cost the user-facing message.
+                logger.error(
+                    f'failed to alert the admin: {get_exception_message(alert_error)}'
+                )
         else:
             self._resolve_due_candidate_outcomes(current=current)
         await self._persist_market_regime_snapshots(current=current)

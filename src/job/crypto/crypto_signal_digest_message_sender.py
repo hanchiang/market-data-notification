@@ -79,18 +79,25 @@ class CryptoSignalDigestMessageSender(MessageSenderWrapper):
             )
         except Exception as error:
             logger.error(get_exception_message(error, cls=self.__class__.__name__))
-            await send_message_to_admin(
-                message=format_messages_to_telegram(
-                    [
-                        get_exception_message(
-                            error,
-                            cls=self.__class__.__name__,
-                            should_escape_markdown=True,
-                        )
-                    ]
-                ),
-                market_data_type=MarketDataType.CRYPTO,
-            )
+            try:
+                await send_message_to_admin(
+                    message=format_messages_to_telegram(
+                        [
+                            get_exception_message(
+                                error,
+                                cls=self.__class__.__name__,
+                                should_escape_markdown=True,
+                            )
+                        ]
+                    ),
+                    market_data_type=MarketDataType.CRYPTO,
+                    runtime_mode=self.runtime_mode,
+                )
+            except Exception as alert_error:
+                # A dead Telegram must not replace the failure being reported.
+                logger.error(
+                    f'failed to alert the admin: {get_exception_message(alert_error)}'
+                )
             return None
 
     async def format_message(self) -> List[str]:

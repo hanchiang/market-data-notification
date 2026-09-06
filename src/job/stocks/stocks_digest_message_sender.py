@@ -8,8 +8,8 @@ from src.job.stocks.stocks_digest_formatter import build_digest_messages
 from src.job.stocks.tradingview_message_sender import TradingViewMessageSender
 from src.job.stocks.vix_central_message_sender import VixCentralMessageSender
 from src.notification_destination.telegram_notification import (
-    market_data_type_to_admin_chat_id,
     market_data_type_to_chat_id,
+    send_message_to_admin,
     send_message_to_channel,
 )
 from src.type.market_data_type import MarketDataType
@@ -78,12 +78,19 @@ class StocksDigestMessageSender(MessageSenderWrapper):
                     )
                 ]
             )
-            await send_message_to_channel(
-                message=message,
-                chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
-                market_data_type=self.market_data_type,
-                runtime_mode=self.runtime_mode,
-            )
+            try:
+                await send_message_to_admin(
+                    message=message,
+                    market_data_type=self.market_data_type,
+                    runtime_mode=self.runtime_mode,
+                )
+            except Exception as alert_error:
+                # A dead Telegram must not replace the failure being reported.
+                # `send_message_to_admin` re-raises a delivery failure, unlike
+                # the `send_message_to_channel` this site used until 2026-09-06.
+                logger.error(
+                    f'failed to alert the admin: {get_exception_message(alert_error)}'
+                )
             return None
 
     async def format_message(self) -> List[str]:
@@ -142,9 +149,17 @@ class StocksDigestMessageSender(MessageSenderWrapper):
                 )
             ]
         )
-        await send_message_to_channel(
-            message=message,
-            chat_id=market_data_type_to_admin_chat_id[self.market_data_type],
-            market_data_type=self.market_data_type,
-            runtime_mode=self.runtime_mode,
-        )
+        try:
+            await send_message_to_admin(
+                message=message,
+                market_data_type=self.market_data_type,
+                runtime_mode=self.runtime_mode,
+            )
+        except Exception as alert_error:
+            # The caller is `_load_supporting_messages`, whose contract is that a
+            # failing VIX/sentiment section still leaves a digest to send. An
+            # alert raising here would propagate out of `format_message` and
+            # drop the whole user-facing digest.
+            logger.error(
+                f'failed to alert the admin: {get_exception_message(alert_error)}'
+            )

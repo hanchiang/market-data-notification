@@ -18,7 +18,9 @@ crypto_admin_bot = None
 crypto_dev_bot = None
 
 chat_id_to_telegram_client = {}
-market_data_type_to_admin_chat_id = {}
+# There is deliberately no market_data_type -> ADMIN chat id map. Handing one out
+# invites addressing the admin chat through `send_message_to_channel`, which
+# DISABLE_TELEGRAM mutes; `send_message_to_admin` resolves the channel itself.
 market_data_type_to_chat_id = {}
 
 logger = logging.getLogger('Telegram notification')
@@ -68,10 +70,6 @@ def init_telegram_bots():
     chat_id_to_telegram_client[config.get_telegram_crypto_channel_id()] = crypto_bot
     chat_id_to_telegram_client[config.get_telegram_crypto_admin_id()] = crypto_admin_bot
     chat_id_to_telegram_client[config.get_telegram_crypto_dev_id()] = crypto_dev_bot
-
-    global market_data_type_to_admin_chat_id
-    market_data_type_to_admin_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_admin_id()
-    market_data_type_to_admin_chat_id[MarketDataType.CRYPTO] = config.get_telegram_crypto_admin_id()
 
     global market_data_type_to_chat_id
     market_data_type_to_chat_id[MarketDataType.STOCKS] = config.get_telegram_stocks_channel_id()
@@ -147,9 +145,16 @@ async def send_message_to_channel(
         # it that way.
 
 async def send_message_to_admin(
-    message: str, market_data_type: MarketDataType
+    message: str,
+    market_data_type: MarketDataType,
+    runtime_mode: RuntimeMode | None = None,
 ) -> Optional[telegram.Message]:
     """Send to the admin chat. None means DISABLE_TELEGRAM_ADMIN withheld it.
+
+    `runtime_mode` exists so a caller that used to reach the admin chat through
+    `send_message_to_channel` keeps that function's dev redirect when it moves
+    here. Omit it and the alert goes to the admin chat, which is what an alert
+    with no run context should do.
 
     Deliberately NOT `DISABLE_TELEGRAM`: that flag mutes user-facing output, and
     an operator reaching for it to quiet public channels during an incident must
@@ -169,19 +174,40 @@ async def send_message_to_admin(
         return None
 
     channel_id = get_admin_channel_id_from_market_data_type(market_data_type)
+    # Only an explicit test-mode run redirects. `send_message_to_channel` also
+    # redirects on SIMULATE_TRADINGVIEW_TRAFFIC, and that is deliberately not
+    # copied here: simulated traffic concerns user-facing output, and a real
+    # failure during a simulation is still a real failure the admin wants.
+    active_runtime_mode = (
+        DEFAULT_RUNTIME_MODE if runtime_mode is None else runtime_mode
+    )
+    if active_runtime_mode.use_dev_telegram:
+        channel_id = get_dev_channel_id_from_market_data_type(market_data_type)
     telegram_client = chat_id_to_telegram_client[channel_id]
     try:
         if len(message) > MAX_TELEGRAM_MESSAGE_LENGTH:
-            raise ValueError(
-                f'Admin message exceeds Telegram limit: {len(message)} characters'
+            # Split rather than refuse. A crash report is an escaped traceback and
+            # routinely exceeds the limit; raising here used to replace the whole
+            # traceback with a character count, which is the one outcome an alert
+            # must never produce.
+            responses = await _send_split_message_to_channel(
+                telegram_client=telegram_client,
+                chat_id=channel_id,
+                message=message,
             )
-        res = await telegram_client.send_message(
-            chat_id=channel_id,
-            text=message,
-            parse_mode='MarkdownV2',
-        )
+            res = responses[-1] if responses else None
+        else:
+            res = await telegram_client.send_message(
+                chat_id=channel_id,
+                text=message,
+                parse_mode='MarkdownV2',
+            )
     except Exception as e:
         logger.error(get_exception_message(e))
+        # If this fallback send also fails it propagates, which is the behaviour
+        # every caller already had. Callers reporting a job failure guard the
+        # alert themselves, so a dead Telegram cannot replace the failure they
+        # were reporting -- see `record.py` and `message_sender_wrapper.py`.
         res = await telegram_client.send_message(
             chat_id=channel_id,
             text=_build_telegram_error_alert(
@@ -190,7 +216,8 @@ async def send_message_to_admin(
             ),
             parse_mode='MarkdownV2',
         )
-    print_telegram_message(res)
+    if res is not None:
+        print_telegram_message(res)
     return res
 
 

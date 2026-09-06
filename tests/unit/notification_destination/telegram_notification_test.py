@@ -642,3 +642,124 @@ async def test_send_crypto_signal_message_keeps_admin_routing_in_test_mode(
         parse_mode='MarkdownV2',
     )
     dev_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_alert_uses_the_dev_channel_in_test_mode(monkeypatch):
+    """A job's crash report keeps its dev redirect after moving onto this sender.
+
+    Until 2026-09-06 that report went through `send_message_to_channel`, which
+    routes a test-mode run to the dev channel. It moved here to get off
+    `DISABLE_TELEGRAM`, and that move must not start posting `--test_mode=1`
+    crashes to the real admin chat.
+    """
+    admin_client = AsyncMock()
+    admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=901)
+    )
+    dev_client = AsyncMock()
+    dev_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=902)
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {'crypto-admin-chat': admin_client, 'crypto-dev-chat': dev_client},
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_dev_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-dev-chat',
+    )
+    monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
+
+    await telegram_notification.send_message_to_admin(
+        message='job crashed',
+        market_data_type=MarketDataType.CRYPTO,
+        runtime_mode=RuntimeMode.from_test_mode(True),
+    )
+
+    dev_client.send_message.assert_awaited_once()
+    admin_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_alert_without_runtime_mode_goes_to_the_admin_chat(monkeypatch):
+    """Omitting `runtime_mode` must not inherit dev routing from anywhere."""
+    admin_client = AsyncMock()
+    admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=903)
+    )
+    dev_client = AsyncMock()
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {'crypto-admin-chat': admin_client, 'crypto-dev-chat': dev_client},
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_dev_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-dev-chat',
+    )
+    monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
+
+    await telegram_notification.send_message_to_admin(
+        message='onchain alert',
+        market_data_type=MarketDataType.CRYPTO,
+    )
+
+    admin_client.send_message.assert_awaited_once()
+    dev_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_long_admin_alert_is_split_rather_than_dropped(monkeypatch):
+    """An oversized crash report must still deliver its traceback.
+
+    `send_message_to_admin` used to raise on anything over the Telegram limit
+    and fall back to an error alert carrying only a character count, so the
+    traceback -- the whole content of the alert -- was discarded. An escaped
+    traceback routinely exceeds 4096 characters, so this was the normal case.
+    """
+    admin_client = AsyncMock()
+    admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=904)
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {'crypto-admin-chat': admin_client},
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
+
+    message = 'x' * (telegram_notification.MAX_TELEGRAM_MESSAGE_LENGTH + 500)
+    result = await telegram_notification.send_message_to_admin(
+        message=message,
+        market_data_type=MarketDataType.CRYPTO,
+    )
+
+    assert result is not None
+    assert admin_client.send_message.await_count > 1
+    delivered = ''.join(
+        call.kwargs.get('text', '') for call in admin_client.send_message.await_args_list
+    )
+    assert 'exceeds Telegram limit' not in delivered
+    assert len(delivered) >= len(message)

@@ -1,6 +1,7 @@
 """The record entrypoint: the failure-alert path and the log-window narrowing."""
 import asyncio
 import logging
+from typing import NamedTuple, Optional
 
 import pytest
 
@@ -29,13 +30,20 @@ from src.service.project_monitor.config import NETNET
 _DELIVERED = object()
 
 
+class _Alert(NamedTuple):
+    """One recorded admin alert from a `main()` run."""
+
+    message: str
+    runtime_mode: Optional[RuntimeMode]
+
+
 def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch, caplog):
     """The operator asked for alerts so failures are not swallowed; the payload
     is deliberately run id + class name only, because an exception's MESSAGE can
     carry the keyed URL and this send is not on the redacting path."""
     sent = []
 
-    async def fake_send(message, market_data_type):
+    async def fake_send(message, market_data_type, runtime_mode=None):
         sent.append((message, market_data_type))
         # A stand-in for the Message the real sender returns. None is how it
         # reports a send it withheld, so a recorder returning None would drive
@@ -72,17 +80,30 @@ def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch, c
     assert '\\' in message or '.' not in message
 
 
-def test_a_failing_alert_never_masks_the_run_outcome(monkeypatch):
+def test_a_failing_alert_never_masks_the_run_outcome(monkeypatch, caplog):
     """The run row is written before the alert is attempted; the send is guarded
-    so its failure cannot propagate and turn a recorded outcome into a crash."""
+    so its failure cannot propagate and turn a recorded outcome into a crash.
 
-    async def exploding_send(message, market_data_type):
+    The log assertion is what makes this discriminating. `_alert` catches bare
+    `Exception`, so "nothing escaped" holds even if the send never happened --
+    a stub whose signature had drifted would raise TypeError and be swallowed
+    identically. Only the warning line proves the guarded send was reached.
+    """
+    sent = []
+
+    async def exploding_send(message, market_data_type, runtime_mode=None):
+        sent.append(message)
         raise RuntimeError('telegram is down')
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', exploding_send)
     monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
-    # No exception escapes.
-    asyncio.run(record_job._alert(run_id=1, error_class='EvmTransportError'))
+
+    with caplog.at_level(logging.WARNING, logger='Project monitor record'):
+        # No exception escapes.
+        asyncio.run(record_job._alert(run_id=1, error_class='EvmTransportError'))
+
+    assert len(sent) == 1, 'the send was never attempted'
+    assert 'failure alert could not be sent' in caplog.text
 
 
 def test_the_alert_is_not_sent_when_telegram_is_disabled(monkeypatch, caplog):
@@ -469,8 +490,11 @@ def _patch_entrypoint(monkeypatch, repository, database_url):
     monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
     sent = []
 
-    async def fake_send(message, market_data_type):
-        sent.append(message)
+    async def fake_send(message, market_data_type, runtime_mode=None):
+        # The runtime mode rides alongside the message because dropping it is
+        # invisible otherwise: the alert still sends, still reads correctly, and
+        # goes to the LIVE crypto admin chat instead of the dev channel.
+        sent.append(_Alert(message=message, runtime_mode=runtime_mode))
         # See `_DELIVERED`: returning None would make `_alert` log a suppression
         # for a message this list records as delivered.
         return _DELIVERED
@@ -514,7 +538,38 @@ def test_a_rejecting_endpoint_exits_non_zero_and_writes_no_sample(
     # The run row names the failure even though no sample exists -- the record
     # of the attempt is what tells the operator the hour was not simply skipped.
     assert 'EvmTransportError' in run['notes']
-    assert len(sent) == 1 and 'EvmTransportError' in sent[0]
+    assert len(sent) == 1 and 'EvmTransportError' in sent[0].message
+
+
+def test_a_test_mode_run_alerts_the_dev_channel(
+    repository, database_url, monkeypatch
+):
+    """`main()` must hand its runtime mode to `_alert`, not just `_alert` to the sender.
+
+    The two hops fail independently. Dropping the argument at either one is
+    invisible to every other assertion here -- the alert still sends and still
+    reads correctly, it just lands in the LIVE crypto admin chat during a manual
+    `--test_mode=1` run, which is how this branch produced an unauthorised send.
+    """
+    sent = _patch_entrypoint(monkeypatch, repository, database_url)
+
+    async def rejecting(*args, **kwargs):
+        raise EvmTransportError(
+            'endpoint refused the request', endpoint_kind='public', status_code=403
+        )
+
+    async def fake_manifest(repo):
+        return 'manifest skipped'
+
+    monkeypatch.setattr(record_job, 'run_sample', rejecting)
+    monkeypatch.setattr(record_job, 'run_manifest_snapshot', fake_manifest)
+
+    exit_code = asyncio.run(record_job.main(test_mode=True))
+
+    assert exit_code == 1
+    assert len(sent) == 1
+    assert sent[0].runtime_mode is not None, 'main() dropped the runtime mode'
+    assert sent[0].runtime_mode.use_dev_telegram is True
 
 
 def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero(
@@ -704,3 +759,31 @@ def test_a_capped_window_narrows_off_the_issued_width_not_the_nominal_one():
     # narrower, not a repeat of it.
     assert client.requested[0] == 400_001
     assert client.requested[1] < 400_001
+
+
+def test_the_alert_forwards_runtime_mode_to_the_admin_sender(monkeypatch):
+    """A `--test_mode 1` run must alert the dev channel, not the live admin chat.
+
+    Omitting `runtime_mode` is not a crash and not visible in any assertion
+    about the message: the alert simply goes to the real crypto admin chat.
+    That is the mechanism behind this branch's unauthorised sends, so the
+    forwarding is pinned rather than trusted.
+    """
+    seen = []
+
+    async def fake_send(message, market_data_type, runtime_mode=None):
+        seen.append(runtime_mode)
+        return _DELIVERED
+
+    monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
+
+    test_mode = RuntimeMode.from_test_mode(True)
+    asyncio.run(
+        record_job._alert(
+            run_id=7, error_class='EvmRpcError', runtime_mode=test_mode
+        )
+    )
+
+    assert seen == [test_mode]
+    assert seen[0].use_dev_telegram is True

@@ -266,13 +266,21 @@ async def main(force_run: bool = False, test_mode: bool = False) -> int:
             repository.close()
 
     if outcome not in ('ok', 'skipped'):
-        await _alert(run_id, error_class or 'unknown', progress.get('endpoint_kind'))
+        await _alert(
+            run_id,
+            error_class or 'unknown',
+            progress.get('endpoint_kind'),
+            runtime_mode=runtime_mode,
+        )
     print('; '.join(notes))
     return 0 if outcome in ('ok', 'partial', 'skipped') else 1
 
 
 async def _alert(
-    run_id: Optional[int], error_class: str, endpoint_kind: Optional[str] = None
+    run_id: Optional[int],
+    error_class: str,
+    endpoint_kind: Optional[str] = None,
+    runtime_mode: Optional[RuntimeMode] = None,
 ) -> None:
     """One admin-chat message: run id, endpoint kind, exception CLASS.
 
@@ -295,7 +303,12 @@ async def _alert(
             f'project_monitor run {run_id} failed on '
             f'{endpoint_kind or "unknown"}: {error_class}'
         )
-        delivered = await send_message_to_admin(message, MarketDataType.CRYPTO)
+        # Threaded through so a `--test_mode 1` run alerts the dev channel. Without
+        # it the run posts to the live crypto admin chat, which is how this branch
+        # produced unauthorised sends once already.
+        delivered = await send_message_to_admin(
+            message, MarketDataType.CRYPTO, runtime_mode=runtime_mode
+        )
         if delivered is None:
             logger.info(
                 'project_monitor run alert was suppressed by the sender '

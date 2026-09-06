@@ -308,6 +308,80 @@ class TestAlertBoundary:
             for line in _read_lines(job_log)
         )
 
+    @pytest.mark.parametrize('job', [
+        'onchain.build\nhttps://rhc.g.alchemy.com/v2/SECRETKEY',
+        'https://rhc.g.alchemy.com/v2/SECRETKEY',
+    ])
+    def test_the_job_name_is_sanitised_like_the_rest_of_the_payload(self, job):
+        """`job` is a constant at every call site today, so this is about the
+        contract rather than a live leak: the docstring says the payload is never
+        a URL, and an unsanitised f-string interpolation made that false."""
+        message = format_alert(9, job, [])
+        assert 'SECRETKEY' not in message
+        assert 'http' not in message
+        assert UNRECOGNISED in message
+        assert 'run 9' in message
+
+    def test_a_trailing_newline_does_not_slip_through_the_unit_pattern(self):
+        """`$` matches before a single trailing newline; `\\Z` does not. Nothing
+        leaks either way -- this pins the anchor so a rewrite cannot loosen it."""
+        with pytest.raises(AlertPayloadError):
+            failed_unit('zzz/onchain_health\n', 'EvmRpcError')
+        assert format_alert(
+            9, 'onchain.build', [{'unit': 'zzz/onchain_health\n',
+                                  'error_class': 'EvmRpcError'}]
+        ).endswith(f'- {UNRECOGNISED}: EvmRpcError')
+
+    def test_the_send_path_inits_the_bots_then_sends_the_escaped_alert(
+        self, monkeypatch
+    ):
+        """The five lines that touch the wire, exercised with recorders instead
+        of a transport: `init_telegram_bots()` must run BEFORE the send (it
+        populates the map `send_message_to_admin` indexes, so the other order is
+        a KeyError swallowed by the except), the text is the escaped payload, and
+        the destination is the CRYPTO admin chat.
+
+        `DISABLE_TELEGRAM=false` is pinned for the same reason as the failure
+        test: the recorders are what keep this off the network, and the test must
+        assert the same thing whichever way the developer's env is set.
+        """
+        import src.notification_destination.telegram_notification as telegram_notification
+        import src.service.onchain.observability as obs
+        from src.type.market_data_type import MarketDataType
+        from src.util.my_telegram import escape_markdown
+
+        calls = []
+
+        async def record_send(message, market_data_type):
+            calls.append(('send', message, market_data_type))
+
+        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+        monkeypatch.setattr(
+            telegram_notification, 'init_telegram_bots',
+            lambda: calls.append(('init',)),
+        )
+        monkeypatch.setattr(
+            telegram_notification, 'send_message_to_admin', record_send
+        )
+
+        units = [failed_unit('zzz/onchain_health', 'EvmRpcError')]
+
+        async def run():
+            with run_context(6, 'onchain.build'):
+                return await obs.send_run_alert(6, 'onchain.build', units)
+
+        assert asyncio.run(run()) is True
+        assert [call[0] for call in calls] == ['init', 'send']
+        _, message, market_data_type = calls[1]
+        assert message == escape_markdown(
+            format_alert(6, 'onchain.build', units)
+        )
+        assert market_data_type is MarketDataType.CRYPTO
+        # The escaping is not a no-op on this payload, so the assertion above
+        # would still hold if `escape_markdown` were dropped from the product --
+        # pin the observable consequence too.
+        assert 'zzz/onchain\\_health' in message
+
     def test_a_failed_alert_send_is_logged_with_its_exception_class(
         self, job_log, monkeypatch
     ):
@@ -327,6 +401,12 @@ class TestAlertBoundary:
         async def refuse(*_args, **_kwargs):
             raise RuntimeError('transport stubbed by the test; nothing was sent')
 
+        # Pinned, not inherited: with `DISABLE_TELEGRAM=true` in the developer's
+        # environment the guard returns before the stub and no line is written,
+        # so this test would pass only in the configuration where an unstubbed
+        # send reaches the wire. The stubs above are what keep it off the
+        # network; the flag is not doing that job here.
+        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
         monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
         monkeypatch.setattr(telegram_notification, 'send_message_to_admin', refuse)
 

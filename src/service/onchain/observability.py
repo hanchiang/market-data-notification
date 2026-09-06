@@ -176,11 +176,21 @@ def current_span_id() -> Optional[str]:
 
 # A unit is `project/section` or `project/section/field`; project keys are
 # lowercase-with-hyphens (registry), section and field names are snake_case.
-_UNIT = re.compile(r'^[a-z0-9-]+(/[a-z0-9_]+){1,2}$')
+# `\Z` and not `$` in every pattern here: `$` also matches just before a single
+# trailing newline, so `'zzz/onchain_health\n'` matched and would have put a
+# line break into the chat message.
+_UNIT = re.compile(r'^[a-z0-9-]+(/[a-z0-9_]+){1,2}\Z')
 # A Python exception CLASS name, never a message. `str(exc)` from the library's
 # HTTP client carries the request URL, and the archive endpoint's URL is a
 # credential, so a message-shaped value must not reach the admin chat.
-_ERROR_CLASS = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*$')
+_ERROR_CLASS = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*\Z')
+
+# The job name, as it appears in the entrypoint and in `job_var`: dotted
+# lowercase (`onchain.build`). Sanitised like everything else in the payload --
+# it is a constant at every current call site, but the module's contract is that
+# nothing reaching the admin chat is interpolated unchecked, and a future caller
+# passing an error string here would otherwise leak it.
+_JOB = re.compile(r'^[a-z0-9_.]+\Z')
 
 UNRECOGNISED = '<unrecognised>'
 
@@ -203,7 +213,8 @@ def format_alert(
     nothing is worse than one that says a unit it could not name; the run row
     holds the full record either way, and the log line names the unit.
     """
-    lines = [f'onchain {job} run {run_id if run_id is not None else "unknown"}']
+    safe_job = _safe(job, _JOB)
+    lines = [f'onchain {safe_job} run {run_id if run_id is not None else "unknown"}']
     if not failed_units:
         lines.append('failed with no unit recorded')
         return '\n'.join(lines)

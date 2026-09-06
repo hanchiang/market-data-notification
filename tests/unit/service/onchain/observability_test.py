@@ -5,6 +5,7 @@ read the file back. A mocked handler would assert that the formatter was called,
 not that a grep for a run id finds every line of that run -- which is the actual
 criterion (A12).
 """
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -12,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from src.service.onchain.observability import (
+    UNRECOGNISED,
+    AlertPayloadError,
     ContextFilter,
     JsonFormatter,
     collect_failed_units,
@@ -19,6 +22,7 @@ from src.service.onchain.observability import (
     configure_job_logging,
     current_run_id,
     current_span_id,
+    failed_unit,
     format_alert,
     new_span_id,
     run_context,
@@ -221,3 +225,143 @@ class TestAlert:
             {'project': 'zzz', 'name': 'identity', 'status': 'ok',
              'fields_json': {'pool_id': '0x1'}},
         ]) == []
+
+
+class TestAlertBoundary:
+    """Round-1 finding P2-4. A11 and P13 are universals over what reaches the
+    admin chat, so they are discharged by a check at the boundary rather than by
+    one example of benign input."""
+
+    @pytest.mark.parametrize('error_class', [
+        # What `str(exc)` produces from the library HTTP client -- the archive
+        # endpoint's URL is a credential, and this is the shape that leaks it.
+        'HttpClientError: HTTP error 500 (url=https://rhc.g.alchemy.com/v2/SECRETKEY)',
+        'Failed to fetch blockscout data: https://robinhoodchain.blockscout.com/api/v2/addresses/0xabc',
+        'total_supply was 1000000000000000000000000',
+        '',
+    ])
+    def test_a_message_shaped_error_class_is_refused_at_construction(
+        self, error_class
+    ):
+        with pytest.raises(AlertPayloadError):
+            failed_unit('zzz/onchain_health', error_class)
+
+    @pytest.mark.parametrize('unit', [
+        'https://rhc.g.alchemy.com/v2/SECRETKEY',
+        '0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b',
+        'zzz',
+        'a/b/c/d',
+        'ZZZ/Onchain Health',
+        '',
+    ])
+    def test_a_unit_that_is_not_project_section_field_is_refused(self, unit):
+        with pytest.raises(AlertPayloadError):
+            failed_unit(unit, 'EvmRpcError')
+
+    @pytest.mark.parametrize('unit', [
+        'touch-grass/identity',
+        'not-a-website/contract_safety/verified_source',
+        'zzz/onchain_health',
+    ])
+    def test_the_real_unit_shapes_are_accepted(self, unit):
+        assert failed_unit(unit, 'EvmRpcError')['unit'] == unit
+
+    def test_format_alert_replaces_anything_unrecognised_rather_than_interpolating(
+        self,
+    ):
+        """The second half of the boundary: a unit built some other way, or read
+        back from a row written before the check existed, must not reach the
+        chat. The alert still fires -- a failed run that says nothing is worse."""
+        message = format_alert(88, 'onchain.build', [
+            {'unit': 'zzz/onchain_health',
+             'error_class': 'HttpClientError (url=https://rhc.g.alchemy.com/v2/SECRETKEY)'},
+            {'unit': 'https://rhc.g.alchemy.com/v2/SECRETKEY',
+             'error_class': 'EvmRpcError'},
+        ])
+        assert 'SECRETKEY' not in message
+        assert 'http' not in message
+        assert message.count(UNRECOGNISED) == 2
+        # It still names the run and still fires.
+        assert 'run 88' in message
+
+    def test_collect_failed_units_degrades_instead_of_raising(self):
+        """These rows are already in the database by the time this runs, so a
+        value that should never have been stored must not also cost the run its
+        alert."""
+        units = collect_failed_units([
+            {'project': 'zzz', 'name': 'onchain_health', 'status': 'failed',
+             'error_class': 'HttpClientError: https://rhc.g.alchemy.com/v2/SECRETKEY',
+             'fields_json': {}},
+        ])
+        assert units == [
+            {'unit': 'zzz/onchain_health', 'error_class': UNRECOGNISED}
+        ]
+        assert 'SECRETKEY' not in format_alert(1, 'onchain.build', units)
+
+    def test_a_dropped_value_is_logged_so_it_can_be_found(self, job_log):
+        with run_context(3, 'onchain.build'):
+            format_alert(3, 'onchain.build', [
+                {'unit': 'zzz/onchain_health', 'error_class': 'a message with spaces'},
+            ])
+        assert any(
+            'alert payload dropped a value' in line['message']
+            for line in _read_lines(job_log)
+        )
+
+    def test_a_failed_alert_send_is_logged_with_its_exception_class(
+        self, job_log, monkeypatch
+    ):
+        """`exc_info=True` so the JSON line carries `exc_class`: the formatter
+        emits the class and never the traceback, and a silent alert failure
+        would otherwise leave nothing to grep.
+
+        The transport is stubbed. `send_message_to_admin` does NOT consult
+        `DISABLE_TELEGRAM`, and this worktree's `.env` carries real credentials,
+        so a test that let the real function run would post to the operator's
+        admin chat -- which is exactly what happened once while writing this
+        file.
+        """
+        import src.notification_destination.telegram_notification as telegram_notification
+        import src.service.onchain.observability as obs
+
+        async def refuse(*_args, **_kwargs):
+            raise RuntimeError('transport stubbed by the test; nothing was sent')
+
+        monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
+        monkeypatch.setattr(telegram_notification, 'send_message_to_admin', refuse)
+
+        async def run():
+            with run_context(4, 'onchain.build'):
+                return await obs.send_run_alert(4, 'onchain.build', [])
+
+        assert asyncio.run(run()) is False
+        lines = [
+            line for line in _read_lines(job_log)
+            if 'alert could not be sent' in line['message']
+        ]
+        assert lines and lines[0]['exc_class'] == 'RuntimeError'
+
+    def test_the_alert_is_suppressed_when_telegram_is_disabled(
+        self, job_log, monkeypatch
+    ):
+        """`DISABLE_TELEGRAM` is the operator's explicit switch, and the admin
+        send path does not honour it on its own. Checked before the bots are
+        built, so a disabled run touches no network at all."""
+        import src.notification_destination.telegram_notification as telegram_notification
+        import src.service.onchain.observability as obs
+
+        def explode():
+            raise AssertionError('the alert path must not build a bot when disabled')
+
+        monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+        monkeypatch.setattr(telegram_notification, 'init_telegram_bots', explode)
+
+        async def run():
+            with run_context(5, 'onchain.build'):
+                return await obs.send_run_alert(5, 'onchain.build', [])
+
+        assert asyncio.run(run()) is False
+        assert any(
+            'telegram is disabled' in line['message'].lower()
+            for line in _read_lines(job_log)
+        )

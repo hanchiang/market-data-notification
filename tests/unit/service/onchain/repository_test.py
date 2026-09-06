@@ -144,10 +144,11 @@ class TestEntityModel:
     def test_an_evidence_row_cannot_reference_a_missing_run(self, onchain_repository):
         """The foreign key is the rule: a row whose run id is invented cannot be
         traced from an alert, so the store refuses it."""
+        chain = onchain_repository.upsert_entity(level='chain', key='chain:4663')
         with pytest.raises(psycopg.errors.ForeignKeyViolation):
             onchain_repository.insert_evidence(
-                run_id=999999, kind='jsonrpc', method_or_url='eth_call',
-                body={}, endpoint_kind='public',
+                run_id=999999, entity_id=chain, kind='jsonrpc',
+                method_or_url='eth_call', body={}, endpoint_kind='public',
             )
         onchain_repository.rollback()
 

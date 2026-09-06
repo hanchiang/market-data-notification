@@ -115,11 +115,24 @@ def get_chain_constants(chain_id: int) -> ChainConstants:
 
 
 def get_registry_path() -> Path:
-    return Path(os.getenv('ONCHAIN_REGISTRY_PATH', str(DEFAULT_REGISTRY_PATH)))
+    return _resolve(os.getenv('ONCHAIN_REGISTRY_PATH'), DEFAULT_REGISTRY_PATH)
 
 
 def get_log_dir() -> Path:
-    return Path(os.getenv('ONCHAIN_LOG_DIR', str(DEFAULT_LOG_DIR)))
+    return _resolve(os.getenv('ONCHAIN_LOG_DIR'), DEFAULT_LOG_DIR)
+
+
+def _resolve(value: Optional[str], default: Path) -> Path:
+    """A path from the environment, with `~` expanded.
+
+    `.env` is read as literal text, so `ONCHAIN_LOG_DIR=~/onchain-data/logs`
+    arrives with the tilde intact and `Path()` would happily create a directory
+    actually named `~` under the process's cwd -- which for a cron job is
+    wherever cron started it.
+    """
+    if value is None or not value.strip():
+        return default
+    return Path(value.strip()).expanduser()
 
 
 def get_build_deadline_hours() -> float:

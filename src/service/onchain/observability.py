@@ -14,7 +14,13 @@ The phase-1 column of the requirement's three-pillar table, in one module:
   from an admin-chat message to a log line to the stored evidence with grep and
   one SQL query, and no tracing backend (A12).
 * **Alerting** -- one message per job per run, carrying the run id, the job and
-  the failed units with their error classes. Never a URL and never a field value.
+  the failed units with their error classes. Never a URL and never a field
+  value, and that is enforced rather than asserted: `failed_unit` rejects a unit
+  or error class that is not the shape it promises, and `format_alert` replaces
+  anything unrecognised with a placeholder. Both, because they fail differently
+  -- the first catches the mistake at the point it is made, while the second
+  guarantees the property even for a unit built some other way, and an alert
+  that refused to send would be the worst of the three outcomes.
 
 The backend's redacting record factory stays in front: it is installed at
 `src.config.config` import (which `src.service.onchain.config` forces) and works
@@ -26,6 +32,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import secrets
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -167,6 +174,21 @@ def current_span_id() -> Optional[str]:
     return span_id_var.get()
 
 
+# A unit is `project/section` or `project/section/field`; project keys are
+# lowercase-with-hyphens (registry), section and field names are snake_case.
+_UNIT = re.compile(r'^[a-z0-9-]+(/[a-z0-9_]+){1,2}$')
+# A Python exception CLASS name, never a message. `str(exc)` from the library's
+# HTTP client carries the request URL, and the archive endpoint's URL is a
+# credential, so a message-shaped value must not reach the admin chat.
+_ERROR_CLASS = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*$')
+
+UNRECOGNISED = '<unrecognised>'
+
+
+class AlertPayloadError(ValueError):
+    """A failed unit was built from something that could carry project content."""
+
+
 def format_alert(
     run_id: Optional[int], job: str, failed_units: Sequence[Any]
 ) -> str:
@@ -175,6 +197,11 @@ def format_alert(
     Never a URL and never a field value. A unit is `project/section` or
     `project/section/field` with its error class -- enough to say which collector
     to look at, and nothing that could carry a secret or project content.
+
+    Anything not of that shape is replaced by `<unrecognised>` rather than
+    interpolated. The alert still fires, because a run that failed and then said
+    nothing is worse than one that says a unit it could not name; the run row
+    holds the full record either way, and the log line names the unit.
     """
     lines = [f'onchain {job} run {run_id if run_id is not None else "unknown"}']
     if not failed_units:
@@ -182,10 +209,23 @@ def format_alert(
         return '\n'.join(lines)
     for unit in failed_units:
         if isinstance(unit, dict):
-            lines.append(f'- {unit.get("unit", "unknown")}: {unit.get("error_class", "unknown")}')
+            name = _safe(unit.get('unit'), _UNIT)
+            error_class = _safe(unit.get('error_class'), _ERROR_CLASS)
         else:
-            lines.append(f'- {unit}')
+            name, error_class = _safe(unit, _UNIT), 'unknown'
+        lines.append(f'- {name}: {error_class}')
     return '\n'.join(lines)
+
+
+def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
+    if isinstance(value, str) and pattern.match(value):
+        return value
+    if value is None:
+        return 'unknown'
+    logger.warning(
+        'alert payload dropped a value that does not match %s', pattern.pattern
+    )
+    return UNRECOGNISED
 
 
 async def send_run_alert(
@@ -200,45 +240,91 @@ async def send_run_alert(
     path raises KeyError and swallows itself.
     """
     try:
-        from src.notification_destination.telegram_notification import (
-            init_telegram_bots,
-            send_message_to_admin,
-        )
+        from src.config.config import get_disable_telegram
+        from src.notification_destination import telegram_notification
         from src.type.market_data_type import MarketDataType
         from src.util.my_telegram import escape_markdown
 
-        init_telegram_bots()
-        await send_message_to_admin(
+        # `send_message_to_admin` does not consult this flag itself -- only the
+        # signal senders do -- so the operator's explicit off switch is honoured
+        # here, BEFORE any bot is constructed. Without it a local run, or a test
+        # that reaches this function, posts to the real admin chat: this repo's
+        # `.env` carries live credentials and nothing else stands in the way.
+        if get_disable_telegram():
+            logger.info('telegram is disabled; onchain run alert not sent')
+            return False
+
+        telegram_notification.init_telegram_bots()
+        # Resolved through the module rather than imported by name so a test
+        # can stub the transport without the send having already been bound.
+        await telegram_notification.send_message_to_admin(
             escape_markdown(format_alert(run_id, job, failed_units)),
             MarketDataType.CRYPTO,
         )
         return True
     except Exception:
-        logger.warning('onchain run alert could not be sent')
+        # `exc_info` so the JSON line carries `exc_class`: the formatter emits
+        # the class and never the traceback, so this is safe and is the only
+        # thing left to grep when an alert silently fails to send.
+        logger.warning('onchain run alert could not be sent', exc_info=True)
         return False
 
 
 def failed_unit(unit: str, error_class: str) -> Dict[str, str]:
+    """One failed unit for the run row and the alert.
+
+    Both fields are validated here, at the point the unit is built, because this
+    is where a mistake is cheap to see: a collector that records `str(exc)` as
+    its error class would otherwise put the library HTTP client's request URL --
+    and for an archive read, a credential -- into the admin chat. Raising is
+    right at construction time; `format_alert` degrades instead of raising,
+    because by then the run has already failed.
+    """
+    if not _UNIT.match(unit or ''):
+        raise AlertPayloadError(
+            f'a failed unit must be project/section or project/section/field, '
+            f'got {unit!r}'
+        )
+    if not _ERROR_CLASS.match(error_class or ''):
+        raise AlertPayloadError(
+            'a failed unit carries an exception CLASS name, never a message: '
+            f'got a value of length {len(error_class or "")}'
+        )
     return {'unit': unit, 'error_class': error_class}
 
 
 def collect_failed_units(sections: Sequence[Dict[str, Any]]) -> List[Dict[str, str]]:
-    """Failed units for the run row and the alert, from stored section rows."""
+    """Failed units for the run row and the alert, from STORED section rows.
+
+    Degrades rather than raises, unlike `failed_unit`: the rows are already in
+    the database by the time this runs, so a value that should never have been
+    stored must not also cost us the run's alert. The offending value is replaced
+    by `<unrecognised>` and logged, so the JSON log line still names the section.
+    """
     units: List[Dict[str, str]] = []
     for section in sections:
         project = section.get('project') or 'unknown'
         name = section.get('name') or 'unknown'
         if section.get('status') == 'failed':
             units.append(
-                failed_unit(f'{project}/{name}', section.get('error_class') or 'unknown')
+                _degrading_unit(
+                    f'{project}/{name}', section.get('error_class') or 'unknown'
+                )
             )
             continue
         for field_name, value in (section.get('fields_json') or {}).items():
             if isinstance(value, dict) and value.get('state') == 'failed':
                 units.append(
-                    failed_unit(
+                    _degrading_unit(
                         f'{project}/{name}/{field_name}',
                         value.get('error_class') or 'unknown',
                     )
                 )
     return units
+
+
+def _degrading_unit(unit: str, error_class: str) -> Dict[str, str]:
+    return {
+        'unit': _safe(unit, _UNIT),
+        'error_class': _safe(error_class, _ERROR_CLASS),
+    }

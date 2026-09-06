@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from src.service.onchain.config import (
+    DEXSCREENER_CHAIN_SLUG,
     KNOWN_ARCHETYPES,
     SOURCE_CLASSES,
     VERIFIED_UNISWAP_ADDRESSES,
@@ -129,10 +130,22 @@ def parse_registry(payload: Any) -> Registry:
         chains[chain.chain_id] = chain
 
     projects: Dict[str, ProjectEntry] = {}
+    claimed_pools: Dict[tuple, str] = {}
     for raw in _require_list(payload, 'projects'):
         project = _parse_project(raw, chains)
         if project.key in projects:
             raise RegistryError(f'duplicate project key {project.key!r}')
+        # A pool entity's key is derived from (chain, reference), so two projects
+        # naming the same pool would have the pool claimed by whichever upserted
+        # first -- and the second project's health section would silently read
+        # the first project's custody.
+        pool_claim = (project.chain_id, project.pool_ref)
+        if pool_claim in claimed_pools:
+            raise RegistryError(
+                f'project {project.key!r} and {claimed_pools[pool_claim]!r} '
+                f'both name pool {project.pool_ref} on chain {project.chain_id}'
+            )
+        claimed_pools[pool_claim] = project.key
         projects[project.key] = project
 
     return Registry(chains=chains, projects=projects)
@@ -196,6 +209,19 @@ def _parse_chain(raw: Any) -> ChainEntry:
     for name in ('key', 'dexscreener_slug', 'explorer_api'):
         if not isinstance(raw.get(name), str) or not raw[name]:
             raise RegistryError(f'chain {chain_id}: {name!r} must be a non-empty string')
+
+    # The same tripwire the Uniswap addresses get, for the same reason: the slug
+    # is the provider's own name for the chain and is not derivable from the id,
+    # so it is knowledge held in two places. The file stays authoritative; a
+    # disagreement with the shipped constant is a loud failure rather than a
+    # silent join that matches nothing (the library's chain-id defect).
+    expected_slug = DEXSCREENER_CHAIN_SLUG.get(chain_id)
+    if expected_slug is not None and raw['dexscreener_slug'] != expected_slug:
+        raise RegistryError(
+            f'chain {chain_id}: dexscreener_slug is {raw["dexscreener_slug"]!r}, '
+            f'but the shipped constant is {expected_slug!r}. A provider slug that '
+            'matches nothing does not raise, it silently returns no pairs.'
+        )
 
     return ChainEntry(
         chain_id=chain_id,

@@ -76,6 +76,11 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     # The run ledger (P13), and the metric source the dashboard reads (P14).
     # `spend_json` carries CU and request counts per endpoint kind, which is how
     # the scaling envelope gets re-derived from measurement instead of estimate.
+    #
+    # `outcome` is one of RUN_OUTCOMES: 'running' until the job closes the row,
+    # then 'ok', 'partial' (something failed but the run produced builds),
+    # 'failed', or 'skipped' (the advisory lock was held). Only 'ok' and
+    # 'skipped' suppress the admin alert.
     f"""
     CREATE TABLE IF NOT EXISTS {ONCHAIN_SCHEMA}.run (
         id                bigserial PRIMARY KEY,
@@ -89,7 +94,9 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     )
     """,
     # One build per project per run: the unique constraint is the rule, not a
-    # convention the build loop is trusted to keep.
+    # convention the build loop is trusted to keep. `outcome` uses the same
+    # vocabulary as `run.outcome` minus 'skipped': a build is 'running', then
+    # 'ok', 'partial' (at least one section `partial` or `failed`) or 'failed'.
     f"""
     CREATE TABLE IF NOT EXISTS {ONCHAIN_SCHEMA}.build (
         id                bigserial PRIMARY KEY,
@@ -140,12 +147,18 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     # is the provenance and the URL is a credential -- the monitor's `raw_response`
     # rule, and `evidence.store_response` refuses a keyed URL rather than
     # trusting a caller to remember.
+    #
+    # `entity_id` is NOT NULL because the entity model (P1) says every evidence
+    # row references exactly one entity. A run-setup read (the head-block pin,
+    # the 24-hour boundary search) is a read about the CHAIN entity, so there is
+    # always one to name; tightening this later on a populated table is the
+    # migration the no-migration-tool rule makes awkward.
     f"""
     CREATE TABLE IF NOT EXISTS {ONCHAIN_SCHEMA}.evidence (
         id            bigserial PRIMARY KEY,
         run_id        bigint NOT NULL REFERENCES {ONCHAIN_SCHEMA}.run(id),
         span_id       text,
-        entity_id     bigint REFERENCES {ONCHAIN_SCHEMA}.entity(id),
+        entity_id     bigint NOT NULL REFERENCES {ONCHAIN_SCHEMA}.entity(id),
         kind          text NOT NULL,
         method_or_url text NOT NULL,
         params_json   jsonb,
@@ -190,6 +203,10 @@ SCHEMA_STATEMENTS: Sequence[str] = (
     """,
     # v3 `Mint`/`Burn` and v4 `ModifyLiquidity` normalised to one shape, so the
     # custody read is one query per pool type rather than two code paths.
+    # `kind` is the normalised event: 'mint' and 'burn' from a v3 pool,
+    # 'modify_liquidity' from the v4 pool manager, 'nft_transfer' from either
+    # position manager. `liquidity_delta` is signed, negative for a burn, so a
+    # position nets to zero when it is closed.
     f"""
     CREATE TABLE IF NOT EXISTS {ONCHAIN_SCHEMA}.position_event (
         id               bigserial PRIMARY KEY,
@@ -231,6 +248,9 @@ SCHEMA_STATEMENTS: Sequence[str] = (
 )
 
 LEVELS = ('market', 'chain', 'project', 'pool', 'token')
+RUN_OUTCOMES = ('running', 'ok', 'partial', 'failed', 'skipped')
+BUILD_OUTCOMES = ('running', 'ok', 'partial', 'failed')
+SECTION_STATUSES = ('ok', 'partial', 'failed')
 
 
 class LockNotAcquiredError(RuntimeError):
@@ -393,6 +413,11 @@ class OnchainRepository:
         `admitted_at` is set by the database on the first admission and left
         alone afterwards: it records when the operator (or the registry) let the
         source in, and a nightly re-upsert must not keep moving it forward.
+
+        `admission` itself is only ever RAISED from `candidate`. A source the
+        operator later suspends or retires keeps that status, because the
+        registry file re-upserts every night and would otherwise silently undo
+        the operator's decision.
         """
         with self.connection.cursor() as cursor:
             cursor.execute(
@@ -400,9 +425,21 @@ class OnchainRepository:
                 '(class, url_or_handle, admission, admitted_by, admitted_at, evidence_json) '
                 'VALUES (%s, %s, %s, %s, CASE WHEN %s = \'admitted\' THEN now() END, %s) '
                 'ON CONFLICT (class, url_or_handle) DO UPDATE SET '
-                '  admission = EXCLUDED.admission, '
-                '  admitted_by = COALESCE(EXCLUDED.admitted_by, '
-                f'    {ONCHAIN_SCHEMA}.source.admitted_by), '
+                # The nightly re-upsert must never out-rank the operator. Only a
+                # `candidate` row is raised by the registry; once a source has an
+                # operator-set status ('admitted', 'suspended', 'retired' -- P6,
+                # phase 2), the stored value stands and the file cannot revert a
+                # suspension on the next build.
+                f'  admission = CASE WHEN {ONCHAIN_SCHEMA}.source.admission '
+                "    = 'candidate' THEN EXCLUDED.admission "
+                f'    ELSE {ONCHAIN_SCHEMA}.source.admission END, '
+                # `admitted_by` follows `admission`: the record of WHO set a
+                # status is part of the status, so a suspension by the operator
+                # must not end up attributed to the registry file.
+                f'  admitted_by = CASE WHEN {ONCHAIN_SCHEMA}.source.admission '
+                "    = 'candidate' THEN COALESCE(EXCLUDED.admitted_by, "
+                f'      {ONCHAIN_SCHEMA}.source.admitted_by) '
+                f'    ELSE {ONCHAIN_SCHEMA}.source.admitted_by END, '
                 '  admitted_at = COALESCE('
                 f'    {ONCHAIN_SCHEMA}.source.admitted_at, EXCLUDED.admitted_at), '
                 '  evidence_json = EXCLUDED.evidence_json '
@@ -635,12 +672,12 @@ class OnchainRepository:
         self,
         *,
         run_id: int,
+        entity_id: int,
         kind: str,
         method_or_url: str,
         body: Any,
         endpoint_kind: str,
         span_id: Optional[str] = None,
-        entity_id: Optional[int] = None,
         params: Optional[Any] = None,
         block: Optional[int] = None,
     ) -> int:

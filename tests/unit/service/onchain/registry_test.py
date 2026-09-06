@@ -16,6 +16,7 @@ from src.service.onchain.config import (
     ROBINHOOD_CHAIN_ID,
     VERIFIED_UNISWAP_ADDRESSES,
 )
+from src.service.onchain import registry as registry_module
 from src.service.onchain.registry import (
     RegistryError,
     load_registry,
@@ -224,3 +225,129 @@ class TestUpsert:
         assert 'fifth-project' in project_ids
         entity = onchain_repository.get_entity_by_key('project:fifth-project')
         assert entity['attrs_json']['pool_ref_kind'] == 'pool_address'
+
+
+class TestModuleResolution:
+    def test_the_registry_import_resolves_to_the_module_not_the_directory(self):
+        """`registry.py` sits beside a `registry/` directory and wins only
+        because that directory is not a package. A mechanical assertion, because
+        adding `registry/__init__.py` would silently redirect every import here
+        to an empty package and a README warning does not run."""
+        assert registry_module.__file__.endswith('registry.py')
+        assert hasattr(registry_module, 'load_registry')
+        assert not (DEFAULT_REGISTRY_PATH.parent / '__init__.py').exists()
+
+
+class TestDriftGuards:
+    def test_a_drifted_dexscreener_slug_is_rejected(self):
+        """The slug is the provider's own name for the chain and is not
+        derivable from the id, so it is knowledge in two places. A slug that
+        matches nothing does not raise at the provider -- it returns no pairs."""
+        payload = _payload()
+        payload['chains'][0]['dexscreener_slug'] = 'robinhood-chain'
+        with pytest.raises(RegistryError, match='shipped constant'):
+            parse_registry(payload)
+
+    def test_two_projects_cannot_claim_the_same_pool(self):
+        """The pool entity key is derived from (chain, reference), so the second
+        project's health section would silently read the first project's
+        custody."""
+        payload = _payload()
+        duplicate = copy.deepcopy(payload['projects'][0])
+        duplicate['key'] = 'touch-grass-copy'
+        payload['projects'].append(duplicate)
+        with pytest.raises(RegistryError, match='both name pool'):
+            parse_registry(payload)
+
+    def test_the_same_reference_on_a_different_chain_is_allowed(self):
+        """Only (chain, reference) collides; the same address on two chains is
+        two different pools."""
+        payload = _payload()
+        second_chain = copy.deepcopy(payload['chains'][0])
+        second_chain['chain_id'] = 8453
+        second_chain['key'] = 'base'
+        second_chain['dexscreener_slug'] = 'base'
+        payload['chains'].append(second_chain)
+        elsewhere = copy.deepcopy(payload['projects'][0])
+        elsewhere['key'] = 'touch-grass-on-base'
+        elsewhere['chain_id'] = 8453
+        payload['projects'].append(elsewhere)
+        assert len(parse_registry(payload).projects) == 5
+
+
+class TestAdmissionIsNotOverwritten:
+    def test_a_suspended_source_survives_the_nightly_upsert(
+        self, onchain_repository
+    ):
+        """The registry re-upserts every night. A source the operator suspends
+        (P6, phase 2) must not silently revert to `admitted` on the next build."""
+        registry = load_registry(DEFAULT_REGISTRY_PATH)
+        project_ids = upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+
+        with onchain_repository.connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE onchain.source SET admission = 'suspended', "
+                "admitted_by = 'operator' WHERE url_or_handle = %s",
+                ('https://x.com/TouchGrassRWA',),
+            )
+        onchain_repository.commit()
+
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+
+        sources = {
+            s['url_or_handle']: s
+            for s in onchain_repository.get_sources_for_entity(
+                project_ids['touch-grass']
+            )
+        }
+        suspended = sources['https://x.com/TouchGrassRWA']
+        assert suspended['admission'] == 'suspended'
+        assert suspended['admitted_by'] == 'operator'
+        # The others are untouched.
+        assert sources['https://www.touchgrass.family']['admission'] == 'admitted'
+
+    def test_a_candidate_source_is_raised_by_the_registry(self, onchain_repository):
+        """The one direction that IS allowed: a candidate the operator has not
+        ruled on yet becomes admitted when the registry names it."""
+        source_id = onchain_repository.upsert_source(
+            source_class='web',
+            url_or_handle='https://www.touchgrass.family',
+            admission='candidate',
+        )
+        onchain_repository.commit()
+
+        registry = load_registry(DEFAULT_REGISTRY_PATH)
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+
+        row = onchain_repository.fetch_one(
+            'SELECT * FROM onchain.source WHERE id = %s', (source_id,)
+        )
+        assert row['admission'] == 'admitted'
+        assert row['admitted_by'] == 'registry'
+
+
+class TestPathResolution:
+    def test_a_tilde_in_the_log_dir_is_expanded(self, monkeypatch):
+        """`.env` is literal text, so `ONCHAIN_LOG_DIR=~/onchain-data/logs`
+        arrives with the tilde intact; `Path()` would create a directory
+        actually named `~` under wherever cron started the job."""
+        from pathlib import Path as _Path
+
+        from src.service.onchain.config import get_log_dir, get_registry_path
+
+        monkeypatch.setenv('ONCHAIN_LOG_DIR', '~/onchain-data/logs/onchain')
+        resolved = get_log_dir()
+        assert '~' not in str(resolved)
+        assert resolved == _Path.home() / 'onchain-data' / 'logs' / 'onchain'
+
+        monkeypatch.setenv('ONCHAIN_REGISTRY_PATH', '~/registry.json')
+        assert '~' not in str(get_registry_path())
+
+    def test_an_empty_override_falls_back_to_the_default(self, monkeypatch):
+        from src.service.onchain.config import DEFAULT_LOG_DIR, get_log_dir
+
+        monkeypatch.setenv('ONCHAIN_LOG_DIR', '   ')
+        assert get_log_dir() == DEFAULT_LOG_DIR

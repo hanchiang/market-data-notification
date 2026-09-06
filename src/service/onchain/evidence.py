@@ -5,15 +5,21 @@ Two rules the store cannot enforce on its own and this module does:
 * **The run id and span id come from the logging context**, not from the caller,
   so an evidence row and the log lines written beside it carry the same ids by
   construction rather than by a caller remembering to pass them.
-* **A keyed endpoint's URL is never stored.** The archive endpoint's URL is the
-  credential. `endpoint_kind` ('alchemy', 'public', 'dexscreener', 'blockscout')
-  is the provenance, and a keyed HTTP read is refused loudly rather than
+* **A keyed endpoint's URL is never stored**, and the check does not trust the
+  caller's own label. `endpoint_kind` ('alchemy', 'public', 'dexscreener',
+  'blockscout') is the provenance, but a row mislabelled `public` while carrying
+  the archive URL would sail past a label check -- so the URL is also compared
+  against the configured archive endpoint by value. Refused loudly rather than
   redacted quietly: nothing in phase 1a fetches HTTP from a keyed endpoint, so
   reaching that branch is a bug, and a silent redaction would hide it.
+* **Every row names an entity.** The entity model (P1) says every evidence row
+  references exactly one entity, so `entity_id` is required here and NOT NULL in
+  the store. A run-setup read is a read about the chain entity.
 """
 import logging
 from typing import Any, Optional
 
+from src.service.onchain.config import get_archive_endpoint
 from src.service.onchain.observability import current_run_id, current_span_id
 from src.service.onchain.repository import OnchainRepository
 
@@ -35,14 +41,29 @@ class MissingRunContextError(RuntimeError):
     """Evidence was written outside a run context, so it would have no run id."""
 
 
+def _points_at_the_keyed_endpoint(url: str) -> bool:
+    """Whether this URL is the configured archive endpoint, whatever it is
+    labelled.
+
+    Compared by prefix against the endpoint's own URL, and neither the URL nor
+    this function's inputs are ever logged: the point is to refuse the write,
+    not to report what the credential was.
+    """
+    archive = get_archive_endpoint()
+    if archive is None:
+        return False
+    origin = archive.url.split('?', 1)[0].rstrip('/')
+    return bool(origin) and url.split('?', 1)[0].startswith(origin)
+
+
 def store_response(
     repository: OnchainRepository,
     *,
+    entity_id: int,
     kind: str,
     method_or_url: str,
     body: Any,
     endpoint_kind: str,
-    entity_id: Optional[int] = None,
     params: Optional[Any] = None,
     block: Optional[int] = None,
     run_id: Optional[int] = None,
@@ -68,6 +89,14 @@ def store_response(
         raise KeyedEndpointUrlError(
             f'refusing to store an HTTP URL for keyed endpoint kind '
             f'{endpoint_kind!r}: the URL is the credential'
+        )
+    if kind == KIND_HTTP and _points_at_the_keyed_endpoint(method_or_url):
+        # The label said otherwise, which is exactly why the label is not the
+        # check. The message names neither the URL nor the label's value.
+        raise KeyedEndpointUrlError(
+            'refusing to store an HTTP URL that points at the configured '
+            'archive endpoint: the URL is the credential, whatever the '
+            'endpoint kind claims'
         )
 
     return repository.insert_evidence(

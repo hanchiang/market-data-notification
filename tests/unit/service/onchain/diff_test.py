@@ -6,8 +6,10 @@ component under test would prove only that the test author wrote the rule twice.
 from src.service.onchain.diff import (
     diff_fields,
     effective_fields,
+    failed_field,
     is_empty,
     summarise,
+    with_baselines,
 )
 
 FAILED = {'state': 'failed', 'error_class': 'BlockscoutApiError'}
@@ -135,3 +137,108 @@ class TestFailedFields:
         current = {'verified_source': False}
         [change] = diff_fields(previous, current)['changed']
         assert change == {'field': 'verified_source', 'old': True, 'new': False}
+
+
+class TestBaselineSurvivesStorage:
+    """Round-1 finding P2-2: a `partial` section stores only a failure marker, so
+    without a carried baseline the night after an outage reports the next real
+    change as an appearance rather than as the change it is."""
+
+    def test_a_change_across_an_outage_is_reported_as_a_change(self):
+        night_1 = {'verified_source': True, 'owner': '0xa'}
+        night_2 = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError'), 'owner': '0xa'},
+            night_1,
+        )
+        assert night_2['verified_source']['baseline'] is True
+
+        changes = diff_fields(night_2, {'verified_source': False, 'owner': '0xa'})
+        assert changes['added'] == {}
+        assert changes['changed'] == [
+            {'field': 'verified_source', 'old': True, 'new': False}
+        ]
+
+    def test_the_baseline_chains_across_two_consecutive_outages(self):
+        night_1 = {'verified_source': True}
+        night_2 = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError')}, night_1
+        )
+        night_3 = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError')}, night_2
+        )
+        assert night_3['verified_source']['baseline'] is True
+        assert diff_fields(night_3, {'verified_source': False})['changed'] == [
+            {'field': 'verified_source', 'old': True, 'new': False}
+        ]
+
+    def test_the_outage_night_itself_still_diffs_empty(self):
+        night_1 = {'verified_source': True}
+        night_2 = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError')}, night_1
+        )
+        assert is_empty(diff_fields(night_1, night_2))
+
+    def test_a_field_that_never_read_carries_no_baseline(self):
+        stored = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError')}, {}
+        )
+        assert 'baseline' not in stored['verified_source']
+        assert is_empty(diff_fields({}, stored))
+
+    def test_a_recovery_to_the_same_value_is_not_a_change(self):
+        night_1 = {'verified_source': True}
+        night_2 = with_baselines(
+            {'verified_source': failed_field('BlockscoutApiError')}, night_1
+        )
+        assert is_empty(diff_fields(night_2, {'verified_source': True}))
+
+    def test_a_baseline_already_present_is_not_overwritten(self):
+        marker = failed_field('BlockscoutApiError', baseline='kept')
+        stored = with_baselines({'f': marker}, {'f': 'something-else'})
+        assert stored['f']['baseline'] == 'kept'
+
+
+class TestNumericGuard:
+    """Round-1 finding P3-1: a non-finite delta is rejected by Postgres `jsonb`
+    and would abort the build transaction mid-write."""
+
+    def test_an_infinity_named_token_produces_no_delta(self):
+        [change] = diff_fields({'name': 'Infinity'}, {'name': 'INF'})['changed']
+        assert 'delta' not in change
+
+    def test_nan_strings_produce_no_delta(self):
+        [change] = diff_fields({'name': 'nan'}, {'name': 'NaN'})['changed']
+        assert 'delta' not in change
+
+    def test_hex_and_scientific_notation_are_not_numbers_here(self):
+        for old, new in (('0x10', '0x11'), ('1e400', '1e401'), ('1_000', '1_001')):
+            [change] = diff_fields({'v': old}, {'v': new})['changed']
+            assert 'delta' not in change, (old, new)
+
+    def test_a_uint256_delta_is_exact_not_rounded(self):
+        old = str(10**30)
+        new = str(10**30 + 7)
+        [change] = diff_fields({'supply': old}, {'supply': new})['changed']
+        assert change['delta'] == 7
+        assert isinstance(change['delta'], int)
+
+    def test_a_non_finite_float_value_produces_no_delta(self):
+        [change] = diff_fields({'v': float('inf')}, {'v': 1.0})['changed']
+        assert 'delta' not in change
+
+    def test_every_delta_survives_json_dumps_into_jsonb(self, onchain_repository):
+        """The actual failure mode, checked against the real server rather than
+        by reasoning about `json.dumps`."""
+        import json
+        cases = [
+            ({'name': 'Infinity'}, {'name': 'INF'}),
+            ({'name': 'nan'}, {'name': 'NaN'}),
+            ({'supply': str(10**30)}, {'supply': str(10**30 + 7)}),
+            ({'v': '0.8'}, {'v': '0.9'}),
+        ]
+        for previous, current in cases:
+            payload = json.dumps(diff_fields(previous, current))
+            with onchain_repository.connection.cursor() as cursor:
+                cursor.execute('SELECT %s::jsonb AS j', (payload,))
+                assert cursor.fetchone()['j'] is not None
+        onchain_repository.rollback()

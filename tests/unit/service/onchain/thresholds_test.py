@@ -112,8 +112,8 @@ def _introducing_commit_date(version: str) -> datetime:
     """The author date of the commit that first introduced `version`.
 
     `git log -S` finds commits where the number of occurrences of the string
-    changed; the LAST line of `--reverse` ordering is the oldest, which is the
-    introduction.
+    changed; `--reverse` puts the oldest first, so the FIRST line is the
+    introducing commit.
     """
     result = subprocess.run(
         ['git', 'log', '-S', version, '--reverse', '--format=%H %aI',

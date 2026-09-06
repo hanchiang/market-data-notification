@@ -17,6 +17,9 @@ from src.service.project_monitor.logs import (
     build_log_queries,
     fetch_window,
 )
+from src.notification_destination.telegram_notification import (
+    send_message_to_admin as real_send_message_to_admin,
+)
 from src.service.project_monitor.config import NETNET
 
 
@@ -67,26 +70,23 @@ def test_a_failing_alert_never_masks_the_run_outcome(monkeypatch):
 
 
 def test_the_alert_is_not_sent_when_telegram_is_disabled(monkeypatch, caplog):
-    """The guard's rationale is on `_alert` itself; this asserts its two halves.
+    """`DISABLE_TELEGRAM` is honoured inside `send_message_to_admin` since
+    2026-09-06, not here, so the REAL sender runs in this test -- nothing is
+    stubbed. That is safe because the sender checks the flag before it looks up a
+    client, and no bots are initialised in this test: were the check removed, the
+    empty client map raises KeyError, `_alert` swallows it, and both assertions
+    below go red for that reason rather than passing vacuously.
+
     The log line is half the property: a suppressed alert that says nothing is
     indistinguishable from a job that never tried to alert."""
-
-    # A recorder, not a raising stub: `_alert` catches every exception, so a stub
-    # that raised would be swallowed and this test would pass with the guard
-    # removed -- proving nothing.
-    sent = []
-
-    async def fake_send(message, market_data_type):
-        sent.append(message)
-
-    monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
     monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
 
     with caplog.at_level(logging.INFO, logger='Project monitor record'):
         asyncio.run(record_job._alert(run_id=3, error_class='EvmRpcError'))
 
-    assert sent == []
-    assert 'telegram is disabled' in caplog.text
+    assert 'suppressed by the sender' in caplog.text
+    # Suppressed, not failed.
+    assert 'could not be sent' not in caplog.text
 
 
 def test_window_too_wide_is_recognised_from_the_endpoints_own_wording():
@@ -500,13 +500,17 @@ def test_a_rejecting_endpoint_exits_non_zero_and_writes_no_sample(
 
 
 def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero(
-    repository, database_url, monkeypatch
+    repository, database_url, monkeypatch, caplog
 ):
     """The combination the operator actually runs locally: DISABLE_TELEGRAM on,
     a run that fails. Suppressing the alert must not cost the run row or the exit
     code. Driven through `main()` because the ordering it depends on -- bots are
     built before the guarded body -- is invisible from `_alert` alone."""
-    sent = _patch_entrypoint(monkeypatch, repository, database_url)
+    _patch_entrypoint(monkeypatch, repository, database_url)
+    # The real sender, so the suppression under test is the one that ships. It
+    # returns before any client lookup when the flag is on; `_patch_entrypoint`
+    # stubs `init_telegram_bots`, so there is no client to reach even if it did.
+    monkeypatch.setattr(record_job, 'send_message_to_admin', real_send_message_to_admin)
     monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
 
     async def rejecting(*args, **kwargs):
@@ -520,7 +524,8 @@ def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero
     monkeypatch.setattr(record_job, 'run_sample', rejecting)
     monkeypatch.setattr(record_job, 'run_manifest_snapshot', fake_manifest)
 
-    exit_code = asyncio.run(record_job.main())
+    with caplog.at_level(logging.INFO, logger='Project monitor record'):
+        exit_code = asyncio.run(record_job.main())
 
     assert exit_code == 1
     run = repository.fetch_all(
@@ -528,7 +533,8 @@ def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero
     )[0]
     assert run['outcome'] == 'failed'
     assert run['error_class'] == 'EvmTransportError'
-    assert sent == []
+    assert 'suppressed by the sender' in caplog.text
+    assert 'could not be sent' not in caplog.text
 
 
 def test_a_second_run_while_one_holds_the_lock_is_skipped_not_failed(

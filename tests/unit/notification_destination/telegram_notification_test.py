@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -148,6 +149,10 @@ async def test_send_message_to_admin_uses_crypto_admin_client(monkeypatch):
         ),
     )
     monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    # Pinned, not inherited: `send_message_to_admin` returns before the client
+    # lookup when DISABLE_TELEGRAM is on, so with the flag set in the developer's
+    # environment every assertion below would be about a send that never ran.
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
 
     await telegram_notification.send_message_to_admin(
         message='crypto alert',
@@ -160,6 +165,34 @@ async def test_send_message_to_admin_uses_crypto_admin_client(monkeypatch):
         parse_mode='MarkdownV2',
     )
     stocks_admin_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_admin_is_disabled_by_the_flag(monkeypatch, caplog):
+    """The operator's global off switch, moved into this sender on 2026-09-06 so
+    that every caller inherits it instead of two jobs carrying private copies.
+
+    The check has to precede the client lookup, not just the send: a disabled
+    process is one that never initialised its bots, and a lookup-then-check
+    order would raise KeyError there instead of returning quietly. The empty
+    client map below is exactly that process.
+    """
+    crypto_admin_client = AsyncMock()
+    crypto_admin_client.send_message = AsyncMock()
+    monkeypatch.setattr(telegram_notification, 'chat_id_to_telegram_client', {})
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+
+    with caplog.at_level(logging.INFO):
+        result = await telegram_notification.send_message_to_admin(
+            message='crypto alert',
+            market_data_type=MarketDataType.CRYPTO,
+        )
+
+    # None, not a Message: that is how a caller tells a suppressed alert from a
+    # delivered one, and both run-alert jobs log the difference.
+    assert result is None
+    crypto_admin_client.send_message.assert_not_awaited()
+    assert 'Telegram is disabled' in caplog.text
 
 
 @pytest.mark.asyncio
@@ -192,6 +225,10 @@ async def test_send_message_to_admin_uses_same_client_for_fallback(monkeypatch):
         ),
     )
     monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    # Pinned, not inherited: `send_message_to_admin` returns before the client
+    # lookup when DISABLE_TELEGRAM is on, so with the flag set in the developer's
+    # environment every assertion below would be about a send that never ran.
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
 
     await telegram_notification.send_message_to_admin(
         message='crypto alert',

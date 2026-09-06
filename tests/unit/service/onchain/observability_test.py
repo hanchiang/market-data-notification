@@ -343,7 +343,8 @@ class TestAlertBoundary:
 
         `DISABLE_TELEGRAM=false` is pinned for the same reason as the failure
         test: the recorders are what keep this off the network, and the test must
-        assert the same thing whichever way the developer's env is set.
+        assert the same thing whichever way the developer's env is set. With the
+        flag on, the real sender returns None and this asserts nothing.
         """
         import src.notification_destination.telegram_notification as telegram_notification
         import src.service.onchain.observability as obs
@@ -351,9 +352,14 @@ class TestAlertBoundary:
         from src.util.my_telegram import escape_markdown
 
         calls = []
+        # Returns a stand-in for the Message the real sender returns: None is
+        # how it reports a suppressed send, so a recorder returning None would
+        # make this assert the suppressed path instead of the delivered one.
+        sent_message = object()
 
         async def record_send(message, market_data_type):
             calls.append(('send', message, market_data_type))
+            return sent_message
 
         monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
         monkeypatch.setattr(
@@ -389,11 +395,10 @@ class TestAlertBoundary:
         emits the class and never the traceback, and a silent alert failure
         would otherwise leave nothing to grep.
 
-        The transport is stubbed. `send_message_to_admin` does NOT consult
-        `DISABLE_TELEGRAM`, and this worktree's `.env` carries real credentials,
-        so a test that let the real function run would post to the operator's
-        admin chat -- which is exactly what happened once while writing this
-        file.
+        The transport is stubbed, which is what keeps this off the wire: this
+        worktree's `.env` carries real credentials, and a test that let the real
+        send run with the flag off would post to the operator's admin chat --
+        which is exactly what happened once while writing this file.
         """
         import src.notification_destination.telegram_notification as telegram_notification
         import src.service.onchain.observability as obs
@@ -424,24 +429,38 @@ class TestAlertBoundary:
     def test_the_alert_is_suppressed_when_telegram_is_disabled(
         self, job_log, monkeypatch
     ):
-        """`DISABLE_TELEGRAM` is the operator's explicit switch, and the admin
-        send path does not honour it on its own. Checked before the bots are
-        built, so a disabled run touches no network at all."""
+        """`DISABLE_TELEGRAM` is the operator's explicit switch, honoured inside
+        `send_message_to_admin` since 2026-09-06 rather than at each call site.
+
+        So the REAL sender runs here -- only `init_telegram_bots` is stubbed.
+        That is safe and is the point: the sender's check precedes its client
+        lookup, so a disabled process needs no bots and can reach no network. If
+        the check were removed, the empty client map raises KeyError, the alert
+        path swallows it, and both assertions below go red for that reason.
+
+        What is asserted is what the code now guarantees -- no message is SENT --
+        and not the old call-site property that no bot is built. Bot construction
+        does no I/O (`telegram.Bot.__init__` only builds `HTTPXRequest`
+        objects), so it was never the property worth pinning.
+        """
         import src.notification_destination.telegram_notification as telegram_notification
         import src.service.onchain.observability as obs
 
-        def explode():
-            raise AssertionError('the alert path must not build a bot when disabled')
-
+        built = []
         monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
-        monkeypatch.setattr(telegram_notification, 'init_telegram_bots', explode)
+        monkeypatch.setattr(
+            telegram_notification, 'init_telegram_bots', lambda: built.append('init')
+        )
 
         async def run():
             with run_context(5, 'onchain.build'):
                 return await obs.send_run_alert(5, 'onchain.build', [])
 
         assert asyncio.run(run()) is False
-        assert any(
-            'telegram is disabled' in line['message'].lower()
-            for line in _read_lines(job_log)
-        )
+        messages = [line['message'] for line in _read_lines(job_log)]
+        # The suppression is observable in THIS job's log: an operator must be
+        # able to tell a withheld alert from a run that never tried to alert.
+        assert any('suppressed by the sender' in message for message in messages)
+        # And it was suppressed, not failed: no exception reached the handler.
+        assert not any('could not be sent' in message for message in messages)
+        assert built == ['init']

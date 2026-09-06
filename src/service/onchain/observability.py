@@ -242,36 +242,37 @@ def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
 async def send_run_alert(
     run_id: Optional[int], job: str, failed_units: Sequence[Any]
 ) -> bool:
-    """One admin-chat message per job per run. Returns whether it was sent.
+    """One admin-chat message per job per run. Returns whether it was DELIVERED.
 
     Imported lazily and guarded in full: this is called after the run row has
     already been written, and an alert failure must never mask or undo the run
     outcome (the monitor's pattern). `init_telegram_bots` populates the global
     bot map `send_message_to_admin` indexes, so it has to run first or the alert
     path raises KeyError and swallows itself.
+
+    `DISABLE_TELEGRAM` is honoured by the sender, not here. A suppressed send
+    comes back as None, and that is logged rather than returned silently: an
+    operator reading this job's log must be able to tell an alert that was
+    withheld from a run that never tried to alert.
     """
     try:
-        from src.config.config import get_disable_telegram
         from src.notification_destination import telegram_notification
         from src.type.market_data_type import MarketDataType
         from src.util.my_telegram import escape_markdown
 
-        # `send_message_to_admin` does not consult this flag itself -- only the
-        # signal senders do -- so the operator's explicit off switch is honoured
-        # here, BEFORE any bot is constructed. Without it a local run, or a test
-        # that reaches this function, posts to the real admin chat: this repo's
-        # `.env` carries live credentials and nothing else stands in the way.
-        if get_disable_telegram():
-            logger.info('telegram is disabled; onchain run alert not sent')
-            return False
-
         telegram_notification.init_telegram_bots()
         # Resolved through the module rather than imported by name so a test
         # can stub the transport without the send having already been bound.
-        await telegram_notification.send_message_to_admin(
+        delivered = await telegram_notification.send_message_to_admin(
             escape_markdown(format_alert(run_id, job, failed_units)),
             MarketDataType.CRYPTO,
         )
+        if delivered is None:
+            logger.info(
+                'onchain run alert was suppressed by the sender '
+                '(DISABLE_TELEGRAM); the run row still holds the record'
+            )
+            return False
         return True
     except Exception:
         # `exc_info` so the JSON line carries `exc_class`: the formatter emits

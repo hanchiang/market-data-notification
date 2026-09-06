@@ -210,6 +210,27 @@ async def test_send_message_to_admin_is_disabled_by_the_flag(monkeypatch, caplog
 
 
 @pytest.mark.asyncio
+async def test_send_message_to_admin_is_disabled_before_the_client_lookup(monkeypatch):
+    """The ordering half, kept at the definition site: with the map empty, a
+    check placed BELOW `chat_id_to_telegram_client[channel_id]` raises KeyError
+    instead of returning quietly.
+
+    Separate from the test above because the two cannot be one: that one has to
+    register a client for its "nothing was sent" assertion to be capable of
+    failing, and a registered client is exactly what makes the misordered lookup
+    succeed. An empty map is the process the flag is normally set on -- one that
+    never initialised its bots.
+    """
+    monkeypatch.setattr(telegram_notification, 'chat_id_to_telegram_client', {})
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+
+    assert await telegram_notification.send_message_to_admin(
+        message='crypto alert',
+        market_data_type=MarketDataType.CRYPTO,
+    ) is None
+
+
+@pytest.mark.asyncio
 async def test_send_message_to_admin_uses_same_client_for_fallback(monkeypatch):
     crypto_admin_client = AsyncMock()
     crypto_admin_client.send_message = AsyncMock(

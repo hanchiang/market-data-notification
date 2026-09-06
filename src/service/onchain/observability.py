@@ -241,9 +241,11 @@ def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
 
 # One wording for both suppression paths -- the flag caught here before the bot
 # init, and a send the sender withheld -- because to the operator reading the log
-# they are the same event and should grep as one.
+# they are the same event and should grep as one. Deliberately does NOT name the
+# sender: on the first path no sender is reached, which is the whole point of
+# checking before the init.
 _SUPPRESSED = (
-    'onchain run alert was suppressed by the sender (DISABLE_TELEGRAM); '
+    'onchain run alert was suppressed (DISABLE_TELEGRAM); '
     'the run row still holds the record'
 )
 

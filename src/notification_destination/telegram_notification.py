@@ -141,6 +141,10 @@ async def send_message_to_channel(
             )
         except Exception as fallback_error:
             logger.error(get_exception_message(fallback_error))
+        # Falls off the end returning None even when the fallback send SUCCEEDED.
+        # This function's return is not on `send_message_to_admin`'s contract:
+        # None here does not mean the send was suppressed, and no caller may read
+        # it that way.
 
 async def send_message_to_admin(
     message: str, market_data_type: MarketDataType

@@ -456,7 +456,7 @@ class TestAlertBoundary:
 
         assert asyncio.run(run()) is False
         messages = [line['message'] for line in _read_lines(job_log)]
-        assert any('suppressed by the sender' in message for message in messages)
+        assert any('was suppressed (DISABLE_TELEGRAM)' in message for message in messages)
         assert not any('could not be sent' in message for message in messages)
 
     def test_a_send_the_sender_withholds_is_reported_as_suppressed(
@@ -491,5 +491,5 @@ class TestAlertBoundary:
 
         assert asyncio.run(run()) is False
         messages = [line['message'] for line in _read_lines(job_log)]
-        assert any('suppressed by the sender' in message for message in messages)
+        assert any('was suppressed (DISABLE_TELEGRAM)' in message for message in messages)
         assert not any('could not be sent' in message for message in messages)

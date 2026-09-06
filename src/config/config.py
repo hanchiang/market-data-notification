@@ -326,7 +326,20 @@ def get_tradingview_webhook_secret():
     return os.getenv('TRADING_VIEW_WEBHOOK_SECRET')
 
 def get_disable_telegram():
+    # User-facing output only: the public channels and the crypto signal chat.
+    # It does NOT reach admin or error alerts -- see below.
     return os.getenv('DISABLE_TELEGRAM', 'false') == 'true'
+
+def get_disable_telegram_admin():
+    # Admin and error alerts, which are a separate concern from user-facing
+    # output: an operator muting noisy channels during an incident must not also
+    # mute the alerts telling them the incident is getting worse.
+    #
+    # Defaults to FALSE, and the default is the point: an alert channel fails
+    # safe by firing, so it stays on unless something explicitly turns it off.
+    # `DISABLE_TELEGRAM_ADMIN` exists for local and CI processes, whose `.env`
+    # can carry live credentials; it must not be set in production.
+    return os.getenv('DISABLE_TELEGRAM_ADMIN', 'false') == 'true'
 
 def _get_positive_float_env(var_name: str, default: str) -> float:
     raw_value = os.getenv(var_name, default)

@@ -245,7 +245,7 @@ def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
 # sender: on the first path no sender is reached, which is the whole point of
 # checking before the init.
 _SUPPRESSED = (
-    'onchain run alert was suppressed (DISABLE_TELEGRAM); '
+    'onchain run alert was suppressed (DISABLE_TELEGRAM_ADMIN); '
     'the run row still holds the record'
 )
 
@@ -261,8 +261,10 @@ async def send_run_alert(
     bot map `send_message_to_admin` indexes, so it has to run first or the alert
     path raises KeyError and swallows itself.
 
-    `DISABLE_TELEGRAM` is honoured by the sender for the SEND. The check below
-    is not a second copy of that: it guards the INIT. `init_telegram_bots()`
+    `DISABLE_TELEGRAM_ADMIN` is honoured by the sender for the SEND -- and it,
+    not `DISABLE_TELEGRAM`, is the switch: a production operator muting
+    user-facing channels must still receive run failures. The check below is not
+    a second copy of the sender's: it guards the INIT. `init_telegram_bots()`
     raises when credentials are absent, and the environment the flag targets is
     usually exactly that one -- a local or CI process with no bot token -- so
     without it a disabled run reports "alert could not be sent" where the
@@ -275,12 +277,12 @@ async def send_run_alert(
     withheld from a run that never tried to alert.
     """
     try:
-        from src.config.config import get_disable_telegram
+        from src.config.config import get_disable_telegram_admin
         from src.notification_destination import telegram_notification
         from src.type.market_data_type import MarketDataType
         from src.util.my_telegram import escape_markdown
 
-        if get_disable_telegram():
+        if get_disable_telegram_admin():
             logger.info(_SUPPRESSED)
             return False
 

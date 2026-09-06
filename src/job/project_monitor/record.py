@@ -285,8 +285,9 @@ async def _alert(
     `.` or `_` is rejected by Telegram otherwise. The whole send is guarded so an
     alert failure never masks the run outcome.
 
-    `DISABLE_TELEGRAM` is honoured by the sender, not here. A suppressed send
-    comes back as None and is logged, so a withheld alert is distinguishable in
+    Suppression is `DISABLE_TELEGRAM_ADMIN`'s, honoured by the sender, not here
+    -- and not `DISABLE_TELEGRAM`, which mutes user-facing output only. A
+    withheld send comes back as None and is logged, so it is distinguishable in
     this job's log from a run that never tried to alert.
     """
     try:
@@ -298,7 +299,7 @@ async def _alert(
         if delivered is None:
             logger.info(
                 'project_monitor run alert was suppressed by the sender '
-                '(DISABLE_TELEGRAM); the run row still holds the record'
+                '(DISABLE_TELEGRAM_ADMIN); the run row still holds the record'
             )
     except Exception:
         logger.warning('failure alert could not be sent')

@@ -62,7 +62,10 @@ class CryptoNotificationJob(JobWrapper):
 #   snapshot persistence, and private/admin signal routing:
 #   ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto.py --force_run=1 --test_mode=1
 # - Production-runtime smoke without Telegram delivery:
-#   DISABLE_TELEGRAM=true ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto.py --force_run=1
+#   DISABLE_TELEGRAM=true DISABLE_TELEGRAM_ADMIN=true ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/crypto/crypto.py --force_run=1
+#   Both flags: DISABLE_TELEGRAM mutes user-facing output, and admin error
+#   alerts are deliberately NOT covered by it -- locally they need
+#   DISABLE_TELEGRAM_ADMIN, or a failure posts to the real admin chat.
 #
 # Phase-1 crypto signal output must stay on private/admin routing. The signal
 # sender reads CRYPTO_SIGNAL_RECIPIENT_ID, falling back to CRYPTO_TELEGRAM_ADMIN_ID,

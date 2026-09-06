@@ -149,7 +149,13 @@ async def send_message_to_channel(
 async def send_message_to_admin(
     message: str, market_data_type: MarketDataType
 ) -> Optional[telegram.Message]:
-    """Send to the admin chat. None means DISABLE_TELEGRAM withheld the send.
+    """Send to the admin chat. None means DISABLE_TELEGRAM_ADMIN withheld it.
+
+    Deliberately NOT `DISABLE_TELEGRAM`: that flag mutes user-facing output, and
+    an operator reaching for it to quiet public channels during an incident must
+    still be told the incident is getting worse. Ruled by the operator on
+    2026-09-06, after that coupling shipped: "any errors in production should be
+    surfaced, so that I am aware."
 
     A delivered message -- including one delivered by the error fallback below --
     always comes back, so `is None` is the callers' test for suppression and
@@ -158,8 +164,8 @@ async def send_message_to_admin(
     # Before the client lookup, so a disabled process needs no initialised bots
     # and can reach no network at all -- which is the state that process is
     # normally in.
-    if config.get_disable_telegram():
-        logger.info('Telegram is disabled')
+    if config.get_disable_telegram_admin():
+        logger.info('Telegram admin alerts are disabled')
         return None
 
     channel_id = get_admin_channel_id_from_market_data_type(market_data_type)

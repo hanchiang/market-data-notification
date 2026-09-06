@@ -341,10 +341,10 @@ class TestAlertBoundary:
         a KeyError swallowed by the except), the text is the escaped payload, and
         the destination is the CRYPTO admin chat.
 
-        `DISABLE_TELEGRAM=false` is pinned for the same reason as the failure
-        test: the recorders are what keep this off the network, and the test must
-        assert the same thing whichever way the developer's env is set. With the
-        flag on, the real sender returns None and this asserts nothing.
+        `DISABLE_TELEGRAM_ADMIN=false` is pinned for the same reason as the
+        failure test: the recorders are what keep this off the network, and the
+        test must assert the same thing whichever way the developer's env is set.
+        With that flag on, the real sender returns None and this asserts nothing.
         """
         import src.notification_destination.telegram_notification as telegram_notification
         import src.service.onchain.observability as obs
@@ -361,7 +361,7 @@ class TestAlertBoundary:
             calls.append(('send', message, market_data_type))
             return sent_message
 
-        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+        monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
         monkeypatch.setattr(
             telegram_notification, 'init_telegram_bots',
             lambda: calls.append(('init',)),
@@ -406,12 +406,12 @@ class TestAlertBoundary:
         async def refuse(*_args, **_kwargs):
             raise RuntimeError('transport stubbed by the test; nothing was sent')
 
-        # Pinned, not inherited: with `DISABLE_TELEGRAM=true` in the developer's
-        # environment the guard returns before the stub and no line is written,
-        # so this test would pass only in the configuration where an unstubbed
-        # send reaches the wire. The stubs above are what keep it off the
-        # network; the flag is not doing that job here.
-        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+        # Pinned, not inherited: with `DISABLE_TELEGRAM_ADMIN=true` in the
+        # developer's environment the guard returns before the stub and no line
+        # is written, so this test would pass only in the configuration where an
+        # unstubbed send reaches the wire. The stubs above are what keep it off
+        # the network; the flag is not doing that job here.
+        monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
         monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
         monkeypatch.setattr(telegram_notification, 'send_message_to_admin', refuse)
 
@@ -429,9 +429,10 @@ class TestAlertBoundary:
     def test_a_disabled_run_reports_suppression_even_with_no_credentials(
         self, job_log, monkeypatch
     ):
-        """The environment `DISABLE_TELEGRAM` actually targets is usually one
-        with no bot token at all, and `init_telegram_bots()` raises there. If the
-        flag were only checked by the sender, the init would raise first, the
+        """The environment `DISABLE_TELEGRAM_ADMIN` actually targets is usually
+        one with no bot token at all -- a local or CI process -- and
+        `init_telegram_bots()` raises there. If the flag were only checked by the
+        sender, the init would raise first, the
         broad except would catch it, and the operator would read "alert could not
         be sent" for a run whose alert was deliberately withheld -- a real
         failure and a suppression telling the same story.
@@ -445,7 +446,7 @@ class TestAlertBoundary:
         def no_credentials():
             raise RuntimeError('telegram stocks bot token is missing')
 
-        monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+        monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'true')
         monkeypatch.setattr(
             telegram_notification, 'init_telegram_bots', no_credentials
         )
@@ -456,7 +457,7 @@ class TestAlertBoundary:
 
         assert asyncio.run(run()) is False
         messages = [line['message'] for line in _read_lines(job_log)]
-        assert any('was suppressed (DISABLE_TELEGRAM)' in message for message in messages)
+        assert any('was suppressed (DISABLE_TELEGRAM_ADMIN)' in message for message in messages)
         assert not any('could not be sent' in message for message in messages)
 
     def test_a_send_the_sender_withholds_is_reported_as_suppressed(
@@ -479,7 +480,7 @@ class TestAlertBoundary:
         async def withhold(*_args, **_kwargs):
             return None
 
-        monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+        monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
         monkeypatch.setattr(telegram_notification, 'init_telegram_bots', lambda: None)
         monkeypatch.setattr(
             telegram_notification, 'send_message_to_admin', withhold
@@ -491,5 +492,5 @@ class TestAlertBoundary:
 
         assert asyncio.run(run()) is False
         messages = [line['message'] for line in _read_lines(job_log)]
-        assert any('was suppressed (DISABLE_TELEGRAM)' in message for message in messages)
+        assert any('was suppressed (DISABLE_TELEGRAM_ADMIN)' in message for message in messages)
         assert not any('could not be sent' in message for message in messages)

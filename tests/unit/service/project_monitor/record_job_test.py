@@ -24,7 +24,7 @@ from src.service.project_monitor.config import NETNET
 
 
 # What `send_message_to_admin` returns on a delivered send: any non-None value.
-# `None` is reserved for a send the sender withheld under DISABLE_TELEGRAM, and
+# `None` is reserved for a send the sender withheld under DISABLE_TELEGRAM_ADMIN,
 # both jobs branch on exactly that.
 _DELIVERED = object()
 
@@ -48,7 +48,7 @@ def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch, c
     # the wire; the pin is here so the test reads the same in an environment
     # that sets the flag, since `send_message_to_admin` is the authority now and
     # a future test that stops stubbing it would silently stop asserting.
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
     with caplog.at_level(logging.INFO, logger='Project monitor record'):
         asyncio.run(
             record_job._alert(
@@ -80,14 +80,14 @@ def test_a_failing_alert_never_masks_the_run_outcome(monkeypatch):
         raise RuntimeError('telegram is down')
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', exploding_send)
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
     # No exception escapes.
     asyncio.run(record_job._alert(run_id=1, error_class='EvmTransportError'))
 
 
 def test_the_alert_is_not_sent_when_telegram_is_disabled(monkeypatch, caplog):
-    """`DISABLE_TELEGRAM` is honoured inside `send_message_to_admin` since
-    2026-09-06, not here, so the REAL sender runs in this test -- nothing is
+    """Admin sends are gated by `DISABLE_TELEGRAM_ADMIN`, honoured inside
+    `send_message_to_admin` since 2026-09-06, not here, so the REAL sender runs in this test -- nothing is
     stubbed. That is safe because the sender checks the flag before it looks up a
     client, and no bots are initialised in this test: were the check removed, the
     empty client map raises KeyError, `_alert` swallows it, and both assertions
@@ -95,7 +95,7 @@ def test_the_alert_is_not_sent_when_telegram_is_disabled(monkeypatch, caplog):
 
     The log line is half the property: a suppressed alert that says nothing is
     indistinguishable from a job that never tried to alert."""
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'true')
 
     with caplog.at_level(logging.INFO, logger='Project monitor record'):
         asyncio.run(record_job._alert(run_id=3, error_class='EvmRpcError'))
@@ -466,7 +466,7 @@ def _patch_entrypoint(monkeypatch, repository, database_url):
     monkeypatch.setattr(record_job, 'init_telegram_bots', lambda: None)
     # Pinned so this reads the same in an environment that sets the flag. The
     # stub below is what keeps it off the wire.
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
     sent = []
 
     async def fake_send(message, market_data_type):
@@ -520,8 +520,8 @@ def test_a_rejecting_endpoint_exits_non_zero_and_writes_no_sample(
 def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero(
     repository, database_url, monkeypatch, caplog
 ):
-    """The combination the operator actually runs locally: DISABLE_TELEGRAM on,
-    a run that fails. Suppressing the alert must not cost the run row or the exit
+    """The combination the operator actually runs locally: alerts muted with
+    DISABLE_TELEGRAM_ADMIN, and a run that fails. Suppressing the alert must not cost the run row or the exit
     code. Driven through `main()` because the ordering it depends on -- bots are
     built before the guarded body -- is invisible from `_alert` alone."""
     _patch_entrypoint(monkeypatch, repository, database_url)
@@ -529,7 +529,7 @@ def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero
     # returns before any client lookup when the flag is on; `_patch_entrypoint`
     # stubs `init_telegram_bots`, so there is no client to reach even if it did.
     monkeypatch.setattr(record_job, 'send_message_to_admin', real_send_message_to_admin)
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'true')
 
     async def rejecting(*args, **kwargs):
         raise EvmTransportError(

@@ -150,9 +150,11 @@ async def test_send_message_to_admin_uses_crypto_admin_client(monkeypatch):
     )
     monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
     # Pinned, not inherited: `send_message_to_admin` returns before the client
-    # lookup when DISABLE_TELEGRAM is on, so with the flag set in the developer's
-    # environment every assertion below would be about a send that never ran.
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+    # lookup when DISABLE_TELEGRAM_ADMIN is on, so with that flag set in the
+    # developer's environment every assertion below would be about a send that
+    # never ran. `DISABLE_TELEGRAM` is deliberately NOT the flag here: it mutes
+    # user-facing output and must never reach an admin alert.
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
 
     await telegram_notification.send_message_to_admin(
         message='crypto alert',
@@ -165,6 +167,47 @@ async def test_send_message_to_admin_uses_crypto_admin_client(monkeypatch):
         parse_mode='MarkdownV2',
     )
     stocks_admin_client.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_disable_telegram_does_not_silence_admin_alerts(monkeypatch):
+    """The operator's ruling, 2026-09-06: "any errors in production should be
+    surfaced, so that I am aware."
+
+    `DISABLE_TELEGRAM` is a deployed secret, so the switch an operator reaches
+    for to quiet noisy public channels during an incident was also muting the
+    alerts telling them the incident was getting worse. The two concerns are
+    separate and this is the guard that keeps them separate: user-facing output
+    off, admin alert still delivered.
+
+    Asserted with the admin flag UNSET rather than set to 'false', because the
+    default is the property under test -- an alert channel fails safe by firing.
+    """
+    crypto_admin_client = AsyncMock()
+    crypto_admin_client.send_message = AsyncMock(
+        return_value=_build_message_response(message_id=789)
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'chat_id_to_telegram_client',
+        {'crypto-admin-chat': crypto_admin_client},
+    )
+    monkeypatch.setattr(
+        telegram_notification,
+        'get_admin_channel_id_from_market_data_type',
+        lambda market_data_type: 'crypto-admin-chat',
+    )
+    monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+    monkeypatch.delenv('DISABLE_TELEGRAM_ADMIN', raising=False)
+
+    result = await telegram_notification.send_message_to_admin(
+        message='crypto alert',
+        market_data_type=MarketDataType.CRYPTO,
+    )
+
+    assert result is not None
+    crypto_admin_client.send_message.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -194,7 +237,7 @@ async def test_send_message_to_admin_is_disabled_by_the_flag(monkeypatch, caplog
         'get_admin_channel_id_from_market_data_type',
         lambda market_data_type: 'crypto-admin-chat',
     )
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'true')
 
     with caplog.at_level(logging.INFO):
         result = await telegram_notification.send_message_to_admin(
@@ -206,7 +249,7 @@ async def test_send_message_to_admin_is_disabled_by_the_flag(monkeypatch, caplog
     # delivered one, and both run-alert jobs log the difference.
     assert result is None
     crypto_admin_client.send_message.assert_not_awaited()
-    assert 'Telegram is disabled' in caplog.text
+    assert 'Telegram admin alerts are disabled' in caplog.text
 
 
 @pytest.mark.asyncio
@@ -222,7 +265,7 @@ async def test_send_message_to_admin_is_disabled_before_the_client_lookup(monkey
     never initialised its bots.
     """
     monkeypatch.setattr(telegram_notification, 'chat_id_to_telegram_client', {})
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'true')
 
     assert await telegram_notification.send_message_to_admin(
         message='crypto alert',
@@ -261,9 +304,11 @@ async def test_send_message_to_admin_uses_same_client_for_fallback(monkeypatch):
     )
     monkeypatch.setattr(telegram_notification, 'print_telegram_message', lambda _res: None)
     # Pinned, not inherited: `send_message_to_admin` returns before the client
-    # lookup when DISABLE_TELEGRAM is on, so with the flag set in the developer's
-    # environment every assertion below would be about a send that never ran.
-    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
+    # lookup when DISABLE_TELEGRAM_ADMIN is on, so with that flag set in the
+    # developer's environment every assertion below would be about a send that
+    # never ran. `DISABLE_TELEGRAM` is deliberately NOT the flag here: it mutes
+    # user-facing output and must never reach an admin alert.
+    monkeypatch.setenv('DISABLE_TELEGRAM_ADMIN', 'false')
 
     await telegram_notification.send_message_to_admin(
         message='crypto alert',

@@ -1,5 +1,6 @@
 """The record entrypoint: the failure-alert path and the log-window narrowing."""
 import asyncio
+import logging
 
 import pytest
 
@@ -29,6 +30,10 @@ def test_the_alert_carries_the_exception_class_and_never_its_text(monkeypatch):
         sent.append((message, market_data_type))
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
+    # Pinned, not inherited: `_alert` returns early when DISABLE_TELEGRAM is set,
+    # so a developer running with the flag on would see this test pass for the
+    # wrong reason. The stub above -- not the flag -- is what keeps it off the wire.
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
     asyncio.run(
         record_job._alert(
             run_id=7, error_class='EvmRateLimitError', endpoint_kind='alchemy'
@@ -56,8 +61,32 @@ def test_a_failing_alert_never_masks_the_run_outcome(monkeypatch):
         raise RuntimeError('telegram is down')
 
     monkeypatch.setattr(record_job, 'send_message_to_admin', exploding_send)
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
     # No exception escapes.
     asyncio.run(record_job._alert(run_id=1, error_class='EvmTransportError'))
+
+
+def test_the_alert_is_not_sent_when_telegram_is_disabled(monkeypatch, caplog):
+    """The guard's rationale is on `_alert` itself; this asserts its two halves.
+    The log line is half the property: a suppressed alert that says nothing is
+    indistinguishable from a job that never tried to alert."""
+
+    # A recorder, not a raising stub: `_alert` catches every exception, so a stub
+    # that raised would be swallowed and this test would pass with the guard
+    # removed -- proving nothing.
+    sent = []
+
+    async def fake_send(message, market_data_type):
+        sent.append(message)
+
+    monkeypatch.setattr(record_job, 'send_message_to_admin', fake_send)
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+
+    with caplog.at_level(logging.INFO, logger='Project monitor record'):
+        asyncio.run(record_job._alert(run_id=3, error_class='EvmRpcError'))
+
+    assert sent == []
+    assert 'telegram is disabled' in caplog.text
 
 
 def test_window_too_wide_is_recognised_from_the_endpoints_own_wording():
@@ -419,6 +448,10 @@ def _patch_entrypoint(monkeypatch, repository, database_url):
         record_job, 'get_project_monitor_database_url', lambda mode: database_url
     )
     monkeypatch.setattr(record_job, 'init_telegram_bots', lambda: None)
+    # Pinned so the returned `sent` list means what its callers assert about it:
+    # with DISABLE_TELEGRAM on, `_alert` returns before the stub and every
+    # "an alert was sent" assertion would pass vacuously.
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'false')
     sent = []
 
     async def fake_send(message, market_data_type):
@@ -464,6 +497,38 @@ def test_a_rejecting_endpoint_exits_non_zero_and_writes_no_sample(
     # of the attempt is what tells the operator the hour was not simply skipped.
     assert 'EvmTransportError' in run['notes']
     assert len(sent) == 1 and 'EvmTransportError' in sent[0]
+
+
+def test_a_failed_run_under_a_disabled_telegram_still_records_and_exits_non_zero(
+    repository, database_url, monkeypatch
+):
+    """The combination the operator actually runs locally: DISABLE_TELEGRAM on,
+    a run that fails. Suppressing the alert must not cost the run row or the exit
+    code. Driven through `main()` because the ordering it depends on -- bots are
+    built before the guarded body -- is invisible from `_alert` alone."""
+    sent = _patch_entrypoint(monkeypatch, repository, database_url)
+    monkeypatch.setenv('DISABLE_TELEGRAM', 'true')
+
+    async def rejecting(*args, **kwargs):
+        raise EvmTransportError(
+            'endpoint refused the request', endpoint_kind='public', status_code=403
+        )
+
+    async def fake_manifest(repo):
+        return 'manifest skipped'
+
+    monkeypatch.setattr(record_job, 'run_sample', rejecting)
+    monkeypatch.setattr(record_job, 'run_manifest_snapshot', fake_manifest)
+
+    exit_code = asyncio.run(record_job.main())
+
+    assert exit_code == 1
+    run = repository.fetch_all(
+        'SELECT outcome, error_class FROM run ORDER BY id DESC LIMIT 1'
+    )[0]
+    assert run['outcome'] == 'failed'
+    assert run['error_class'] == 'EvmTransportError'
+    assert sent == []
 
 
 def test_a_second_run_while_one_holds_the_lock_is_skipped_not_failed(

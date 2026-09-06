@@ -23,6 +23,7 @@ from market_data_library.core.onchain.evm import (
     public_rpc_budget,
 )
 
+from src.config.config import get_disable_telegram
 from src.notification_destination.telegram_notification import (
     init_telegram_bots,
     send_message_to_admin,
@@ -284,8 +285,20 @@ async def _alert(
     The class name goes through the MarkdownV2 escaper because a name carrying
     `.` or `_` is rejected by Telegram otherwise. The whole send is guarded so an
     alert failure never masks the run outcome.
+
+    `send_message_to_admin` does not consult DISABLE_TELEGRAM itself -- only the
+    signal senders do -- so the operator's explicit off switch is honoured here,
+    which is what stops a local run posting to the real admin chat off this
+    repo's live `.env`. It suppresses the SEND only: `main()` has already built
+    the bot clients by the time this runs, unlike the onchain job's
+    `send_run_alert`, whose guard precedes its own `init_telegram_bots`.
+    Added on the operator's ruling, 2026-09-06, so `record` and `build` behave
+    the same way under one flag.
     """
     try:
+        if get_disable_telegram():
+            logger.info('telegram is disabled; project_monitor run alert not sent')
+            return
         message = escape_markdown(
             f'project_monitor run {run_id} failed on '
             f'{endpoint_kind or "unknown"}: {error_class}'

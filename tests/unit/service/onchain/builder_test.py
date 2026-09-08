@@ -414,11 +414,19 @@ class TestLogEvidenceJoin:
         ]
         this_runs_lines = [line for line in lines if line['run_id'] == run_id]
         assert this_runs_lines, 'no log line at all was written under this run'
-        # "every line of that run appears with its run id" -- trivially true of
-        # the filter above; the real claim is that filtering by run id is a
-        # sound way to isolate one run's lines from the file at all, i.e. no
-        # line lacks a run id while inside `run_context`.
-        assert all(line['run_id'] == run_id for line in this_runs_lines)
+        # A12, round 2: filtering by run id and then asserting the filtered
+        # lines carry it is trivially true of the filter and catches only a
+        # TOTAL loss of run id. The real claim -- "every LINE OF THAT RUN
+        # appears with its run id" -- is available for free here: this
+        # handler's file is per-job (`configure_job_logging` keys on job
+        # name) and `JOB_BUILD_FOR_LOG_TEST` is unique to this test, and this
+        # assertion runs immediately after `handler.flush()`, before any
+        # later test's log calls can reach the same file. So every line
+        # in the file at this point belongs to THIS run, and a PARTIAL loss
+        # (e.g. a context-var reset mid-span dropping run_id off some lines
+        # but not all) is now caught too, not only the total-loss case the
+        # filtered check already covered.
+        assert all(line['run_id'] == run_id for line in lines)
 
         evidence_rows = onchain_repository.get_evidence_for_run(run_id)
         assert evidence_rows, 'the fake collector did not write the evidence row it claims to'

@@ -262,6 +262,15 @@ class TestPairingAgainstTheProductsOwnList:
             pair = next(p for p in pairs if p['metric'] == metric)
             assert pair['counterpart'] in row
             assert pair['guards_against'] in row
+            # F5, round 2: this loop drives the PRODUCT's own pairs
+            # (`health._pairs()`), unlike TestPairing's hand-copied `PAIRS`
+            # literal above -- the round-1 fix landed on that literal's test
+            # instead of here, so a real pair whose `counterpart_value`
+            # regresses to `None` still rendered `custody=None` under a green
+            # suite. The counterpart's NAME appearing is not its VALUE
+            # appearing; `_render_pairs` would happily print `x=None`.
+            assert pair['counterpart_value'] is not None, metric
+            assert report._short(pair['counterpart_value']) in row, metric
 
     def test_both_liquidity_rows_name_the_pool_type(self):
         """A4's last clause applies to every row whose counterpart is a custody

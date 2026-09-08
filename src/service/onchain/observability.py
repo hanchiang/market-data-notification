@@ -36,7 +36,7 @@ import re
 import secrets
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Union
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain.config import (  # noqa: F401  (forces the redacting factory)
@@ -223,9 +223,11 @@ def format_alert(
         if isinstance(unit, dict):
             name = _safe(unit.get('unit'), _UNIT)
             error_class = _safe(unit.get('error_class'), _ERROR_CLASS)
+            detail = _safe_detail(unit.get('detail'))
         else:
-            name, error_class = _safe(unit, _UNIT), 'unknown'
-        lines.append(f'- {name}: {error_class}')
+            name, error_class, detail = _safe(unit, _UNIT), 'unknown', None
+        suffix = f' ({_format_detail(detail)}h)' if detail is not None else ''
+        lines.append(f'- {name}: {error_class}{suffix}')
     return '\n'.join(lines)
 
 
@@ -238,6 +240,28 @@ def _safe(value: Any, pattern: 're.Pattern[str]') -> str:
         'alert payload dropped a value that does not match %s', pattern.pattern
     )
     return UNRECOGNISED
+
+
+def _safe_detail(value: Any) -> Optional[Union[int, float]]:
+    """The deadline-hours addition (E-1, operator ruling): a NUMBER, never
+    text, so it cannot become a second route for a collector's `str(exc)` to
+    reach the admin chat -- the exact hazard `_ERROR_CLASS` exists to block.
+    Degrades by omission rather than raising, same as the other two fields:
+    the run has already failed by the time this renders.
+    """
+    if isinstance(value, bool):
+        pass  # bool is an int subclass; never a legitimate detail.
+    elif isinstance(value, (int, float)):
+        return value
+    if value is not None:
+        logger.warning('alert payload dropped a non-numeric detail')
+    return None
+
+
+def _format_detail(value: Union[int, float]) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 # One wording for both suppression paths -- the flag caught here before the bot
@@ -312,15 +336,24 @@ async def send_run_alert(
         return False
 
 
-def failed_unit(unit: str, error_class: str) -> Dict[str, str]:
+def failed_unit(
+    unit: str, error_class: str, detail: Optional[Union[int, float]] = None
+) -> Dict[str, Any]:
     """One failed unit for the run row and the alert.
 
-    Both fields are validated here, at the point the unit is built, because this
-    is where a mistake is cheap to see: a collector that records `str(exc)` as
-    its error class would otherwise put the library HTTP client's request URL --
-    and for an archive read, a credential -- into the admin chat. Raising is
-    right at construction time; `format_alert` degrades instead of raising,
-    because by then the run has already failed.
+    All three fields are validated here, at the point the unit is built,
+    because this is where a mistake is cheap to see: a collector that records
+    `str(exc)` as its error class would otherwise put the library HTTP
+    client's request URL -- and for an archive read, a credential -- into the
+    admin chat. Raising is right at construction time; `format_alert` degrades
+    instead of raising, because by then the run has already failed.
+
+    `detail` (E-1, operator ruling: carry the missed-run deadline hours) is
+    deliberately a NUMBER and nothing else. The obvious route -- appending
+    " (25h)" onto `error_class` -- would have meant widening `_ERROR_CLASS`,
+    which is the one thing standing between a collector's `str(exc)` and the
+    admin chat; a number cannot carry a URL or a credential, so it needs no
+    such fence, only a type check.
     """
     if not _UNIT.match(unit or ''):
         raise AlertPayloadError(
@@ -332,7 +365,14 @@ def failed_unit(unit: str, error_class: str) -> Dict[str, str]:
             'a failed unit carries an exception CLASS name, never a message: '
             f'got a value of length {len(error_class or "")}'
         )
-    return {'unit': unit, 'error_class': error_class}
+    result: Dict[str, Any] = {'unit': unit, 'error_class': error_class}
+    if detail is not None:
+        if isinstance(detail, bool) or not isinstance(detail, (int, float)):
+            raise AlertPayloadError(
+                f'a failed unit\'s detail must be a number, got {detail!r}'
+            )
+        result['detail'] = detail
+    return result
 
 
 def collect_failed_units(sections: Sequence[Dict[str, Any]]) -> List[Dict[str, str]]:

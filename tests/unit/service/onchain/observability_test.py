@@ -239,6 +239,13 @@ class TestAlertBoundary:
         'Failed to fetch blockscout data: https://robinhoodchain.blockscout.com/api/v2/addresses/0xabc',
         'total_supply was 1000000000000000000000000',
         '',
+        # The obvious-but-wrong route for E-1's deadline-hours addition
+        # (post-gate ruling): appending "(25h)" onto the class instead of
+        # carrying it as its own numeric `detail`. Anything appended to an
+        # otherwise-valid class name must still be refused -- this is the
+        # regression that would undo the whole reason `detail` exists as a
+        # separate, type-checked field rather than a widened pattern.
+        'BuildDeadlineExceeded (25h)',
     ])
     def test_a_message_shaped_error_class_is_refused_at_construction(
         self, error_class

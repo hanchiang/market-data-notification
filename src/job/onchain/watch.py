@@ -60,10 +60,16 @@ def evaluate(
     """Is the last build late? Pure, so the deadline arithmetic is testable
     without a store and without a clock."""
     if latest_run is None:
+        # The deadline applies even here: there is no age to report (nothing
+        # has ever run), but the rule that was exceeded is the same one, and
+        # the operator asked for the deadline on the alert unconditionally
+        # (post-gate ruling, E-1).
         return {
             'state': 'never_ran',
             'age_hours': None,
-            'unit': failed_unit(NEVER_RAN_UNIT, 'NoBuildRunRecorded'),
+            'unit': failed_unit(
+                NEVER_RAN_UNIT, 'NoBuildRunRecorded', detail=deadline_hours
+            ),
         }
     started = latest_run['started_at']
     if started.tzinfo is None:
@@ -74,7 +80,9 @@ def evaluate(
     return {
         'state': 'missed',
         'age_hours': round(age_hours, 2),
-        'unit': failed_unit(MISSED_RUN_UNIT, 'BuildDeadlineExceeded'),
+        'unit': failed_unit(
+            MISSED_RUN_UNIT, 'BuildDeadlineExceeded', detail=deadline_hours
+        ),
     }
 
 

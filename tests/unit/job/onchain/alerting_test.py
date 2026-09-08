@@ -328,6 +328,11 @@ class TestMissedRunWatcher:
         # say which job's cron line went silent.
         assert 'build/missed_run' in sender.calls[0]['message'].replace('\\', '')
         assert 'BuildDeadlineExceeded' in sender.calls[0]['message']
+        # Post-gate ruling, E-1: the alert also names the deadline, over the
+        # real transport-adjacent path (watch_job.main, not evaluate()
+        # called directly -- see watch_test.TestRenderedAlertCarriesTheDeadline
+        # for the exact-string, mutation-proven guard).
+        assert '(25h)' in sender.calls[0]['message'].replace('\\', '')
 
     @pytest.mark.asyncio
     async def test_a_recent_build_produces_no_message(

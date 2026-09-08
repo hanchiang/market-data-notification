@@ -420,10 +420,31 @@ def normalise_v4_events(
     return sorted(rows, key=lambda row: (row.block, row.log_index))
 
 
+def _token_id_after(
+    entries: Optional[Sequence[Tuple[int, int]]], log_index: int
+) -> Optional[int]:
+    """The token id whose manager event FOLLOWS this pool event in the same
+    transaction.
+
+    The manager emits `Transfer` and then `IncreaseLiquidity` after the pool's
+    own `Mint`, so the first manager event past the pool event's log index is the
+    one that belongs to it. Falling back to the last entry keeps a transaction
+    whose ordering is unexpected attributed rather than dropped -- being wrong
+    about which of two positions in one multicall is worse than being wrong about
+    none, but calling it unattributed loses the liquidity entirely.
+    """
+    if not entries:
+        return None
+    for index, token_id in entries:
+        if index > log_index:
+            return token_id
+    return entries[-1][1]
+
+
 def attribute_owners(
     rows: Sequence[PositionRow],
     nft_transfers: Sequence[Dict[str, Any]],
-    token_id_by_tx: Optional[Dict[str, int]] = None,
+    token_id_by_tx: Optional[Dict[str, List[Tuple[int, int]]]] = None,
 ) -> List[PositionRow]:
     """Give every row the NFT token id its liquidity belongs to, and a holder.
 
@@ -434,7 +455,11 @@ def attribute_owners(
        into the event's own salt.
     2. `token_id_by_tx`, built by the caller from the manager's own
        `IncreaseLiquidity`/`DecreaseLiquidity` in the same transaction -- v3,
-       where the pool event names only the manager.
+       where the pool event names only the manager. Passed as
+       `{tx: [(log_index, token_id), ...]}` and matched by ORDER within the
+       transaction, because one multicall can mint two positions and the manager
+       emits its own event after each: keeping a single id per transaction
+       netted both positions under whichever came last.
     3. The ERC-721 mint (`from` = `0x0`) in the same transaction -- a first
        deposit, and the only one of the three that a WITHDRAWAL never has.
 
@@ -451,7 +476,7 @@ def attribute_owners(
     route keep their event owner: that is liquidity held directly, and calling it
     unattributed would lose the fact that someone holds it.
     """
-    minted_in: Dict[str, int] = {}
+    minted_in: Dict[str, List[Tuple[int, int]]] = {}
     holder_of: Dict[int, str] = {}
     for log in sorted(nft_transfers, key=lambda entry: (_block_of(entry), _index_of(entry))):
         fields = abi.decode_log(ERC721_TRANSFER, log)
@@ -459,18 +484,23 @@ def attribute_owners(
         sender = str(fields['from']).lower()
         recipient = str(fields['to']).lower()
         if sender == ZERO_ADDRESS:
-            minted_in[str(log['transactionHash']).lower()] = token_id
+            minted_in.setdefault(str(log['transactionHash']).lower(), []).append(
+                (_index_of(log), token_id)
+            )
         holder_of[token_id] = recipient
 
-    by_tx = {key.lower(): value for key, value in (token_id_by_tx or {}).items()}
+    by_tx = {
+        key.lower(): sorted(value)
+        for key, value in (token_id_by_tx or {}).items()
+    }
     attributed: List[PositionRow] = []
     for row in rows:
         tx_hash = str(row.tx_hash).lower()
         token_id = row.nft_token_id
         if token_id is None:
-            token_id = by_tx.get(tx_hash)
+            token_id = _token_id_after(by_tx.get(tx_hash), row.log_index)
         if token_id is None:
-            token_id = minted_in.get(tx_hash)
+            token_id = _token_id_after(minted_in.get(tx_hash), row.log_index)
         if token_id is None:
             attributed.append(row)
             continue

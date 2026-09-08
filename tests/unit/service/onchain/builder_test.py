@@ -298,6 +298,37 @@ class TestProjectSelection:
         ]
         assert sorted(urls) == sorted([handle, 'https://touchgrass.family/new'])
 
+    def test_a_trailing_slash_is_the_same_source_and_a_social_link_gets_its_class(
+        self, onchain_repository
+    ):
+        """The two variants `onchain_demo` actually held: the registry's
+        `https://www.touchgrass.family` beside the provider's
+        `https://www.touchgrass.family/`, and every social link stored as class
+        `web` next to the same handle admitted as class `x`."""
+        project = onchain_repository.upsert_entity(
+            level='project', key='project:predict-fwa'
+        )
+        site = 'https://www.touchgrass.family'
+        admitted = onchain_repository.upsert_source(
+            source_class='web', url_or_handle=site, admission='admitted',
+            admitted_by='registry', evidence={},
+        )
+        onchain_repository.link_source_to_entity(admitted, project)
+
+        stored = builder.store_candidate_sources(
+            onchain_repository, project, [site + '/', 'https://x.com/pfwafun',
+                                          'https://t.me/pfwafun'],
+        )
+        onchain_repository.commit()
+        assert stored == 2
+        rows = {
+            row['url_or_handle']: row['class']
+            for row in onchain_repository.get_sources_for_entity(project)
+        }
+        assert site + '/' not in rows
+        assert rows['https://x.com/pfwafun'] == 'x'
+        assert rows['https://t.me/pfwafun'] == 'telegram'
+
     def test_an_unknown_project_says_what_to_edit(self, onchain_registry_payload):
         registry = parse_registry(onchain_registry_payload)
         with pytest.raises(KeyError, match='projects.json'):

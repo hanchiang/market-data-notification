@@ -311,6 +311,47 @@ def select_projects(registry: Registry, project_key: Optional[str]) -> List[Proj
     return [registry.projects[project_key]]
 
 
+# Which class a published link belongs to, by host. The registry admits an X
+# handle as class `x`, so a provider link to the same account stored as `web`
+# is a second row for one source -- the duplicate this table exists to stop.
+# Only hosts whose class is one the registry validator already knows
+# (`config.SOURCE_CLASSES`). A Discord invite has no class in phase 1a, so it
+# stays `web` rather than inventing a value the registry would reject.
+SOURCE_CLASS_BY_HOST = {
+    'x.com': 'x',
+    'www.x.com': 'x',
+    'twitter.com': 'x',
+    'www.twitter.com': 'x',
+    't.me': 'telegram',
+    'telegram.me': 'telegram',
+}
+
+
+def source_class_for(url: str) -> str:
+    """The source class a published link belongs to, `web` when the host is not
+    one this phase knows."""
+    from urllib.parse import urlsplit
+
+    from src.service.onchain.config import SOURCE_CLASSES
+
+    found = SOURCE_CLASS_BY_HOST.get(urlsplit(str(url)).netloc.lower(), 'web')
+    return found if found in SOURCE_CLASSES else 'web'
+
+
+def normalise_source_url(url: str) -> str:
+    """The comparison key for "is this the same source".
+
+    Lowercased, with a trailing slash removed: the registry holds
+    `https://www.touchgrass.family` and the provider publishes
+    `https://www.touchgrass.family/`, which are one website and were stored as
+    two rows. Nothing more is normalised here -- `www.` and the scheme are NOT
+    stripped, because two hosts that differ in either can be genuinely different
+    sites, and phase 1b's admission run reads these rows to decide what to fetch.
+    """
+    text = str(url).strip().lower()
+    return text[:-1] if text.endswith('/') and not text.endswith('//') else text
+
+
 def store_candidate_sources(
     repository: OnchainRepository, project_entity_id: int, links: Sequence[str]
 ) -> int:
@@ -321,28 +362,30 @@ def store_candidate_sources(
     scheduled capture touches them until the operator's queue does.
 
     A link the project already has as a source is SKIPPED, whatever class it
-    carries. Upsert is idempotent per `(class, url)`, so without this the same
+    carries, compared on `normalise_source_url` rather than on the raw string.
+    Upsert is idempotent per `(class, url)`, so without this the same
     `https://x.com/...` the registry admitted as class `x` is stored again as a
     `candidate` of class `web`, and phase 1b's admission run sees two rows for
     one source -- one already admitted, one asking to be.
     """
     known = {
-        str(row['url_or_handle']).lower()
+        normalise_source_url(row['url_or_handle'])
         for row in repository.get_sources_for_entity(project_entity_id)
     }
     stored = 0
     for url in links:
-        if str(url).lower() in known:
+        key = normalise_source_url(url)
+        if key in known:
             continue
         source_id = repository.upsert_source(
-            source_class='web',
+            source_class=source_class_for(url),
             url_or_handle=url,
             admission='candidate',
             admitted_by=None,
             evidence={'hop_from': 'dex_provider', 'phase': '1a'},
         )
         repository.link_source_to_entity(source_id, project_entity_id)
-        known.add(str(url).lower())
+        known.add(key)
         stored += 1
     return stored
 

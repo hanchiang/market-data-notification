@@ -7,10 +7,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13342511,
+    "fdv": 12876028,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -23,21 +23,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 11489685,
-      "quote": 74.601,
-      "usd": 369400.63
+      "base": 11696765,
+      "quote": 73.2803,
+      "usd": 362910.57
     },
-    "marketCap": 13342511,
+    "marketCap": 12876028,
     "pairAddress": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
     "pairCreatedAt": 1788566099000,
     "priceChange": {
-      "h1": 0.22,
-      "h24": -41.38,
-      "h6": -22.63,
-      "m5": 2.55
+      "h1": -3.5,
+      "h24": -48.32,
+      "h6": -12.98,
+      "m5": 0.04
     },
-    "priceNative": "0.000006492",
-    "priceUsd": "0.01607",
+    "priceNative": "0.000006265",
+    "priceUsd": "0.01551",
     "quoteToken": {
       "address": "0x0000000000000000000000000000000000000000",
       "name": "Ether",
@@ -45,28 +45,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 52,
-        "sells": 73
+        "buys": 55,
+        "sells": 53
       },
       "h24": {
-        "buys": 2288,
-        "sells": 2392
+        "buys": 2229,
+        "sells": 2359
       },
       "h6": {
-        "buys": 644,
-        "sells": 645
+        "buys": 608,
+        "sells": 606
       },
       "m5": {
-        "buys": 2,
-        "sells": 3
+        "buys": 1,
+        "sells": 4
       }
     },
     "url": "https://dexscreener.com/robinhood/0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
     "volume": {
-      "h1": 56844.49,
-      "h24": 2399335.79,
-      "h6": 770489.24,
-      "m5": 2825.05
+      "h1": 46266.37,
+      "h24": 2359276.6,
+      "h6": 691989.96,
+      "m5": 373.29
     }
   },
   {
@@ -77,10 +77,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13091126,
+    "fdv": 12743102,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -93,21 +93,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 4476445,
-      "quote": 22.5159,
-      "usd": 126350.46
+      "base": 4635599,
+      "quote": 21.5332,
+      "usd": 124491.13
     },
-    "marketCap": 13091126,
+    "marketCap": 12743102,
     "pairAddress": "0x1e2ed4084a9e5b594d725d8a022554dc8e4c759a7a7a3f396018be916941c331",
     "pairCreatedAt": 1788597256000,
     "priceChange": {
-      "h1": -1.64,
-      "h24": -42.5,
-      "h6": -22.65,
-      "m5": 0.45
+      "h1": -2.29,
+      "h24": -48.17,
+      "h6": -15.64,
+      "m5": 0.15
     },
-    "priceNative": "0.000006370",
-    "priceUsd": "0.01577",
+    "priceNative": "0.000006200",
+    "priceUsd": "0.01535",
     "quoteToken": {
       "address": "0x0000000000000000000000000000000000000000",
       "name": "Ether",
@@ -115,28 +115,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 18,
-        "sells": 17
+        "buys": 22,
+        "sells": 13
       },
       "h24": {
-        "buys": 749,
-        "sells": 695
+        "buys": 724,
+        "sells": 688
       },
       "h6": {
-        "buys": 239,
-        "sells": 127
+        "buys": 228,
+        "sells": 103
       },
       "m5": {
-        "buys": 3,
+        "buys": 1,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x1e2ed4084a9e5b594d725d8a022554dc8e4c759a7a7a3f396018be916941c331",
     "volume": {
-      "h1": 20451.39,
-      "h24": 820810.67,
-      "h6": 306665.42,
-      "m5": 679.62
+      "h1": 18592.64,
+      "h24": 810203.73,
+      "h6": 284321.6,
+      "m5": 162.35
     }
   },
   {
@@ -147,10 +147,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 12968766,
+    "fdv": 12521203,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -163,20 +163,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 13061655,
-      "quote": 190394,
-      "usd": 394300.64
+      "base": 13916738,
+      "quote": 180480,
+      "usd": 390510.48
     },
-    "marketCap": 12968766,
+    "marketCap": 12521203,
     "pairAddress": "0xf398e8f73f8b5067a978b1306c963e0c2224b2ada11b71d294d756106d02ae5d",
     "pairCreatedAt": 1788575701000,
     "priceChange": {
-      "h1": -1.3,
-      "h24": -43.02,
-      "h6": -22.98
+      "h1": -3.45,
+      "h24": -48.64,
+      "h6": -15.9,
+      "m5": 0.14
     },
-    "priceNative": "0.01564",
-    "priceUsd": "0.01562",
+    "priceNative": "0.01507",
+    "priceUsd": "0.01508",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -184,28 +185,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 7,
-        "sells": 5
+        "buys": 2,
+        "sells": 7
       },
       "h24": {
-        "buys": 402,
-        "sells": 432
+        "buys": 379,
+        "sells": 436
       },
       "h6": {
-        "buys": 93,
-        "sells": 68
+        "buys": 92,
+        "sells": 51
       },
       "m5": {
-        "buys": 0,
+        "buys": 1,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0xf398e8f73f8b5067a978b1306c963e0c2224b2ada11b71d294d756106d02ae5d",
     "volume": {
-      "h1": 12901.12,
-      "h24": 1190088.13,
-      "h6": 396355.97,
-      "m5": 0
+      "h1": 21084.55,
+      "h24": 1198213.68,
+      "h6": 359785.71,
+      "m5": 547.51
     }
   },
   {
@@ -216,10 +217,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13178202,
+    "fdv": 12874017,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -232,21 +233,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 1002810,
-      "quote": 49372,
-      "usd": 65247.33
+      "base": 1071910,
+      "quote": 48306,
+      "usd": 64955.14
     },
-    "marketCap": 13178202,
+    "marketCap": 12874017,
     "pairAddress": "0xdd96a8b750ee5eb3c13dcf874ee7dfdfd8b2b04706ed676db7b9921536290641",
     "pairCreatedAt": 1788670395000,
     "priceChange": {
-      "h1": -0.9,
-      "h24": -42.56,
-      "h6": -23.01,
-      "m5": 2.32
+      "h1": -1.89,
+      "h24": -47.38,
+      "h6": -13.32,
+      "m5": -0.06
     },
-    "priceNative": "0.01589",
-    "priceUsd": "0.01587",
+    "priceNative": "0.01550",
+    "priceUsd": "0.01551",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -254,28 +255,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 30,
+        "buys": 36,
         "sells": 38
       },
       "h24": {
         "buys": 1044,
-        "sells": 1150
+        "sells": 1130
       },
       "h6": {
-        "buys": 350,
-        "sells": 325
+        "buys": 345,
+        "sells": 321
       },
       "m5": {
-        "buys": 4,
+        "buys": 0,
         "sells": 2
       }
     },
     "url": "https://dexscreener.com/robinhood/0xdd96a8b750ee5eb3c13dcf874ee7dfdfd8b2b04706ed676db7b9921536290641",
     "volume": {
-      "h1": 19382.82,
-      "h24": 415284.42,
-      "h6": 179422.66,
-      "m5": 1211.41
+      "h1": 16826.68,
+      "h24": 423032.16,
+      "h6": 171393.27,
+      "m5": 29.35
     }
   },
   {
@@ -286,10 +287,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13103856,
+    "fdv": 12494762,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -302,20 +303,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 721327,
-      "quote": 13932,
-      "usd": 25307.6
+      "base": 636841,
+      "quote": 10383,
+      "usd": 19975.63
     },
-    "marketCap": 13103856,
+    "marketCap": 12494762,
     "pairAddress": "0x3a555810ab87a47d031b44aa8382209d182ee539809f12a51293d6641660af47",
     "pairCreatedAt": 1788566563000,
     "priceChange": {
-      "h1": 1.09,
-      "h24": -43.17,
-      "h6": -21.66
+      "h1": -4.65,
+      "h24": -47.63,
+      "h6": -17.53
     },
-    "priceNative": "0.01580",
-    "priceUsd": "0.01578",
+    "priceNative": "0.01504",
+    "priceUsd": "0.01505",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -323,16 +324,16 @@
     },
     "txns": {
       "h1": {
-        "buys": 3,
-        "sells": 0
+        "buys": 0,
+        "sells": 2
       },
       "h24": {
-        "buys": 124,
-        "sells": 184
+        "buys": 116,
+        "sells": 185
       },
       "h6": {
         "buys": 21,
-        "sells": 17
+        "sells": 16
       },
       "m5": {
         "buys": 0,
@@ -341,9 +342,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0x3a555810ab87a47d031b44aa8382209d182ee539809f12a51293d6641660af47",
     "volume": {
-      "h1": 204.31,
-      "h24": 59590.71,
-      "h6": 10767.62,
+      "h1": 762.87,
+      "h24": 58502.27,
+      "h6": 9403.06,
       "m5": 0
     }
   },
@@ -358,7 +359,7 @@
     "fdv": 12653356,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -379,8 +380,8 @@
     "pairAddress": "0xd451c398d8e522b1c8e7a23d4bd9576ca745d16ca85bbfa3a371d36a004aa5a1",
     "pairCreatedAt": 1788664514000,
     "priceChange": {
-      "h24": -44.37,
-      "h6": -26.42
+      "h24": -44.11,
+      "h6": -15.36
     },
     "priceNative": "0.01525",
     "priceUsd": "0.01524",
@@ -395,12 +396,12 @@
         "sells": 0
       },
       "h24": {
-        "buys": 1012,
-        "sells": 1008
+        "buys": 989,
+        "sells": 996
       },
       "h6": {
-        "buys": 159,
-        "sells": 206
+        "buys": 107,
+        "sells": 143
       },
       "m5": {
         "buys": 0,
@@ -410,8 +411,8 @@
     "url": "https://dexscreener.com/robinhood/0xd451c398d8e522b1c8e7a23d4bd9576ca745d16ca85bbfa3a371d36a004aa5a1",
     "volume": {
       "h1": 0,
-      "h24": 199789.16,
-      "h6": 25907.47,
+      "h24": 195002.77,
+      "h6": 16982.48,
       "m5": 0
     }
   },
@@ -423,10 +424,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 12978884,
+    "fdv": 12690493,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -439,20 +440,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 882641,
-      "quote": 2166.5509,
-      "usd": 15966.51
+      "base": 908182,
+      "quote": 1771.5207,
+      "usd": 15658.24
     },
-    "marketCap": 12978884,
+    "marketCap": 12690493,
     "pairAddress": "0x6c614c38c65fea492f4cb2b90fd664f924a7b828c7384620662217e2e2df43ed",
     "pairCreatedAt": 1788593691000,
     "priceChange": {
-      "h1": -2.23,
-      "h24": -42.39,
-      "h6": -22.73
+      "h1": -2.22,
+      "h24": -47.59,
+      "h6": -15.52,
+      "m5": 0.58
     },
-    "priceNative": "0.01565",
-    "priceUsd": "0.01563",
+    "priceNative": "0.01528",
+    "priceUsd": "0.01528",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -461,27 +463,27 @@
     "txns": {
       "h1": {
         "buys": 8,
-        "sells": 8
+        "sells": 3
       },
       "h24": {
-        "buys": 229,
+        "buys": 226,
         "sells": 255
       },
       "h6": {
-        "buys": 72,
-        "sells": 64
+        "buys": 78,
+        "sells": 55
       },
       "m5": {
-        "buys": 0,
+        "buys": 1,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x6c614c38c65fea492f4cb2b90fd664f924a7b828c7384620662217e2e2df43ed",
     "volume": {
-      "h1": 1689.04,
-      "h24": 54956.22,
-      "h6": 23257.19,
-      "m5": 0
+      "h1": 1632.5,
+      "h24": 55784.86,
+      "h6": 23722.97,
+      "m5": 97.13
     }
   },
   {
@@ -492,10 +494,10 @@
     },
     "chainId": "robinhood",
     "dexId": "ramses",
-    "fdv": 13015887,
+    "fdv": 12627184,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -508,20 +510,20 @@
       "v3"
     ],
     "liquidity": {
-      "base": 304650,
-      "quote": 352.2382,
-      "usd": 5129.7
+      "base": 306650,
+      "quote": 322.9899,
+      "usd": 4988.2
     },
-    "marketCap": 13015887,
+    "marketCap": 12627184,
     "pairAddress": "0x9f3656607B07B4a129d822bBB12a691D7f2713Bd",
     "pairCreatedAt": 1788595322000,
     "priceChange": {
-      "h1": -2.11,
-      "h24": -41.62,
-      "h6": -23.35
+      "h1": -2.99,
+      "h24": -48.26,
+      "h6": -16.67
     },
-    "priceNative": "0.01568",
-    "priceUsd": "0.01568",
+    "priceNative": "0.01521",
+    "priceUsd": "0.01521",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -529,16 +531,16 @@
     },
     "txns": {
       "h1": {
-        "buys": 5,
-        "sells": 4
+        "buys": 3,
+        "sells": 3
       },
       "h24": {
-        "buys": 273,
+        "buys": 260,
         "sells": 253
       },
       "h6": {
-        "buys": 61,
-        "sells": 50
+        "buys": 57,
+        "sells": 44
       },
       "m5": {
         "buys": 0,
@@ -547,9 +549,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0x9f3656607b07b4a129d822bbb12a691d7f2713bd",
     "volume": {
-      "h1": 79.39,
-      "h24": 33136.4,
-      "h6": 7222.44,
+      "h1": 86.67,
+      "h24": 31168.99,
+      "h6": 5777.54,
       "m5": 0
     }
   },
@@ -561,10 +563,10 @@
     },
     "chainId": "robinhood",
     "dexId": "0swap",
-    "fdv": 13113715,
+    "fdv": 12579882,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -574,20 +576,21 @@
       "websites": []
     },
     "liquidity": {
-      "base": 170307,
-      "quote": 1.08699,
-      "usd": 5381.59
+      "base": 173918,
+      "quote": 1.06454,
+      "usd": 5271.99
     },
-    "marketCap": 13113715,
+    "marketCap": 12579882,
     "pairAddress": "0x7B1fB27B472730D6BDe5B857393aCDb00Af72d37",
     "pairCreatedAt": 1788647028000,
     "priceChange": {
-      "h1": -0.24,
-      "h24": -40.13,
-      "h6": -23.32
+      "h1": -4.07,
+      "h24": -48.94,
+      "h6": -15.35,
+      "m5": 0.47
     },
-    "priceNative": "0.000006382",
-    "priceUsd": "0.01579",
+    "priceNative": "0.000006120",
+    "priceUsd": "0.01515",
     "quoteToken": {
       "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
       "name": "WETH",
@@ -596,27 +599,27 @@
     "txns": {
       "h1": {
         "buys": 4,
-        "sells": 5
+        "sells": 3
       },
       "h24": {
-        "buys": 179,
-        "sells": 188
+        "buys": 173,
+        "sells": 184
       },
       "h6": {
-        "buys": 57,
-        "sells": 54
+        "buys": 55,
+        "sells": 46
       },
       "m5": {
-        "buys": 0,
+        "buys": 1,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x7b1fb27b472730d6bde5b857393acdb00af72d37",
     "volume": {
-      "h1": 216.18,
-      "h24": 11630.21,
-      "h6": 3563.19,
-      "m5": 0
+      "h1": 209.09,
+      "h24": 11310.66,
+      "h6": 3172.84,
+      "m5": 7.37
     }
   },
   {
@@ -627,10 +630,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13026113,
+    "fdv": 12693478,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -643,19 +646,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 62808,
-      "quote": 0.06281,
-      "usd": 1140.69
+      "base": 63251,
+      "quote": 0.06004,
+      "usd": 1115.79
     },
-    "marketCap": 13026113,
+    "marketCap": 12693478,
     "pairAddress": "0x7e78b246b4d72d832cb005cbddb3cb64bdf83c180b07aee336e959f4f38c9192",
     "pairCreatedAt": 1788566829000,
     "priceChange": {
-      "h24": -43.55,
-      "h6": -21.78
+      "h1": -2.55,
+      "h24": -46.82,
+      "h6": -15.89
     },
-    "priceNative": "0.000006361",
-    "priceUsd": "0.01569",
+    "priceNative": "0.000006184",
+    "priceUsd": "0.01529",
     "quoteToken": {
       "address": "0x0000000000000000000000000000000000000000",
       "name": "Ether",
@@ -664,15 +668,15 @@
     "txns": {
       "h1": {
         "buys": 0,
-        "sells": 0
+        "sells": 1
       },
       "h24": {
-        "buys": 39,
-        "sells": 99
+        "buys": 34,
+        "sells": 100
       },
       "h6": {
         "buys": 4,
-        "sells": 9
+        "sells": 7
       },
       "m5": {
         "buys": 0,
@@ -681,9 +685,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0x7e78b246b4d72d832cb005cbddb3cb64bdf83c180b07aee336e959f4f38c9192",
     "volume": {
-      "h1": 0,
-      "h24": 4511.7,
-      "h6": 157.86,
+      "h1": 6.86,
+      "h24": 4256.35,
+      "h6": 120.77,
       "m5": 0
     }
   },
@@ -695,10 +699,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13220355,
+    "fdv": 12850552,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -711,21 +715,20 @@
       "v3"
     ],
     "liquidity": {
-      "base": 21770,
-      "quote": 0.1287,
-      "usd": 665.41
+      "base": 22827,
+      "quote": 0.122,
+      "usd": 655.89
     },
-    "marketCap": 13220355,
+    "marketCap": 12850552,
     "pairAddress": "0x0d803C604c61598e9bf4DAC4B22D6D75D9D08912",
     "pairCreatedAt": 1788815922000,
     "priceChange": {
-      "h1": -0.06,
-      "h24": -11.36,
-      "h6": -23.19,
-      "m5": 3.16
+      "h1": -2.8,
+      "h24": -13.84,
+      "h6": -13.37
     },
-    "priceNative": "0.000006433",
-    "priceUsd": "0.01592",
+    "priceNative": "0.000006247",
+    "priceUsd": "0.01548",
     "quoteToken": {
       "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
       "name": "WETH",
@@ -733,95 +736,27 @@
     },
     "txns": {
       "h1": {
-        "buys": 12,
-        "sells": 11
+        "buys": 10,
+        "sells": 10
       },
       "h24": {
-        "buys": 196,
-        "sells": 213
+        "buys": 206,
+        "sells": 223
       },
       "h6": {
-        "buys": 127,
-        "sells": 144
+        "buys": 125,
+        "sells": 133
       },
       "m5": {
-        "buys": 1,
+        "buys": 0,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x0d803c604c61598e9bf4dac4b22d6d75d9d08912",
     "volume": {
-      "h1": 239.18,
-      "h24": 5865.97,
-      "h6": 3710.04,
-      "m5": 16.65
-    }
-  },
-  {
-    "baseToken": {
-      "address": "0x7dbf38976f6D3b9c529e7D9484A71898B409eE6a",
-      "name": "ZZZ",
-      "symbol": "ZZZ"
-    },
-    "chainId": "robinhood",
-    "dexId": "uniswap",
-    "fdv": 13271199,
-    "info": {
-      "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
-      "socials": [
-        {
-          "type": "twitter",
-          "url": "https://x.com/AndrewCurran_/status/2095990287709737314"
-        }
-      ],
-      "websites": []
-    },
-    "labels": [
-      "v4"
-    ],
-    "liquidity": {
-      "base": 33925,
-      "quote": 359.7293,
-      "usd": 902.14
-    },
-    "marketCap": 13271199,
-    "pairAddress": "0x240449a4c7af9bb83c14280e6651b6eb2abeb6c6b77f221eef0c12eadf5b910c",
-    "pairCreatedAt": 1788788507000,
-    "priceChange": {
-      "h24": -27.13,
-      "h6": -20.91
-    },
-    "priceNative": "0.01599",
-    "priceUsd": "0.01598",
-    "quoteToken": {
-      "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
-      "name": "Global Dollar",
-      "symbol": "USDG"
-    },
-    "txns": {
-      "h1": {
-        "buys": 0,
-        "sells": 0
-      },
-      "h24": {
-        "buys": 17,
-        "sells": 29
-      },
-      "h6": {
-        "buys": 1,
-        "sells": 9
-      },
-      "m5": {
-        "buys": 0,
-        "sells": 0
-      }
-    },
-    "url": "https://dexscreener.com/robinhood/0x240449a4c7af9bb83c14280e6651b6eb2abeb6c6b77f221eef0c12eadf5b910c",
-    "volume": {
-      "h1": 0,
-      "h24": 1590.25,
-      "h6": 556.85,
+      "h1": 185.35,
+      "h24": 6051.32,
+      "h6": 3448.09,
       "m5": 0
     }
   },
@@ -833,10 +768,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13093866,
+    "fdv": 12729464,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -849,19 +784,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 6861.5827,
-      "quote": 160.338,
-      "usd": 268.43
+      "base": 38704,
+      "quote": 284.9009,
+      "usd": 878.63
     },
-    "marketCap": 13093866,
-    "pairAddress": "0xa5f428542f09fe6ccce5b9d4f02193809bab2d0255c526bc694da238cd4e39b6",
-    "pairCreatedAt": 1788830935000,
+    "marketCap": 12729464,
+    "pairAddress": "0x240449a4c7af9bb83c14280e6651b6eb2abeb6c6b77f221eef0c12eadf5b910c",
+    "pairCreatedAt": 1788788507000,
     "priceChange": {
-      "h24": -28.41,
-      "h6": -23.81
+      "h1": -4.08,
+      "h24": -30.1,
+      "h6": -18.33
     },
-    "priceNative": "0.01579",
-    "priceUsd": "0.01577",
+    "priceNative": "0.01532",
+    "priceUsd": "0.01533",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -870,15 +806,84 @@
     "txns": {
       "h1": {
         "buys": 0,
+        "sells": 3
+      },
+      "h24": {
+        "buys": 17,
+        "sells": 32
+      },
+      "h6": {
+        "buys": 1,
+        "sells": 8
+      },
+      "m5": {
+        "buys": 0,
         "sells": 0
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x240449a4c7af9bb83c14280e6651b6eb2abeb6c6b77f221eef0c12eadf5b910c",
+    "volume": {
+      "h1": 74.86,
+      "h24": 1665.11,
+      "h6": 485.03,
+      "m5": 0
+    }
+  },
+  {
+    "baseToken": {
+      "address": "0x7dbf38976f6D3b9c529e7D9484A71898B409eE6a",
+      "name": "ZZZ",
+      "symbol": "ZZZ"
+    },
+    "chainId": "robinhood",
+    "dexId": "uniswap",
+    "fdv": 12503226,
+    "info": {
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/AndrewCurran_/status/2095990287709737314"
+        }
+      ],
+      "websites": []
+    },
+    "labels": [
+      "v4"
+    ],
+    "liquidity": {
+      "base": 7598.5373,
+      "quote": 148.9744,
+      "usd": 263.5
+    },
+    "marketCap": 12503226,
+    "pairAddress": "0xa5f428542f09fe6ccce5b9d4f02193809bab2d0255c526bc694da238cd4e39b6",
+    "pairCreatedAt": 1788830935000,
+    "priceChange": {
+      "h1": -4.51,
+      "h24": -31.64,
+      "h6": -17.6
+    },
+    "priceNative": "0.01505",
+    "priceUsd": "0.01506",
+    "quoteToken": {
+      "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+      "name": "Global Dollar",
+      "symbol": "USDG"
+    },
+    "txns": {
+      "h1": {
+        "buys": 0,
+        "sells": 2
       },
       "h24": {
         "buys": 3,
-        "sells": 13
+        "sells": 15
       },
       "h6": {
         "buys": 3,
-        "sells": 10
+        "sells": 8
       },
       "m5": {
         "buys": 0,
@@ -887,9 +892,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0xa5f428542f09fe6ccce5b9d4f02193809bab2d0255c526bc694da238cd4e39b6",
     "volume": {
-      "h1": 0,
-      "h24": 183.94,
-      "h6": 114.34,
+      "h1": 11.36,
+      "h24": 195.3,
+      "h6": 92.21,
       "m5": 0
     }
   },
@@ -904,7 +909,7 @@
     "fdv": 16651351,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -925,8 +930,7 @@
     "pairAddress": "0x40262ae9c562d385978e8393628cf773991ff6e198d4adea0bfc17894bb1654a",
     "pairCreatedAt": 1788567011000,
     "priceChange": {
-      "h24": -21.96,
-      "h6": -0.54
+      "h24": -29.51
     },
     "priceNative": "0.02005",
     "priceUsd": "0.02006",
@@ -941,12 +945,12 @@
         "sells": 0
       },
       "h24": {
-        "buys": 37,
+        "buys": 35,
         "sells": 79
       },
       "h6": {
         "buys": 0,
-        "sells": 2
+        "sells": 0
       },
       "m5": {
         "buys": 0,
@@ -956,8 +960,8 @@
     "url": "https://dexscreener.com/robinhood/0x40262ae9c562d385978e8393628cf773991ff6e198d4adea0bfc17894bb1654a",
     "volume": {
       "h1": 0,
-      "h24": 1311.61,
-      "h6": 8.96,
+      "h24": 1275.64,
+      "h6": 0,
       "m5": 0
     }
   },
@@ -972,7 +976,7 @@
     "fdv": 18250197,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -993,7 +997,7 @@
     "pairAddress": "0xFebBE9C3bb8397D9b7A42F38885EEF54bdD1225B",
     "pairCreatedAt": 1788704656000,
     "priceChange": {
-      "h24": -21.64
+      "h24": -22.06
     },
     "priceNative": "0.02198",
     "priceUsd": "0.02198",
@@ -1008,7 +1012,7 @@
         "sells": 0
       },
       "h24": {
-        "buys": 8,
+        "buys": 5,
         "sells": 29
       },
       "h6": {
@@ -1023,7 +1027,7 @@
     "url": "https://dexscreener.com/robinhood/0xfebbe9c3bb8397d9b7a42f38885eef54bdd1225b",
     "volume": {
       "h1": 0,
-      "h24": 508.04,
+      "h24": 465.05,
       "h6": 0,
       "m5": 0
     }
@@ -1039,7 +1043,7 @@
     "fdv": 24255059,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1060,7 +1064,7 @@
     "pairAddress": "0x154211d0e06c563735b28e8955a068cf098ccd62a5a214931a6ff648267b10c4",
     "pairCreatedAt": 1788692671000,
     "priceChange": {
-      "h24": -0.8
+      "h24": -3.35
     },
     "priceNative": "0.00001165",
     "priceUsd": "0.02922",
@@ -1075,7 +1079,7 @@
         "sells": 0
       },
       "h24": {
-        "buys": 11,
+        "buys": 10,
         "sells": 15
       },
       "h6": {
@@ -1090,7 +1094,7 @@
     "url": "https://dexscreener.com/robinhood/0x154211d0e06c563735b28e8955a068cf098ccd62a5a214931a6ff648267b10c4",
     "volume": {
       "h1": 0,
-      "h24": 565.7,
+      "h24": 545.58,
       "h6": 0,
       "m5": 0
     }
@@ -1106,7 +1110,7 @@
     "fdv": 24732629,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1173,7 +1177,7 @@
     "fdv": 24260009,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1193,9 +1197,7 @@
     "marketCap": 24260009,
     "pairAddress": "0x32fa7519f26fc52a1b9b0481593fc17167c02577b28259a353827e2616e16085",
     "pairCreatedAt": 1788604924000,
-    "priceChange": {
-      "h24": 12.57
-    },
+    "priceChange": {},
     "priceNative": "0.00001172",
     "priceUsd": "0.02922",
     "quoteToken": {
@@ -1209,7 +1211,7 @@
         "sells": 0
       },
       "h24": {
-        "buys": 2,
+        "buys": 1,
         "sells": 0
       },
       "h6": {
@@ -1224,7 +1226,7 @@
     "url": "https://dexscreener.com/robinhood/0x32fa7519f26fc52a1b9b0481593fc17167c02577b28259a353827e2616e16085",
     "volume": {
       "h1": 0,
-      "h24": 3.39,
+      "h24": 3.14,
       "h6": 0,
       "m5": 0
     }
@@ -1240,7 +1242,7 @@
     "fdv": 16895901,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1308,7 +1310,7 @@
     "fdv": 13005704,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1350,7 +1352,7 @@
       },
       "h6": {
         "buys": 0,
-        "sells": 2
+        "sells": 1
       },
       "m5": {
         "buys": 0,
@@ -1361,7 +1363,7 @@
     "volume": {
       "h1": 0,
       "h24": 5.88,
-      "h6": 5.88,
+      "h6": 3.25,
       "m5": 0
     }
   },
@@ -1376,7 +1378,7 @@
     "fdv": 14326482,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -1407,7 +1409,7 @@
     "txns": {
       "h1": {
         "buys": 0,
-        "sells": 1
+        "sells": 0
       },
       "h24": {
         "buys": 0,
@@ -1424,7 +1426,7 @@
     },
     "url": "https://dexscreener.com/robinhood/0x5d063cd8c2bbf29a3a04b57d38ed8cf8250c6153342f08477b5d6aee6be766f0",
     "volume": {
-      "h1": 0.45,
+      "h1": 0,
       "h24": 0.45,
       "h6": 0.45,
       "m5": 0

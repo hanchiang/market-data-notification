@@ -85,6 +85,20 @@ class ReplayStateClient:
         raw = self._raw('eth_getCode', [address, hex(block)])
         return raw.body['result'], raw
 
+    async def get_block_by_number(self, block):
+        """Matched on the block number rather than on the whole params list.
+
+        The collector bounds its creation-log query by binary-searching headers,
+        and the capture records those reads; matching on the number alone keeps
+        the replay working if the client ever changes the second argument.
+        """
+        wanted = hex(int(block))
+        for (method, _params), entry in self.by_key.items():
+            if method == 'eth_getBlockByNumber' and entry['params'][0] == wanted:
+                raw = _Raw(entry)
+                return raw.body['result'], raw
+        raise KeyError(f'no captured header for block {wanted}')
+
 
 class _Raw:
     def __init__(self, entry):
@@ -173,6 +187,49 @@ class ReplayExplorer:
         return BlockscoutService._parse(body, model, key)
 
 
+def _replay_context(seed_project, onchain_repository, monkeypatch):
+    """The identity collector wired to one seed's committed bodies."""
+    manifest = _load(seed_project, 'manifest')
+    logs = _load(seed_project, 'logs')
+
+    async def replay_fetch_window(client, query, from_block, to_block, **kwargs):
+        return logs.get(query.name, []), []
+
+    monkeypatch.setattr(
+        'src.service.project_monitor.logs.fetch_window', replay_fetch_window
+    )
+
+    registry = load_registry(get_registry_path())
+    project = registry.projects[seed_project]
+    chain_entry = registry.chain_for(project)
+    entity = onchain_repository.upsert_entity(
+        level='project', key=f'project:{seed_project}'
+    )
+    context = BuildContext(
+        repository=onchain_repository,
+        registry=registry,
+        chain=chain_entry,
+        project=project,
+        chain_entity_id=entity,
+        project_entity_id=entity,
+        pinned=PinnedBlock(
+            block=int(manifest['block']),
+            timestamp=int(manifest['block_timestamp']),
+            window_start_block=int(manifest['block']) - 1,
+            window_start_timestamp=int(manifest['block_timestamp']) - 1,
+            header_reads=1,
+        ),
+        state_client=ReplayStateClient(_load(seed_project, 'jsonrpc')),
+        log_client=ReplayStateClient([]),
+        dexscreener=ReplayDexscreener(
+            _load(seed_project, 'dexscreener_pair'),
+            _load(seed_project, 'dexscreener_token_pairs'),
+        ),
+        explorer=ExplorerUnit(ReplayExplorer(_load(seed_project, 'blockscout'))),
+    )
+    return context, registry.projects[seed_project]
+
+
 @pytest.fixture(params=SEED_PROJECTS)
 def seed_project(request):
     return request.param
@@ -180,48 +237,30 @@ def seed_project(request):
 
 class TestIdentityResolvesOffline:
     @pytest.mark.asyncio
+    async def test_a_previously_unresolved_immutable_is_read_again_not_carried(
+        self, seed_project, onchain_repository, monkeypatch
+    ):
+        """`unavailable` is not a fact, so it must not be carried forward.
+
+        predict-fwa's creation block failed once and every later build inherited
+        the failure, which also sent its health section to walk from block 0 --
+        the real cost of treating an unread field as immutable.
+        """
+        context, _ = _replay_context(seed_project, onchain_repository, monkeypatch)
+        previous = {name: 'unavailable' for name in identity.IMMUTABLE_FIELDS}
+        run_id = onchain_repository.start_run('onchain.build')
+        with run_context(run_id, 'onchain.build'):
+            section = await identity.collect(context, previous)
+        assert isinstance(section.fields['creation_block'], int)
+
+    @pytest.mark.asyncio
     async def test_each_seed_pool_reference_resolves_from_committed_bodies(
         self, seed_project, onchain_repository, monkeypatch
     ):
         """A1: given the four seed projects, the identity collector resolves each
         one's pool reference into a pool the chain agrees exists."""
-        manifest = _load(seed_project, 'manifest')
-        logs = _load(seed_project, 'logs')
-
-        async def replay_fetch_window(client, query, from_block, to_block, **kwargs):
-            return logs.get(query.name, []), []
-
-        monkeypatch.setattr(
-            'src.service.project_monitor.logs.fetch_window', replay_fetch_window
-        )
-
-        registry = load_registry(get_registry_path())
-        project = registry.projects[seed_project]
-        chain_entry = registry.chain_for(project)
-        entity = onchain_repository.upsert_entity(
-            level='project', key=f'project:{seed_project}'
-        )
-        context = BuildContext(
-            repository=onchain_repository,
-            registry=registry,
-            chain=chain_entry,
-            project=project,
-            chain_entity_id=entity,
-            project_entity_id=entity,
-            pinned=PinnedBlock(
-                block=int(manifest['block']),
-                timestamp=int(manifest['block_timestamp']),
-                window_start_block=int(manifest['block']) - 1,
-                window_start_timestamp=int(manifest['block_timestamp']) - 1,
-                header_reads=1,
-            ),
-            state_client=ReplayStateClient(_load(seed_project, 'jsonrpc')),
-            log_client=ReplayStateClient([]),
-            dexscreener=ReplayDexscreener(
-                _load(seed_project, 'dexscreener_pair'),
-                _load(seed_project, 'dexscreener_token_pairs'),
-            ),
-            explorer=ExplorerUnit(ReplayExplorer(_load(seed_project, 'blockscout'))),
+        context, project = _replay_context(
+            seed_project, onchain_repository, monkeypatch
         )
         run_id = onchain_repository.start_run('onchain.build')
         with run_context(run_id, 'onchain.build'):
@@ -234,10 +273,20 @@ class TestIdentityResolvesOffline:
         assert isinstance(fields['decimals'], int)
         if fields['version'] == 'v4':
             assert fields['pool_id'] == project.pool_ref
-            assert fields['currency0'] and fields['currency1']
+            # `is True`, not truthiness: an unreadable `Initialize` log fills
+            # every key field with the string 'unavailable', which is truthy, so
+            # `assert fields['currency0']` passed on a fixture that resolved
+            # nothing. The recomputed-id check is the whole of A1 for a v4 pool.
+            assert fields['key_matches'] is True
+            assert fields['currency0'].startswith('0x')
+            assert fields['currency1'].startswith('0x')
         else:
             assert fields['pool_address'] == project.pool_ref
             assert fields['factory_matches'] is True
+        # A1 names the creation block among what must resolve, and it is what
+        # bounds every later transfer fetch. `unavailable` is a string; an int is
+        # the only value that means the log was actually found.
+        assert isinstance(fields['creation_block'], int)
         # The criterion is resolution, not a green explorer: this chain's
         # explorer answers 500 most nights and those units are allowed to fail.
         assert section.status in ('ok', 'partial')

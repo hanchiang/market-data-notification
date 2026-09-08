@@ -7,11 +7,11 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 342023,
+    "fdv": 318516,
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -37,21 +37,20 @@
       "v3"
     ],
     "liquidity": {
-      "base": 104633193,
-      "quote": 13.132,
-      "usd": 68381.68
+      "base": 108585670,
+      "quote": 12.6143,
+      "usd": 65900.6
     },
-    "marketCap": 342023,
+    "marketCap": 318516,
     "pairAddress": "0x5313A71595178721E1D58FD4cb459e4981aaE441",
     "pairCreatedAt": 1785625763000,
     "priceChange": {
-      "h1": 2.96,
-      "h24": -41.93,
-      "h6": -15.49,
-      "m5": -0.19
+      "h1": -6.87,
+      "h24": -51.21,
+      "h6": -14.5
     },
-    "priceNative": "0.0000001384",
-    "priceUsd": "0.0003428",
+    "priceNative": "0.0000001289",
+    "priceUsd": "0.0003192",
     "quoteToken": {
       "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
       "name": "WETH",
@@ -59,28 +58,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 6,
-        "sells": 20
+        "buys": 10,
+        "sells": 24
       },
       "h24": {
         "buys": 526,
-        "sells": 752
+        "sells": 758
       },
       "h6": {
         "buys": 76,
-        "sells": 147
+        "sells": 143
       },
       "m5": {
         "buys": 0,
-        "sells": 1
+        "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x5313a71595178721e1d58fd4cb459e4981aae441",
     "volume": {
-      "h1": 862.83,
-      "h24": 159210.63,
-      "h6": 20281.56,
-      "m5": 7.35
+      "h1": 2781.83,
+      "h24": 158949.71,
+      "h6": 17548.91,
+      "m5": 0
     }
   },
   {
@@ -95,7 +94,7 @@
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -129,9 +128,8 @@
     "pairAddress": "0xf35476960dbb30ddf5a18f13999cedcac2a5b73e9cf591459d01282888bd444b",
     "pairCreatedAt": 1788022741000,
     "priceChange": {
-      "h1": 3.75,
-      "h24": -46.01,
-      "h6": -21.51
+      "h24": -47.43,
+      "h6": -9.3
     },
     "priceNative": "0.0003295",
     "priceUsd": "0.0003291",
@@ -142,16 +140,16 @@
     },
     "txns": {
       "h1": {
-        "buys": 2,
+        "buys": 0,
         "sells": 0
       },
       "h24": {
         "buys": 37,
-        "sells": 67
+        "sells": 66
       },
       "h6": {
         "buys": 5,
-        "sells": 15
+        "sells": 6
       },
       "m5": {
         "buys": 0,
@@ -160,91 +158,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0xf35476960dbb30ddf5a18f13999cedcac2a5b73e9cf591459d01282888bd444b",
     "volume": {
-      "h1": 45.82,
-      "h24": 4767.08,
-      "h6": 482.02,
-      "m5": 0
-    }
-  },
-  {
-    "baseToken": {
-      "address": "0xa934bA4F59070149d37A93F8A002Af79BAe35563",
-      "name": "predict FWA",
-      "symbol": "PFWA"
-    },
-    "chainId": "robinhood",
-    "dexId": "up",
-    "fdv": 347314,
-    "info": {
-      "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
-      "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
-      "socials": [
-        {
-          "type": "twitter",
-          "url": "https://x.com/pfwafun"
-        },
-        {
-          "type": "telegram",
-          "url": "https://t.me/pfwafun"
-        }
-      ],
-      "websites": [
-        {
-          "label": "Website",
-          "url": "https://www.pfwa.fun/"
-        },
-        {
-          "label": "Docs",
-          "url": "https://www.pfwa.fun/docs"
-        }
-      ]
-    },
-    "labels": [
-      "v3"
-    ],
-    "liquidity": {
-      "base": 519901,
-      "quote": 172.04053,
-      "usd": 353.02
-    },
-    "marketCap": 347314,
-    "pairAddress": "0x288988Ef87F10cadc1D45208feFa6f2F9A38e79e",
-    "priceChange": {
-      "h1": 6.48,
-      "h24": -41.47,
-      "h6": -14.21
-    },
-    "priceNative": "0.0003481",
-    "priceUsd": "0.0003481",
-    "quoteToken": {
-      "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
-      "name": "Global Dollar",
-      "symbol": "USDG"
-    },
-    "txns": {
-      "h1": {
-        "buys": 1,
-        "sells": 0
-      },
-      "h24": {
-        "buys": 35,
-        "sells": 41
-      },
-      "h6": {
-        "buys": 7,
-        "sells": 9
-      },
-      "m5": {
-        "buys": 0,
-        "sells": 0
-      }
-    },
-    "url": "https://dexscreener.com/robinhood/0x288988ef87f10cadc1d45208fefa6f2f9a38e79e",
-    "volume": {
-      "h1": 4.49,
-      "h24": 373.69,
-      "h6": 74.14,
+      "h1": 0,
+      "h24": 4704.7,
+      "h6": 276.53,
       "m5": 0
     }
   },
@@ -260,7 +176,7 @@
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -294,7 +210,7 @@
     "pairAddress": "0x8e55da1b2265409bcddd3e1415926eab2dddb2b298852ee76cb28b48a4c093d8",
     "pairCreatedAt": 1787871945000,
     "priceChange": {
-      "h24": -50.7
+      "h24": -57.1
     },
     "priceNative": "0.0000001168",
     "priceUsd": "0.0002907",
@@ -310,7 +226,7 @@
       },
       "h24": {
         "buys": 6,
-        "sells": 12
+        "sells": 11
       },
       "h6": {
         "buys": 0,
@@ -324,8 +240,90 @@
     "url": "https://dexscreener.com/robinhood/0x8e55da1b2265409bcddd3e1415926eab2dddb2b298852ee76cb28b48a4c093d8",
     "volume": {
       "h1": 0,
-      "h24": 262.06,
+      "h24": 253.92,
       "h6": 0,
+      "m5": 0
+    }
+  },
+  {
+    "baseToken": {
+      "address": "0xa934bA4F59070149d37A93F8A002Af79BAe35563",
+      "name": "predict FWA",
+      "symbol": "PFWA"
+    },
+    "chainId": "robinhood",
+    "dexId": "up",
+    "fdv": 335544,
+    "info": {
+      "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788858000000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/pfwafun"
+        },
+        {
+          "type": "telegram",
+          "url": "https://t.me/pfwafun"
+        }
+      ],
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://www.pfwa.fun/"
+        },
+        {
+          "label": "Docs",
+          "url": "https://www.pfwa.fun/docs"
+        }
+      ]
+    },
+    "labels": [
+      "v3"
+    ],
+    "liquidity": {
+      "base": 527165,
+      "quote": 169.58,
+      "usd": 346.87
+    },
+    "marketCap": 335544,
+    "pairAddress": "0x288988Ef87F10cadc1D45208feFa6f2F9A38e79e",
+    "priceChange": {
+      "h1": -3.39,
+      "h24": -48.21,
+      "h6": -11.02
+    },
+    "priceNative": "0.0003363",
+    "priceUsd": "0.0003363",
+    "quoteToken": {
+      "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+      "name": "Global Dollar",
+      "symbol": "USDG"
+    },
+    "txns": {
+      "h1": {
+        "buys": 0,
+        "sells": 1
+      },
+      "h24": {
+        "buys": 34,
+        "sells": 42
+      },
+      "h6": {
+        "buys": 5,
+        "sells": 7
+      },
+      "m5": {
+        "buys": 0,
+        "sells": 0
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x288988ef87f10cadc1d45208fefa6f2f9a38e79e",
+    "volume": {
+      "h1": 2.46,
+      "h24": 373.5,
+      "h6": 56.53,
       "m5": 0
     }
   },
@@ -341,7 +339,7 @@
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",

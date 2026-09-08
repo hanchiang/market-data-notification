@@ -7,11 +7,11 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 4761359,
+    "fdv": 4888329,
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -33,21 +33,21 @@
       "v3"
     ],
     "liquidity": {
-      "base": 29946790,
-      "quote": 54.6841,
-      "usd": 288182.1
+      "base": 29504179,
+      "quote": 55.6326,
+      "usd": 292109.99
     },
-    "marketCap": 4761359,
+    "marketCap": 4888329,
     "pairAddress": "0x6D489e07d7Fe2b4Bc5749f75d56337888B68a34a",
     "pairCreatedAt": 1785782601000,
     "priceChange": {
-      "h1": 3.45,
-      "h24": 0.33,
-      "h6": 7.56,
-      "m5": 0.72
+      "h1": 1.96,
+      "h24": 13.81,
+      "h6": 5.61,
+      "m5": -2.73
     },
-    "priceNative": "0.000002055",
-    "priceUsd": "0.005095",
+    "priceNative": "0.000002112",
+    "priceUsd": "0.005231",
     "quoteToken": {
       "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
       "name": "WETH",
@@ -55,28 +55,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 17,
-        "sells": 22
+        "buys": 19,
+        "sells": 18
       },
       "h24": {
-        "buys": 700,
-        "sells": 851
+        "buys": 699,
+        "sells": 840
       },
       "h6": {
-        "buys": 136,
-        "sells": 159
+        "buys": 109,
+        "sells": 143
       },
       "m5": {
-        "buys": 3,
-        "sells": 8
+        "buys": 1,
+        "sells": 2
       }
     },
     "url": "https://dexscreener.com/robinhood/0x6d489e07d7fe2b4bc5749f75d56337888b68a34a",
     "volume": {
-      "h1": 20048.98,
-      "h24": 366683.73,
-      "h6": 88272.79,
-      "m5": 1542.2
+      "h1": 7253.93,
+      "h24": 361135.21,
+      "h6": 78860.13,
+      "m5": 2306.39
     }
   },
   {
@@ -87,11 +87,11 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 4635095,
+    "fdv": 4813735,
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -113,20 +113,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 6664243,
-      "quote": 31917,
-      "usd": 64945.25
+      "base": 6283542,
+      "quote": 33842,
+      "usd": 66229.63
     },
-    "marketCap": 4635095,
+    "marketCap": 4813735,
     "pairAddress": "0x10c17a5f572cc7b3863ed7c9a2545fc7267bbb377386ca5beb9bd1df1c8f7e7e",
     "pairCreatedAt": 1786957822000,
     "priceChange": {
-      "h1": -1.18,
-      "h24": 3.08,
-      "h6": 1.42
+      "h1": 3.85,
+      "h24": 9.37,
+      "h6": 5.32
     },
-    "priceNative": "0.004965",
-    "priceUsd": "0.004960",
+    "priceNative": "0.005149",
+    "priceUsd": "0.005151",
     "quoteToken": {
       "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
       "name": "Global Dollar",
@@ -134,15 +134,15 @@
     },
     "txns": {
       "h1": {
-        "buys": 0,
-        "sells": 3
+        "buys": 10,
+        "sells": 0
       },
       "h24": {
-        "buys": 56,
-        "sells": 48
+        "buys": 67,
+        "sells": 47
       },
       "h6": {
-        "buys": 10,
+        "buys": 21,
         "sells": 17
       },
       "m5": {
@@ -152,9 +152,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0x10c17a5f572cc7b3863ed7c9a2545fc7267bbb377386ca5beb9bd1df1c8f7e7e",
     "volume": {
-      "h1": 621.36,
-      "h24": 38476.26,
-      "h6": 7355.78,
+      "h1": 2027.77,
+      "h24": 38645.47,
+      "h6": 9385.09,
       "m5": 0
     }
   },
@@ -166,11 +166,11 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 4726453,
+    "fdv": 4954515,
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -192,21 +192,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 181224,
-      "quote": 128251,
-      "usd": 1205.99
+      "base": 194860,
+      "quote": 98279,
+      "usd": 1275.13
     },
-    "marketCap": 4726453,
+    "marketCap": 4954515,
     "pairAddress": "0x7f75164a57cb71676a91b1f5887211a3e7d77594feeca9741775e0ec038a1ee2",
     "pairCreatedAt": 1788490413000,
     "priceChange": {
-      "h1": 1.45,
-      "h24": -2.5,
-      "h6": 5.15,
-      "m5": 1.45
+      "h1": 4.04,
+      "h24": 5.63,
+      "h6": 8.34
     },
-    "priceNative": "2.2424",
-    "priceUsd": "0.005058",
+    "priceNative": "2.1542",
+    "priceUsd": "0.005302",
     "quoteToken": {
       "address": "0x20024E485c0B22b42855589700721b28320A7777",
       "name": "Prism Assets",
@@ -215,27 +214,27 @@
     "txns": {
       "h1": {
         "buys": 1,
-        "sells": 0
+        "sells": 5
       },
       "h24": {
-        "buys": 39,
-        "sells": 48
+        "buys": 33,
+        "sells": 49
       },
       "h6": {
-        "buys": 6,
-        "sells": 14
+        "buys": 9,
+        "sells": 8
       },
       "m5": {
-        "buys": 1,
+        "buys": 0,
         "sells": 0
       }
     },
     "url": "https://dexscreener.com/robinhood/0x7f75164a57cb71676a91b1f5887211a3e7d77594feeca9741775e0ec038a1ee2",
     "volume": {
-      "h1": 50.74,
-      "h24": 3571.46,
-      "h6": 1057.74,
-      "m5": 50.74
+      "h1": 308.05,
+      "h24": 3753.27,
+      "h6": 1023.48,
+      "m5": 0
     }
   },
   {
@@ -246,11 +245,11 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 4525264,
+    "fdv": 4840841,
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -272,20 +271,20 @@
       "v4"
     ],
     "liquidity": {
-      "base": 102130,
-      "quote": 37917,
-      "usd": 1085.15
+      "base": 48189,
+      "quote": 56303,
+      "usd": 1030.39
     },
-    "marketCap": 4525264,
+    "marketCap": 4840841,
     "pairAddress": "0x4b8e8d18712fd3b7b0c0c1a3f8aae69f7fbb58a60c2c348692d1f0625ee3d558",
     "pairCreatedAt": 1788459076000,
     "priceChange": {
-      "h1": -2.3,
-      "h24": -0.48,
-      "h6": -2.82
+      "h1": 3.5,
+      "h24": 8.96,
+      "h6": 2.55
     },
-    "priceNative": "0.3109",
-    "priceUsd": "0.004843",
+    "priceNative": "0.3736",
+    "priceUsd": "0.005180",
     "quoteToken": {
       "address": "0x18E674231A58c239Dc7DaeDcffE15Ec3A24cff5c",
       "name": "Hookr.fun",
@@ -293,16 +292,16 @@
     },
     "txns": {
       "h1": {
-        "buys": 2,
+        "buys": 4,
         "sells": 0
       },
       "h24": {
-        "buys": 47,
-        "sells": 37
+        "buys": 51,
+        "sells": 34
       },
       "h6": {
-        "buys": 16,
-        "sells": 4
+        "buys": 19,
+        "sells": 3
       },
       "m5": {
         "buys": 0,
@@ -311,9 +310,9 @@
     },
     "url": "https://dexscreener.com/robinhood/0x4b8e8d18712fd3b7b0c0c1a3f8aae69f7fbb58a60c2c348692d1f0625ee3d558",
     "volume": {
-      "h1": 49.62,
-      "h24": 3148.47,
-      "h6": 672.75,
+      "h1": 243.91,
+      "h24": 3282.49,
+      "h6": 844.76,
       "m5": 0
     }
   },
@@ -329,7 +328,7 @@
     "info": {
       "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
       "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788858000000",
       "socials": [
         {
           "type": "twitter",
@@ -359,7 +358,7 @@
     "pairAddress": "0xeeec0498fce0ca513807f08a3b104131af97279016471365977d9903da1c83ec",
     "pairCreatedAt": 1787090985000,
     "priceChange": {
-      "h24": 0.27,
+      "h24": 0.73,
       "h6": 0.19
     },
     "priceNative": "0.004856",
@@ -376,7 +375,7 @@
       },
       "h24": {
         "buys": 24,
-        "sells": 22
+        "sells": 21
       },
       "h6": {
         "buys": 1,
@@ -390,7 +389,7 @@
     "url": "https://dexscreener.com/robinhood/0xeeec0498fce0ca513807f08a3b104131af97279016471365977d9903da1c83ec",
     "volume": {
       "h1": 0,
-      "h24": 1851.26,
+      "h24": 1849.18,
       "h6": 2.91,
       "m5": 0
     }

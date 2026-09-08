@@ -1,12 +1,12 @@
 {
   "address": {
-    "block_number_balance_updated_at": 57519822,
+    "block_number_balance_updated_at": 57566506,
     "coin_balance": "0",
     "creation_status": "success",
     "creation_transaction_hash": "0x466ebab37328ee48eef3545e8a55e03c9b6cb66b33399dc3f8018739274a0cdc",
     "creator_address_hash": "0x3711ceA4feaDE896C913C68F01Eda97Cb06D1A42",
     "ens_domain_name": null,
-    "exchange_rate": "2480.55",
+    "exchange_rate": "2480.54",
     "has_beacon_chain_withdrawals": false,
     "has_logs": true,
     "has_token_transfers": true,
@@ -25,18 +25,18 @@
     "reputation": "ok",
     "token": {
       "address_hash": "0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b",
-      "circulating_market_cap": null,
+      "circulating_market_cap": "3347583.6436200114",
       "circulating_supply": null,
       "decimals": "18",
-      "exchange_rate": null,
-      "holders_count": "6914",
+      "exchange_rate": "0.00335566",
+      "holders_count": "6897",
       "icon_url": "https://assets.coingecko.com/coins/images/102176732/small/tg.jpg?1788605774",
       "name": "Touch Grass",
       "reputation": "ok",
       "symbol": "GRASS",
       "total_supply": "994544604992985824445453436",
       "type": "ERC-20",
-      "volume_24h": null
+      "volume_24h": "1655371.41035181"
     },
     "watchlist_address_id": null,
     "watchlist_names": []
@@ -1149,315 +1149,5 @@
     "verified_at": "2026-09-03T15:46:51.390379Z",
     "verified_twin_address_hash": null
   },
-  "transaction": {
-    "arbitrum": {
-      "batch_data_container": "in_blob4844",
-      "batch_number": 184815,
-      "commitment_transaction": {
-        "hash": "0xdead22b69b29055fb08a57ed89a128f266ff9264b64ba80e01ea8b60de86cac2",
-        "status": "finalized",
-        "timestamp": "2026-09-03T15:50:47.000000Z"
-      },
-      "confirmation_transaction": {
-        "hash": null,
-        "status": null,
-        "timestamp": null
-      },
-      "contains_message": null,
-      "gas_used_for_l1": "1373",
-      "gas_used_for_l2": "3947839",
-      "message_related_info": {},
-      "network_fee": "1923292412664000",
-      "poster_fee": "668892648000",
-      "status": "Sent to base"
-    },
-    "authorization_list": [],
-    "base_fee_per_gas": "487176000",
-    "block_number": 53531312,
-    "confirmation_duration": [
-      0,
-      101.0
-    ],
-    "confirmations": 3988864,
-    "created_contract": null,
-    "decoded_input": {
-      "method_call": "launchAndBuy((string,string,string,string,(string,string,string,string,string),address,uint16,bool,bytes32,bytes32) params, uint256 launchConfigId, address pairToken, uint256 quoteIn, uint256 minTokensOut, address recipient, address[] snipeTaxExemptions)",
-      "method_id": "f85f8e41",
-      "parameters": [
-        {
-          "name": "params",
-          "type": "(string,string,string,string,(string,string,string,string,string),address,uint16,bool,bytes32,bytes32)",
-          "value": [
-            "Touch Grass",
-            "GRASS",
-            "ipfs://bafkreibhi2jibeyav7g5hiqzr3s73wziqbyh3zbkmd43afjbi3e6n4wrea",
-            "Stocks hidden in the real world. Go get them. Built on Robinhood Chain.",
-            [
-              "https://x.com/TouchGrassRWA",
-              "",
-              "",
-              "https://www.touchgrass.family/",
-              ""
-            ],
-            "0x21541C4F11D2fEE2258FfC7fd285038e85c58d25",
-            "200",
-            "false",
-            "0xa9fc75d4203a33fe660e8fa32c74c3aa41c1fda4bf23d3a39b6bc22a1f8b1ca7",
-            "0x07dc7d3b30cc686728ea09932dd9e193d1d25690d4dcd13b3c400404cd28cba9"
-          ]
-        },
-        {
-          "name": "launchConfigId",
-          "type": "uint256",
-          "value": "0"
-        },
-        {
-          "name": "pairToken",
-          "type": "address",
-          "value": "0x0000000000000000000000000000000000000000"
-        },
-        {
-          "name": "quoteIn",
-          "type": "uint256",
-          "value": "17494532958450485"
-        },
-        {
-          "name": "minTokensOut",
-          "type": "uint256",
-          "value": "0"
-        },
-        {
-          "name": "recipient",
-          "type": "address",
-          "value": "0x21541C4F11D2fEE2258FfC7fd285038e85c58d25"
-        },
-        {
-          "name": "snipeTaxExemptions",
-          "type": "address[]",
-          "value": [
-            "0x4D010eC650512B3dE1d8BAF0B32071c304d50E4A",
-            "0x8728164027d22e383bcd612aF33b5E157e91781B",
-            "0xFD1Fa6D20cbCc8f42ab44e0F948Ff59988E477C6",
-            "0xfBE3ddc4b2bc7e2eDf56B80DbC65F7E172067EF9",
-            "0x297b3dE622DeF6a38993d8fC64767765D1b4ebfC"
-          ]
-        }
-      ]
-    },
-    "exchange_rate": "2480.55",
-    "fee": {
-      "type": "actual",
-      "value": "1923961305312000"
-    },
-    "fhe_operations_count": 0,
-    "from": {
-      "ens_domain_name": null,
-      "hash": "0x21541C4F11D2fEE2258FfC7fd285038e85c58d25",
-      "implementations": [],
-      "is_contract": false,
-      "is_scam": false,
-      "is_verified": false,
-      "metadata": null,
-      "name": null,
-      "private_tags": [],
-      "proxy_type": null,
-      "public_tags": [],
-      "reputation": "ok",
-      "watchlist_names": []
-    },
-    "gas_limit": "6270000",
-    "gas_price": "487176000",
-    "gas_used": "3949212",
-    "has_error_in_internal_transactions": false,
-    "hash": "0x466ebab37328ee48eef3545e8a55e03c9b6cb66b33399dc3f8018739274a0cdc",
-    "historic_exchange_rate": null,
-    "is_pending_update": false,
-    "max_fee_per_gas": "976720000",
-    "max_priority_fee_per_gas": "0",
-    "method": "launchAndBuy",
-    "nonce": 0,
-    "position": 9,
-    "priority_fee": "0",
-    "raw_input": "0xf85f8e4100000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003e272f5e7ff335000000000000000000000000000000000000000000000000000000000000000000000000000000000000000021541c4f11d2fee2258ffc7fd285038e85c58d2500000000000000000000000000000000000000000000000000000000000005200000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000024000000000000000000000000000000000000000000000000000000000000002c000000000000000000000000021541c4f11d2fee2258ffc7fd285038e85c58d2500000000000000000000000000000000000000000000000000000000000000c80000000000000000000000000000000000000000000000000000000000000000a9fc75d4203a33fe660e8fa32c74c3aa41c1fda4bf23d3a39b6bc22a1f8b1ca707dc7d3b30cc686728ea09932dd9e193d1d25690d4dcd13b3c400404cd28cba9000000000000000000000000000000000000000000000000000000000000000b546f756368204772617373000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000547524153530000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000042697066733a2f2f6261666b726569626869326a6962657961763767356869717a7233733733777a6971627968337a626b6d64343361666a62693365366e3477726561000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004753746f636b732068696464656e20696e20746865207265616c20776f726c642e20476f20676574207468656d2e204275696c74206f6e20526f62696e686f6f6420436861696e2e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000001b68747470733a2f2f782e636f6d2f546f7563684772617373525741000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e68747470733a2f2f7777772e746f75636867726173732e66616d696c792f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000050000000000000000000000004d010ec650512b3de1d8baf0b32071c304d50e4a0000000000000000000000008728164027d22e383bcd612af33b5e157e91781b000000000000000000000000fd1fa6d20cbcc8f42ab44e0f948ff59988e477c6000000000000000000000000fbe3ddc4b2bc7e2edf56b80dbc65f7e172067ef9000000000000000000000000297b3de622def6a38993d8fc64767765d1b4ebfc",
-    "result": "success",
-    "revert_reason": null,
-    "status": "ok",
-    "timestamp": "2026-09-03T15:45:32.000000Z",
-    "to": {
-      "ens_domain_name": null,
-      "hash": "0xe33E9E479dF8802cb0866d5d05258bEc4cF62948",
-      "implementations": [],
-      "is_contract": true,
-      "is_scam": false,
-      "is_verified": true,
-      "metadata": null,
-      "name": "PonsV2LaunchAndBuy",
-      "private_tags": [],
-      "proxy_type": null,
-      "public_tags": [],
-      "reputation": "ok",
-      "watchlist_names": []
-    },
-    "token_transfers": [
-      {
-        "block_hash": "0x90578131e7cc0123f89a8f9a54392daf57fa3206881d0c022f90b5a0a0f1e0aa",
-        "block_number": 53531312,
-        "from": {
-          "ens_domain_name": null,
-          "hash": "0x0000000000000000000000000000000000000000",
-          "implementations": [],
-          "is_contract": false,
-          "is_scam": false,
-          "is_verified": false,
-          "metadata": {
-            "tags": [
-              {
-                "meta": {},
-                "name": "Null: 0x000...000",
-                "ordinal": 10,
-                "slug": "null-0x000000",
-                "tagType": "name"
-              },
-              {
-                "meta": {},
-                "name": "Metamask User",
-                "ordinal": 0,
-                "slug": "metamask-user",
-                "tagType": "generic"
-              },
-              {
-                "meta": {},
-                "name": "Imtoken User",
-                "ordinal": 0,
-                "slug": "imtoken-user",
-                "tagType": "generic"
-              },
-              {
-                "meta": {},
-                "name": "Miner",
-                "ordinal": 0,
-                "slug": "miner",
-                "tagType": "generic"
-              }
-            ]
-          },
-          "name": null,
-          "private_tags": [],
-          "proxy_type": null,
-          "public_tags": [],
-          "reputation": "ok",
-          "watchlist_names": []
-        },
-        "log_index": 40,
-        "method": null,
-        "timestamp": null,
-        "to": {
-          "ens_domain_name": null,
-          "hash": "0xC2d49FBE68ecA7D911f92679d642e4C805A194DB",
-          "implementations": [],
-          "is_contract": true,
-          "is_scam": false,
-          "is_verified": true,
-          "metadata": null,
-          "name": "PonsV2BondingCurve",
-          "private_tags": [],
-          "proxy_type": null,
-          "public_tags": [],
-          "reputation": "ok",
-          "watchlist_names": []
-        },
-        "token": {
-          "address_hash": "0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b",
-          "circulating_market_cap": null,
-          "circulating_supply": null,
-          "decimals": "18",
-          "exchange_rate": null,
-          "holders_count": "6914",
-          "icon_url": "https://assets.coingecko.com/coins/images/102176732/small/tg.jpg?1788605774",
-          "name": "Touch Grass",
-          "reputation": "ok",
-          "symbol": "GRASS",
-          "total_supply": "994544604992985824445453436",
-          "type": "ERC-20",
-          "volume_24h": null
-        },
-        "token_type": "ERC-20",
-        "total": {
-          "decimals": "18",
-          "value": "1000000000000000000000000000"
-        },
-        "transaction_hash": "0x466ebab37328ee48eef3545e8a55e03c9b6cb66b33399dc3f8018739274a0cdc",
-        "type": "token_minting"
-      },
-      {
-        "block_hash": "0x90578131e7cc0123f89a8f9a54392daf57fa3206881d0c022f90b5a0a0f1e0aa",
-        "block_number": 53531312,
-        "from": {
-          "ens_domain_name": null,
-          "hash": "0xC2d49FBE68ecA7D911f92679d642e4C805A194DB",
-          "implementations": [],
-          "is_contract": true,
-          "is_scam": false,
-          "is_verified": true,
-          "metadata": null,
-          "name": "PonsV2BondingCurve",
-          "private_tags": [],
-          "proxy_type": null,
-          "public_tags": [],
-          "reputation": "ok",
-          "watchlist_names": []
-        },
-        "log_index": 51,
-        "method": null,
-        "timestamp": null,
-        "to": {
-          "ens_domain_name": null,
-          "hash": "0x21541C4F11D2fEE2258FfC7fd285038e85c58d25",
-          "implementations": [],
-          "is_contract": false,
-          "is_scam": false,
-          "is_verified": false,
-          "metadata": null,
-          "name": null,
-          "private_tags": [],
-          "proxy_type": null,
-          "public_tags": [],
-          "reputation": "ok",
-          "watchlist_names": []
-        },
-        "token": {
-          "address_hash": "0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b",
-          "circulating_market_cap": null,
-          "circulating_supply": null,
-          "decimals": "18",
-          "exchange_rate": null,
-          "holders_count": "6914",
-          "icon_url": "https://assets.coingecko.com/coins/images/102176732/small/tg.jpg?1788605774",
-          "name": "Touch Grass",
-          "reputation": "ok",
-          "symbol": "GRASS",
-          "total_supply": "994544604992985824445453436",
-          "type": "ERC-20",
-          "volume_24h": null
-        },
-        "token_type": "ERC-20",
-        "total": {
-          "decimals": "18",
-          "value": "10000000000000001343571428"
-        },
-        "transaction_hash": "0x466ebab37328ee48eef3545e8a55e03c9b6cb66b33399dc3f8018739274a0cdc",
-        "type": "token_transfer"
-      }
-    ],
-    "token_transfers_overflow": false,
-    "transaction_burnt_fee": "1923961305312000",
-    "transaction_tag": null,
-    "transaction_types": [
-      "coin_transfer",
-      "contract_call",
-      "token_transfer"
-    ],
-    "type": 2,
-    "value": "17994532958450485"
-  }
+  "transaction": "api_error"
 }

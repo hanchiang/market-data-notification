@@ -96,10 +96,16 @@ async def capture(project_key: str, out_dir: Path, test_mode: bool) -> Dict[str,
             manifest['block_timestamp'] = timestamp
             manifest['endpoint_kind'] = role.endpoint.kind
             rpc = await _capture_rpc(client, project, chain_entry, token_address, head)
-            _write(out_dir, f'{project_key}.jsonrpc.json', rpc, manifest)
+            # The identity collector bounds its creation-log query by searching
+            # block headers, so those reads belong in the same fixture: a replay
+            # that could not answer them would either fail or, worse, quietly
+            # take a different window than the build does.
+            recorder = _HeaderRecorder(client, rpc)
             logs = await _capture_creation_logs(
-                log_client, client, project, chain_entry, head
+                log_client, client, project, chain_entry, head, timestamp,
+                pairs[0], recorder,
             )
+            _write(out_dir, f'{project_key}.jsonrpc.json', rpc, manifest)
             _write(out_dir, f'{project_key}.logs.json', logs, manifest)
 
         explorer_bodies = await _capture_explorer(explorer, token_address)
@@ -155,8 +161,34 @@ async def _capture_rpc(client, project, chain_entry, token_address: str, block: 
     return captured
 
 
+class _HeaderRecorder:
+    """A client proxy that captures every `eth_getBlockByNumber` it serves.
+
+    `find_block_at_or_before` returns a count of header reads and not their
+    bodies, so the only way to record exactly the reads the collector will make
+    is to watch the client while the same search runs.
+    """
+
+    def __init__(self, client, captured: List[Dict[str, Any]]):
+        self._client = client
+        self._captured = captured
+
+    async def get_block_by_number(self, block: int):
+        header, raw = await self._client.get_block_by_number(block)
+        self._captured.append(
+            {
+                'method': raw.method,
+                'params': raw.params,
+                'endpoint_kind': raw.endpoint_kind,
+                'body': raw.body,
+            }
+        )
+        return header, raw
+
+
 async def _capture_creation_logs(
-    log_client, state_client, project, chain_entry, block: int
+    log_client, state_client, project, chain_entry, block: int,
+    block_timestamp: int, pair: Any, recorder: Any,
 ) -> Dict[str, Any]:
     """`{query name: [log, ...]}` for the creation log identity reads.
 
@@ -202,9 +234,24 @@ async def _capture_creation_logs(
     # `PoolCreated` query the public endpoint answers with a timeout.
     from market_data_library.core.onchain.evm import EvmClientError
 
+    from src.service.onchain.collectors.identity import creation_search_bounds
+    from src.service.onchain.config import get_chain_constants
+
+    from_block, to_block, reads = await creation_search_bounds(
+        recorder,
+        getattr(pair, 'pairCreatedAt', None),
+        head=block,
+        head_timestamp=block_timestamp,
+        constants=get_chain_constants(chain_entry.chain_id),
+    )
+    logger.info(
+        '%s searched over blocks %s-%s after %s header reads',
+        query.name, from_block, to_block, reads,
+    )
     try:
         logs, _ = await asyncio.wait_for(
-            fetch_window(log_client, query, 0, block), timeout=CREATION_LOG_BUDGET_SECONDS
+            fetch_window(log_client, query, from_block, to_block),
+            timeout=CREATION_LOG_BUDGET_SECONDS,
         )
     except (EvmClientError, asyncio.TimeoutError) as exc:
         logger.warning(

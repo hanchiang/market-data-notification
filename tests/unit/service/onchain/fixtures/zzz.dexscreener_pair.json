@@ -7,10 +7,10 @@
     },
     "chainId": "robinhood",
     "dexId": "uniswap",
-    "fdv": 13342511,
+    "fdv": 12876028,
     "info": {
       "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
       "socials": [
         {
           "type": "twitter",
@@ -23,21 +23,21 @@
       "v4"
     ],
     "liquidity": {
-      "base": 11489685,
-      "quote": 74.601,
-      "usd": 369400.63
+      "base": 11696765,
+      "quote": 73.2803,
+      "usd": 362910.57
     },
-    "marketCap": 13342511,
+    "marketCap": 12876028,
     "pairAddress": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
     "pairCreatedAt": 1788566099000,
     "priceChange": {
-      "h1": 0.22,
-      "h24": -41.38,
-      "h6": -22.63,
-      "m5": 2.55
+      "h1": -3.5,
+      "h24": -48.32,
+      "h6": -12.98,
+      "m5": 0.04
     },
-    "priceNative": "0.000006492",
-    "priceUsd": "0.01607",
+    "priceNative": "0.000006265",
+    "priceUsd": "0.01551",
     "quoteToken": {
       "address": "0x0000000000000000000000000000000000000000",
       "name": "Ether",
@@ -45,28 +45,28 @@
     },
     "txns": {
       "h1": {
-        "buys": 52,
-        "sells": 73
+        "buys": 55,
+        "sells": 53
       },
       "h24": {
-        "buys": 2288,
-        "sells": 2392
+        "buys": 2229,
+        "sells": 2359
       },
       "h6": {
-        "buys": 644,
-        "sells": 645
+        "buys": 608,
+        "sells": 606
       },
       "m5": {
-        "buys": 2,
-        "sells": 3
+        "buys": 1,
+        "sells": 4
       }
     },
     "url": "https://dexscreener.com/robinhood/0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
     "volume": {
-      "h1": 56844.49,
-      "h24": 2399335.79,
-      "h6": 770489.24,
-      "m5": 2825.05
+      "h1": 46266.37,
+      "h24": 2359276.6,
+      "h6": 691989.96,
+      "m5": 373.29
     }
   },
   "pairs": [
@@ -78,10 +78,10 @@
       },
       "chainId": "robinhood",
       "dexId": "uniswap",
-      "fdv": 13342511,
+      "fdv": 12876028,
       "info": {
         "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
-        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788858300000",
         "socials": [
           {
             "type": "twitter",
@@ -94,21 +94,21 @@
         "v4"
       ],
       "liquidity": {
-        "base": 11489685,
-        "quote": 74.601,
-        "usd": 369400.63
+        "base": 11696765,
+        "quote": 73.2803,
+        "usd": 362910.57
       },
-      "marketCap": 13342511,
+      "marketCap": 12876028,
       "pairAddress": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
       "pairCreatedAt": 1788566099000,
       "priceChange": {
-        "h1": 0.22,
-        "h24": -41.38,
-        "h6": -22.63,
-        "m5": 2.55
+        "h1": -3.5,
+        "h24": -48.32,
+        "h6": -12.98,
+        "m5": 0.04
       },
-      "priceNative": "0.000006492",
-      "priceUsd": "0.01607",
+      "priceNative": "0.000006265",
+      "priceUsd": "0.01551",
       "quoteToken": {
         "address": "0x0000000000000000000000000000000000000000",
         "name": "Ether",
@@ -116,28 +116,28 @@
       },
       "txns": {
         "h1": {
-          "buys": 52,
-          "sells": 73
+          "buys": 55,
+          "sells": 53
         },
         "h24": {
-          "buys": 2288,
-          "sells": 2392
+          "buys": 2229,
+          "sells": 2359
         },
         "h6": {
-          "buys": 644,
-          "sells": 645
+          "buys": 608,
+          "sells": 606
         },
         "m5": {
-          "buys": 2,
-          "sells": 3
+          "buys": 1,
+          "sells": 4
         }
       },
       "url": "https://dexscreener.com/robinhood/0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
       "volume": {
-        "h1": 56844.49,
-        "h24": 2399335.79,
-        "h6": 770489.24,
-        "m5": 2825.05
+        "h1": 46266.37,
+        "h24": 2359276.6,
+        "h6": 691989.96,
+        "m5": 373.29
       }
     }
   ],

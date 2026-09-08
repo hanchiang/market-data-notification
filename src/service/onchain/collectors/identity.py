@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from market_data_library.core.onchain.evm import EvmClientError, abi
 
+from src.service.onchain import chain
 from src.service.onchain.chain import decode_string
 from src.service.onchain.collectors import uniswap
 from src.service.onchain.collectors.base import (
@@ -38,6 +39,14 @@ from src.service.onchain.diff import failed_field
 logger = logging.getLogger('Onchain identity')
 
 UNAVAILABLE = 'unavailable'
+
+# How far either side of the provider's pair-creation timestamp the creation log
+# is searched for. Wide enough to absorb a provider clock that disagrees with the
+# chain by hours, narrow enough that the scan is a few hundred windows rather
+# than the chain's whole history -- which is what made predict-fwa's
+# `PoolCreated` unresolvable: 57M blocks at the public node's window budget
+# rate-limits long before it reaches the pool.
+CREATION_SEARCH_MARGIN_SECONDS = 6 * 60 * 60
 
 # Carried forward from a prior identity section instead of re-read: each is a
 # fact about a pool that was true when it was created and cannot change.
@@ -55,10 +64,15 @@ IMMUTABLE_FIELDS = (
 
 async def collect(context: BuildContext, previous: Optional[Dict[str, Any]] = None) -> SectionResult:
     fields: Dict[str, Any] = {}
+    # An immutable fact that could NOT be read is not a fact. Carrying
+    # `unavailable` forward made one bad night permanent: predict-fwa's creation
+    # block failed once, was carried by every later build, and no re-run could
+    # recover it -- which also left the health section walking from genesis,
+    # because block 0 is where an unresolved creation block sends it.
     carried = {
         name: value
         for name, value in (previous or {}).items()
-        if name in IMMUTABLE_FIELDS
+        if name in IMMUTABLE_FIELDS and value != UNAVAILABLE
     }
 
     pair, raw = await _provider_pair(context)
@@ -79,9 +93,9 @@ async def collect(context: BuildContext, previous: Optional[Dict[str, Any]] = No
 
     version = fields.get('version')
     if version == 'v4':
-        fields.update(await _resolve_v4(context, carried))
+        fields.update(await _resolve_v4(context, carried, fields))
     else:
-        fields.update(await _resolve_v3(context, carried))
+        fields.update(await _resolve_v3(context, carried, fields))
 
     fields.update(await _token_facts(context, token_address))
     explorer_fields = await _deployer_triple(context, token_address)
@@ -147,6 +161,70 @@ def _provider_fields(pair: Any) -> Dict[str, Any]:
     }
 
 
+async def creation_search_bounds(
+    client: Any,
+    created_at_ms: Any,
+    *,
+    head: int,
+    head_timestamp: int,
+    constants: Any,
+) -> Tuple[int, int, int]:
+    """`(from_block, to_block, header_reads)` to look for a pool's creation log in.
+
+    A pool is created once, at the moment the provider dates its pair, so the
+    creation log sits inside a few hours of that timestamp. Bounding BOTH ends
+    matters: a scan bounded only below still walks from the pool's creation to
+    head, which is the same tens of millions of blocks it was already failing on.
+
+    The lower bound is found by binary search over block headers (~25 reads, once
+    in the pool's life); the upper bound is derived from it arithmetically,
+    because the block rate is accurate over the twelve hours between them even
+    where it has drifted over the chain's history.
+
+    Falls back to the whole chain when the provider dates nothing, which is the
+    old behaviour and the honest one -- a bound invented from no timestamp could
+    exclude the very log being looked for.
+    """
+    if not created_at_ms:
+        return 0, head, 0
+    target = int(created_at_ms) // 1000 - CREATION_SEARCH_MARGIN_SECONDS
+    if target <= 0:
+        return 0, head, 0
+    from_block, _timestamp, reads = await chain.find_block_at_or_before(
+        client,
+        target,
+        high_block=head,
+        high_timestamp=head_timestamp,
+        constants=constants,
+    )
+    span = int(2 * CREATION_SEARCH_MARGIN_SECONDS * constants.blocks_per_second)
+    return from_block, min(head, from_block + span), reads
+
+
+async def _creation_bounds(context: BuildContext, fields: Dict[str, Any]) -> Tuple[int, int]:
+    """`creation_search_bounds` for this build, with its header reads billed."""
+    from src.service.onchain.config import get_chain_constants
+
+    from_block, to_block, reads = await creation_search_bounds(
+        context.state_client,
+        fields.get('pair_created_at'),
+        head=context.block,
+        head_timestamp=context.pinned.timestamp,
+        constants=get_chain_constants(context.chain.chain_id),
+    )
+    if reads:
+        context.charge(
+            context.state_client.endpoint.kind,
+            reads,
+            methods=['eth_getBlockByNumber'] * reads,
+        )
+    logger.info(
+        'creation log for %s searched over blocks %s-%s after %s header reads',
+        context.project.key, from_block, to_block, reads,
+    )
+    return from_block, to_block
+
+
 async def _every_pool_for_token(
     context: BuildContext, token_address: Optional[str]
 ) -> Tuple[Any, List[Dict[str, Any]]]:
@@ -178,7 +256,9 @@ async def _every_pool_for_token(
     ]
 
 
-async def _resolve_v3(context: BuildContext, carried: Dict[str, Any]) -> Dict[str, Any]:
+async def _resolve_v3(
+    context: BuildContext, carried: Dict[str, Any], provider: Dict[str, Any]
+) -> Dict[str, Any]:
     """v3: the pool has an address, so the getters answer directly."""
     pool = context.project.pool_ref
     fields: Dict[str, Any] = {'pool_address': pool.lower(), 'pool_id': None}
@@ -204,14 +284,19 @@ async def _resolve_v3(context: BuildContext, carried: Dict[str, Any]) -> Dict[st
         fields['creation_block'] = carried['creation_block']
         fields['creation_tx'] = carried.get('creation_tx')
     else:
-        fields.update(await _v3_creation(context, fields))
+        fields.update(await _v3_creation(context, fields, provider))
     return fields
 
 
-async def _v3_creation(context: BuildContext, fields: Dict[str, Any]) -> Dict[str, Any]:
+async def _v3_creation(
+    context: BuildContext, fields: Dict[str, Any], provider: Dict[str, Any]
+) -> Dict[str, Any]:
     """The factory's `PoolCreated` for this exact (token0, token1, fee).
 
-    One log query, once in the pool's life. The design's fallback -- a binary
+    One log query, once in the pool's life, bounded to a few hours either side of
+    the timestamp the provider dates the pair at (`_creation_bounds`) -- an
+    unbounded scan of this chain's history is what left predict-fwa's creation
+    block `unavailable` through round 2. The design's fallback -- a binary
     search of `eth_getCode` over the pool address -- is deliberately NOT
     implemented here: it costs ~25 archive reads to answer a question a single
     public-RPC query answers, and `unavailable` is a correct dossier value while
@@ -231,8 +316,9 @@ async def _v3_creation(context: BuildContext, fields: Dict[str, Any]) -> Dict[st
         ],
         spec=uniswap.V3_POOL_CREATED,
     )
+    from_block, to_block = await _creation_bounds(context, provider)
     try:
-        logs, raws = await fetch_window(context.log_client, query, 0, context.block)
+        logs, raws = await fetch_window(context.log_client, query, from_block, to_block)
         context.charge_logs(len(raws))
     except EvmClientError as exc:
         logger.warning('v3 creation log unavailable: %s', type(exc).__name__)
@@ -245,7 +331,9 @@ async def _v3_creation(context: BuildContext, fields: Dict[str, Any]) -> Dict[st
     }
 
 
-async def _resolve_v4(context: BuildContext, carried: Dict[str, Any]) -> Dict[str, Any]:
+async def _resolve_v4(
+    context: BuildContext, carried: Dict[str, Any], provider: Dict[str, Any]
+) -> Dict[str, Any]:
     """v4: existence from the state view, the key from the `Initialize` log."""
     pool_id = context.project.pool_ref
     state_view = context.chain.uniswap['v4_state_view']
@@ -271,12 +359,14 @@ async def _resolve_v4(context: BuildContext, carried: Dict[str, Any]) -> Dict[st
         fields.update({name: carried[name] for name in IMMUTABLE_FIELDS if name in carried})
         return fields
 
-    key = await _v4_key(context, pool_id)
+    key = await _v4_key(context, pool_id, provider)
     fields.update(key)
     return fields
 
 
-async def _v4_key(context: BuildContext, pool_id: str) -> Dict[str, Any]:
+async def _v4_key(
+    context: BuildContext, pool_id: str, provider: Dict[str, Any]
+) -> Dict[str, Any]:
     """The pool key, from the pool manager's `Initialize` log for this id.
 
     The design names a fallback -- the v4 position manager's `poolKeys(bytes25)`
@@ -295,8 +385,9 @@ async def _v4_key(context: BuildContext, pool_id: str) -> Dict[str, Any]:
         topics=[uniswap.V4_INITIALIZE.topic0, pool_id],
         spec=uniswap.V4_INITIALIZE,
     )
+    from_block, to_block = await _creation_bounds(context, provider)
     try:
-        logs, raws = await fetch_window(context.log_client, query, 0, context.block)
+        logs, raws = await fetch_window(context.log_client, query, from_block, to_block)
         context.charge_logs(len(raws))
     except EvmClientError as exc:
         logger.warning('v4 Initialize log unavailable: %s', type(exc).__name__)

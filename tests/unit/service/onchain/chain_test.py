@@ -153,3 +153,42 @@ class TestSpendCounters:
         chain.add_spend(spend, 'public', requests=5)
         assert spend['requests'] == {'alchemy': 5, 'public': 5}
         assert spend['compute_units'] == {'alchemy': 80}
+
+
+class TestCreationSearchBounds:
+    """The window the identity collector looks for a pool's creation log in.
+
+    Scanning from genesis to head is what left predict-fwa's `PoolCreated`
+    unresolved through two rounds: the public node rate-limits long before a
+    57M-block walk reaches the pool. The provider dates the pair, so the log is
+    within hours of that timestamp and both ends can be bounded.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_window_brackets_the_block_the_pool_was_created_in(self):
+        from src.service.onchain.collectors.identity import creation_search_bounds
+
+        head, head_timestamp = 40_000_000, 1_800_000_000
+        fake = FakeChain(head, head_timestamp)
+        # A pool created ~11.5 days of chain ago, dated by the provider in ms.
+        created_timestamp = head_timestamp - 1_000_000
+        created_block = head - 10_000_000
+        from_block, to_block, reads = await creation_search_bounds(
+            fake, created_timestamp * 1000,
+            head=head, head_timestamp=head_timestamp, constants=CONSTANTS,
+        )
+        assert from_block < created_block < to_block
+        assert to_block - from_block < head // 10
+        assert reads < 40
+
+    @pytest.mark.asyncio
+    async def test_a_pair_the_provider_does_not_date_falls_back_to_the_whole_chain(self):
+        """A bound invented from no timestamp could exclude the very log being
+        looked for, so the honest answer is the old unbounded scan."""
+        from src.service.onchain.collectors.identity import creation_search_bounds
+
+        fake = FakeChain(40_000_000, 1_800_000_000)
+        assert await creation_search_bounds(
+            fake, None, head=40_000_000, head_timestamp=1_800_000_000,
+            constants=CONSTANTS,
+        ) == (0, 40_000_000, 0)

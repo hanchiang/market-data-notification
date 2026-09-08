@@ -212,10 +212,34 @@ class TestWithdrawalNetting:
         # Without the DecreaseLiquidity join the burn keeps the manager as owner.
         assert uniswap.net_positions(uniswap.attribute_owners(rows, nft)) != []
         attributed = uniswap.attribute_owners(
-            rows, nft, {deposit_tx: 9, withdraw_tx: 9}
+            rows, nft, {deposit_tx: [(3, 9)], withdraw_tx: [(3, 9)]}
         )
         assert [row.nft_token_id for row in attributed] == [9, 9]
         assert uniswap.net_positions(attributed) == []
+
+    def test_two_positions_minted_in_one_transaction_keep_their_own_token_ids(self):
+        """A multicall mints two positions in one transaction and the manager
+        emits `IncreaseLiquidity` after each pool `Mint`, so the ids have to be
+        matched by ORDER. One id per transaction put both pool events under the
+        later position, which then reported twice its liquidity while the other
+        reported none."""
+        tx = '0x' + 'c3' * 32
+        rows = [
+            uniswap.PositionRow(
+                block=10, tx_hash=tx, log_index=1, kind='mint', owner=MANAGER,
+                nft_token_id=None, tick_lower=-60, tick_upper=60,
+                liquidity_delta=1000, salt=None,
+            ),
+            uniswap.PositionRow(
+                block=10, tx_hash=tx, log_index=5, kind='mint', owner=MANAGER,
+                nft_token_id=None, tick_lower=-120, tick_upper=120,
+                liquidity_delta=2000, salt=None,
+            ),
+        ]
+        attributed = uniswap.attribute_owners(
+            rows, [], {tx: [(3, 11), (7, 12)]}
+        )
+        assert [row.nft_token_id for row in attributed] == [11, 12]
 
     def test_rows_sharing_a_token_id_net_even_when_their_owners_disagree(self):
         """Why the netting key is the TOKEN ID and not the owner.

@@ -14,7 +14,7 @@ counterpart measured over "since the last build" would compare a day against
 whatever the cron interval happened to be -- measuring cadence, not gaming.
 """
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from market_data_library.core.onchain.evm import EvmClientError, abi
 
@@ -267,16 +267,23 @@ async def _fetch_owner_transfers(
 
 async def _v3_token_ids(
     context: BuildContext, manager: str, events: List[Dict[str, Any]]
-) -> Dict[str, int]:
-    """`{transaction hash: NFT token id}` from the v3 manager's own liquidity events.
+) -> Dict[str, List[Tuple[int, int]]]:
+    """`{transaction hash: [(log index, NFT token id), ...]}` from the v3
+    manager's own liquidity events.
 
     Restricted to the blocks the pool's events occupy for the same reason the
     ERC-721 fetch is (see `_fetch_owner_transfers`): the manager is chain-wide,
     and only a transaction carrying this pool's `Mint`/`Burn` can contribute.
+
+    Every event is kept with its log index, not one per transaction: a multicall
+    minting two positions emits two `IncreaseLiquidity`, and one id per
+    transaction would net both pool events under the later of them.
+    `attribute_owners` matches each pool event to the manager event that follows
+    it.
     """
     from src.service.project_monitor.logs import LogQuery
 
-    found: Dict[str, int] = {}
+    found: Dict[str, List[Tuple[int, int]]] = {}
     for spec, label in (
         (uniswap.V3_INCREASE_LIQUIDITY, 'increase'),
         (uniswap.V3_DECREASE_LIQUIDITY, 'decrease'),
@@ -287,8 +294,10 @@ async def _v3_token_ids(
         for low, high in _event_ranges(events):
             for log in await _fetch_events(context, query, low, high):
                 fields = abi.decode_log(spec, log)
-                found[str(log['transactionHash']).lower()] = int(fields['tokenId'])
-    return found
+                found.setdefault(str(log['transactionHash']).lower(), []).append(
+                    (int(log['logIndex'], 16), int(fields['tokenId']))
+                )
+    return {tx: sorted(entries) for tx, entries in found.items()}
 
 
 async def _custody_v3(

@@ -90,10 +90,21 @@ async def auth_check(request: Request, call_next):
     if (request.method, request.url.path) in PUBLIC_ROUTES:
         return await call_next(request)
 
+    # Both rejections return FastAPI's own 404 body, byte-identical to a route that
+    # does not exist, so a scanner cannot tell a protected endpoint from an absent
+    # one. The 500 this replaced confirmed the path was real and looked like a bug.
+    # PUBLIC_ROUTES stay enumerable by design — a webhook has to answer.
     auth_token = request.headers.get('X-Api-Auth')
-    if not auth_token or auth_token != config.get_api_auth_token():
-        logger.error('X-Api-Auth token is missing')
-        return JSONResponse(status_code=500, content={'data': 'You shall not pass'})
+    if not auth_token:
+        # Info: an absent header is almost always a scanner spraying paths, and
+        # logging that at error drowned the case below in the same signal.
+        logger.info('X-Api-Auth header absent')
+        return JSONResponse(status_code=404, content={'detail': 'Not Found'})
+    if auth_token != config.get_api_auth_token():
+        # Warning: a token was sent, so this is a stale caller of ours or a
+        # targeted guess. Never log the value.
+        logger.warning('X-Api-Auth token did not match')
+        return JSONResponse(status_code=404, content={'detail': 'Not Found'})
     return await call_next(request)
 
 @app.get("/healthz")

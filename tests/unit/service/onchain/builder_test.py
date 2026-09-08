@@ -250,6 +250,101 @@ class TestFailureUnits:
         assert len(onchain_repository.get_sections_for_build(result.build_id)) == 4
 
 
+class TestBaselineAcrossAnOutage:
+    """The one contract the builder owns that no builder test covered.
+
+    `with_baselines` is what makes a `partial` section's failure marker carry the
+    last good value, so the next build reads a real change as a change and not as
+    "appeared". Two reviewer rounds recorded that a builder which forgot to call
+    it would reintroduce the round-1 defect and that only a builder-level test
+    could catch it -- and every collector fake in this file returns plain scalar
+    fields, on which `with_baselines` is the identity function. So a builder that
+    passed `section.fields` straight to `insert_section` passed the whole file.
+
+    These fakes return failure markers instead, which is the only input shape on
+    which the call is observable.
+    """
+
+    @staticmethod
+    def _partial(name, fields):
+        async def collect(context, *args):
+            return SectionResult(name=name, status='partial', fields=dict(fields))
+        return collect
+
+    @pytest.mark.asyncio
+    async def test_a_failed_field_is_stored_carrying_its_last_good_value(
+        self, onchain_repository, seeded, monkeypatch
+    ):
+        from src.service.onchain import diff as diff_module
+
+        registry, project_id, chain_id = seeded
+
+        _install(monkeypatch)
+        run_id = onchain_repository.start_run(builder.JOB_BUILD)
+        await builder.build_project(
+            _context(onchain_repository, registry, project_id, chain_id),
+            run_id, project_entity_id=project_id,
+        )
+        onchain_repository.commit()
+
+        # Night two: the same section, one field now unreadable.
+        _install(monkeypatch, **{SECTION_CONTRACT_SAFETY: self._partial(
+            SECTION_CONTRACT_SAFETY,
+            {'owner': diff_module.failed_field('BlockscoutApiError')},
+        )})
+        run_id = onchain_repository.start_run(builder.JOB_BUILD)
+        result = await builder.build_project(
+            _context(onchain_repository, registry, project_id, chain_id),
+            run_id, project_entity_id=project_id,
+        )
+        onchain_repository.commit()
+
+        stored = onchain_repository.get_latest_section(project_id, SECTION_CONTRACT_SAFETY)
+        assert stored['status'] == 'partial'
+        assert stored['fields_json']['owner']['baseline'] == 'absent'
+        # And the build row names the field-level unit, not just the section.
+        build = onchain_repository.get_build(result.build_id)
+        assert {unit['unit'] for unit in build['failed_units_json']} == {
+            'touch-grass/contract_safety/owner'
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_change_across_an_outage_is_a_change_and_not_an_appearance(
+        self, onchain_repository, seeded, monkeypatch
+    ):
+        """The defect end to end, through the store: True on night one, the read
+        failing on night two, False on night three. Without the carried baseline
+        night three reports `owner` as ADDED and the frozen table flags it
+        `structural_appeared` -- an outage manufacturing a structural event."""
+        from src.service.onchain import diff as diff_module
+
+        registry, project_id, chain_id = seeded
+        nights = [
+            _ok(SECTION_CONTRACT_SAFETY, {'owner': 'absent'}),
+            self._partial(
+                SECTION_CONTRACT_SAFETY,
+                {'owner': diff_module.failed_field('BlockscoutApiError')},
+            ),
+            _ok(SECTION_CONTRACT_SAFETY, {'owner': '0xdeadbeef'}),
+        ]
+        for collector in nights:
+            _install(monkeypatch, **{SECTION_CONTRACT_SAFETY: collector})
+            run_id = onchain_repository.start_run(builder.JOB_BUILD)
+            result = await builder.build_project(
+                _context(onchain_repository, registry, project_id, chain_id),
+                run_id, project_entity_id=project_id,
+            )
+            onchain_repository.commit()
+
+        third = next(
+            s for s in result.sections if s['name'] == SECTION_CONTRACT_SAFETY
+        )
+        assert third['changes']['added'] == {}
+        assert third['changes']['changed'] == [
+            {'field': 'owner', 'old': 'absent', 'new': '0xdeadbeef'}
+        ]
+
+
 class TestProjectSelection:
     def test_adding_a_project_is_a_registry_edit_and_not_a_code_change(
         self, onchain_registry_payload

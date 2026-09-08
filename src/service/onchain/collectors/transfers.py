@@ -85,10 +85,12 @@ async def advance_transfers(
 ) -> FetchOutcome:
     """Fetch `Transfer` logs from the cursor (or creation) to the pinned block.
 
-    The cursor is advanced only after the rows are inserted, and the caller
-    commits: a crash between the insert and the commit re-fetches a window,
-    which insert-or-ignore makes free, whereas the reverse ordering would skip
-    one silently.
+    Each chunk inserts its rows and advances the cursor inside ONE transaction,
+    which this function then commits itself -- the caller does not, despite what
+    this said until 2026-09-08. The commit boundary is what makes the ordering
+    safe: a crash anywhere before it re-fetches the whole chunk, which
+    insert-or-ignore makes free, and no cursor can name blocks whose rows are
+    not committed beside it.
     """
     cursor = repository.get_fetch_cursor(token_entity_id, STREAM_TRANSFER)
     from_block = creation_block if cursor is None else cursor + 1

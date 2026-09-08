@@ -251,7 +251,16 @@ class TestIdentityResolvesOffline:
         run_id = onchain_repository.start_run('onchain.build')
         with run_context(run_id, 'onchain.build'):
             section = await identity.collect(context, previous)
-        assert isinstance(section.fields['creation_block'], int)
+        # Every immutable, not only the creation block. The filter is one
+        # comprehension over `IMMUTABLE_FIELDS`, but the two resolvers consume
+        # `carried` differently -- v4 short-circuits only when ALL FIVE key
+        # fields are carried, v3 reads only the two creation fields -- so a
+        # regression that let a single field through would leave a
+        # creation-block-only assertion green while that field stayed
+        # permanently unread. `unavailable` is a string; nothing here may be one.
+        for name in identity.IMMUTABLE_FIELDS:
+            if name in section.fields:
+                assert section.fields[name] != 'unavailable', name
 
     @pytest.mark.asyncio
     async def test_each_seed_pool_reference_resolves_from_committed_bodies(
@@ -269,7 +278,9 @@ class TestIdentityResolvesOffline:
         fields = section.fields
         assert fields['version'] in ('v3', 'v4')
         assert fields['token_address'].startswith('0x')
-        assert fields['token_symbol']
+        # Not bare truthiness: a failed symbol read stores the string
+        # 'unavailable', which is truthy and passed this line for free.
+        assert fields['token_symbol'] not in ('', 'unavailable')
         assert isinstance(fields['decimals'], int)
         if fields['version'] == 'v4':
             assert fields['pool_id'] == project.pool_ref

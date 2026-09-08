@@ -383,9 +383,12 @@ class TestAlertBoundary:
             format_alert(6, 'onchain.build', units)
         )
         assert market_data_type is MarketDataType.CRYPTO
-        # The escaping is not a no-op on this payload, so the assertion above
-        # would still hold if `escape_markdown` were dropped from the product --
-        # pin the observable consequence too.
+        # The equality above already fails if `escape_markdown` is dropped, since
+        # the expected value is computed WITH it -- an earlier version of this
+        # comment claimed the opposite and was wrong (sub-stage A review round 3
+        # ran the mutation: the red lands on the equality). This line is kept
+        # because it names the escape that has to survive, which the equality
+        # does not; it is redundancy, not the guard.
         assert 'zzz/onchain\\_health' in message
 
     def test_a_failed_alert_send_is_logged_with_its_exception_class(

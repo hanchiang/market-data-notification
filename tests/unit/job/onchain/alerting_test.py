@@ -114,6 +114,93 @@ class TestOneMessagePerRun:
         assert sender.calls == []
 
 
+class TestConsecutiveRuns:
+    """A11's second half, in its own words: "a collector that fails on three
+    consecutive runs" sends "three messages, one per run and not one per failed
+    unit". The per-run half was pinned; the ACROSS-runs half was not, and the two
+    fail differently. A cache that alerted once per unit-and-error-class, or a
+    module-level "already alerted" flag, satisfies every single-run test in this
+    file and silently swallows nights two and three -- which is the failure mode
+    that matters, because a collector broken for one night is noise and one
+    broken for three is the signal.
+    """
+
+    @pytest.mark.asyncio
+    async def test_three_consecutive_failing_runs_send_three_messages(
+        self, onchain_repository, demo_url, sender, monkeypatch
+    ):
+        units = [failed_unit('zzz/onchain_health', 'EvmRpcError')]
+
+        async def failing_run(*args, **kwargs):
+            result = builder.RunResult(run_id=kwargs.get('run_id', 1), outcome='partial')
+            result.failed_units = list(units)
+            return result
+
+        monkeypatch.setattr(build_job, 'run_build', failing_run)
+        for _ in range(3):
+            assert await build_job.main(test_mode=True) == 0
+
+        assert len(sender.calls) == 3
+        # Each names its OWN run, so three identical messages -- which would also
+        # be "three" -- do not pass.
+        run_ids = {
+            call['message'].replace('\\', '').split(' run ')[1].split()[0]
+            for call in sender.calls
+        }
+        assert len(run_ids) == 3
+
+    @pytest.mark.asyncio
+    async def test_a_run_that_recovers_between_two_failures_sends_only_its_own(
+        self, onchain_repository, demo_url, sender, monkeypatch
+    ):
+        """The complement: alerting must be per-run state, not sticky. A latch
+        set on the first failure would keep alerting through the clean night."""
+        outcomes = iter(['partial', 'ok', 'partial'])
+
+        async def run(*args, **kwargs):
+            outcome = next(outcomes)
+            result = builder.RunResult(run_id=kwargs.get('run_id', 1), outcome=outcome)
+            if outcome != 'ok':
+                result.failed_units = [failed_unit('zzz/onchain_health', 'EvmRpcError')]
+            return result
+
+        monkeypatch.setattr(build_job, 'run_build', run)
+        for _ in range(3):
+            await build_job.main(test_mode=True)
+
+        assert len(sender.calls) == 2
+
+
+def test_the_alert_has_exactly_two_call_sites_in_the_product():
+    """The cardinality tests above stub `run_build`, so they see only the send at
+    `main()`'s end. A second `send_run_alert` added inside the build loop -- per
+    project, or per failed section -- would be invisible to every one of them
+    while turning a six-failure night into seven messages.
+
+    Enumerating the call sites is the check that does not depend on which code
+    path a test happens to drive. If a third site is ever legitimate, this list
+    is where the decision gets recorded.
+    """
+    import collections
+    import pathlib
+
+    src = pathlib.Path(build_job.__file__).resolve().parents[3] / 'src'
+    sites = collections.Counter(
+        str(path.relative_to(src))
+        for path in src.rglob('*.py')
+        for line in path.read_text().splitlines()
+        if 'send_run_alert(' in line
+        and not line.lstrip().startswith(('#', 'def ', 'async def ', 'from ', 'import '))
+    )
+    # Counted per file, not per line: a line number would redden on any edit
+    # above it, which trains the next reader to update the list without reading
+    # it -- the opposite of what a tripwire is for.
+    assert dict(sites) == {
+        'job/onchain/build.py': 1,
+        'job/onchain/watch.py': 1,
+    }, dict(sites)
+
+
 class TestRuntimeModeReachesTheSender:
     """The carried sub-stage A requirement. `runtime_mode` defaults to None,
     which resolves to the LIVE crypto admin chat, and forgetting it is silent:

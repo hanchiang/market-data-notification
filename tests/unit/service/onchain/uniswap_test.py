@@ -357,3 +357,81 @@ class TestCustodyShares:
         shares = uniswap.custody_shares([], {})
         assert shares['owner_count'] == 0
         assert shares['largest_owner_share'] is None
+
+
+class TestV3RawLogDecoding:
+    """`normalise_v3_events` is called by no other test in this suite: every v3
+    case above hands it `PositionRow`s that were built by hand. So the decoding
+    itself -- which is where the 2026-09-08 tick defect lived -- is unexercised
+    on the v3 path, and two things about these two events are easy to get wrong:
+
+      * `Mint` has an UNINDEXED `sender` before its indexed `owner`, so the data
+        words are (sender, amount, amount0, amount1) while `Burn`'s are
+        (amount, amount0, amount1). Reading `Mint`'s amount at `Burn`'s offset
+        returns the sender address as a liquidity figure;
+      * both tick bounds are indexed `int24`s, so they arrive as topics. A real
+        pool's range is very often negative, and a tick read unsigned comes back
+        as ~10^76 -- the exact shape that shipped in the library decoder.
+    """
+
+    @staticmethod
+    def _mint(*, owner, lower, upper, amount, block=10, index=0):
+        return _log(
+            [uniswap.V3_MINT.topic0,
+             '0x' + '0' * 24 + owner[2:],
+             '0x' + format(lower & ((1 << 256) - 1), '064x'),
+             '0x' + format(upper & ((1 << 256) - 1), '064x')],
+            data=('0x' + '0' * 24 + MANAGER[2:]
+                  + f'{amount:064x}' + f'{1:064x}' + f'{2:064x}'),
+            block=block, index=index,
+        )
+
+    @staticmethod
+    def _burn(*, owner, lower, upper, amount, block=20, index=0):
+        return _log(
+            [uniswap.V3_BURN.topic0,
+             '0x' + '0' * 24 + owner[2:],
+             '0x' + format(lower & ((1 << 256) - 1), '064x'),
+             '0x' + format(upper & ((1 << 256) - 1), '064x')],
+            data='0x' + f'{amount:064x}' + f'{1:064x}' + f'{2:064x}',
+            block=block, index=index,
+        )
+
+    def test_a_mint_decodes_its_amount_past_the_unindexed_sender(self):
+        rows = uniswap.normalise_v3_events(
+            [self._mint(owner=MANAGER, lower=-60, upper=60, amount=12345)], []
+        )
+        assert [row.liquidity_delta for row in rows] == [12345]
+        assert rows[0].owner == MANAGER.lower()
+        assert rows[0].kind == 'mint'
+
+    def test_a_burn_becomes_a_negative_delta(self):
+        rows = uniswap.normalise_v3_events(
+            [], [self._burn(owner=MANAGER, lower=-60, upper=60, amount=500)]
+        )
+        assert [row.liquidity_delta for row in rows] == [-500]
+        assert rows[0].kind == 'burn'
+
+    @pytest.mark.parametrize('lower,upper', [(-887220, -100), (-60, 60), (100, 887220)])
+    def test_negative_tick_bounds_survive_the_topic_decode(self, lower, upper):
+        """Both bounds below zero is the common case for a token priced under its
+        pair. Read unsigned, each becomes ~10^76, which nets nothing against
+        anything and stores as an out-of-range integer."""
+        rows = uniswap.normalise_v3_events(
+            [self._mint(owner=MANAGER, lower=lower, upper=upper, amount=7)], []
+        )
+        assert (rows[0].tick_lower, rows[0].tick_upper) == (lower, upper)
+
+    def test_a_deposit_and_its_withdrawal_over_the_same_range_net_from_raw_logs(self):
+        """The end-to-end v3 shape from logs rather than from hand-built rows:
+        both events name the manager, the withdrawal has no ERC-721 transfer, and
+        the manager's own token-id events are what ties them together."""
+        mint = self._mint(owner=MANAGER, lower=-887220, upper=-100, amount=1000, block=10)
+        burn = self._burn(owner=MANAGER, lower=-887220, upper=-100, amount=1000, block=20)
+        rows = uniswap.normalise_v3_events([mint], [burn])
+        attributed = uniswap.attribute_owners(
+            rows, [], {mint['transactionHash']: [(1, 42)],
+                       burn['transactionHash']: [(1, 42)]}
+        )
+        assert [row.nft_token_id for row in attributed] == [42, 42]
+        assert uniswap.net_positions(attributed) == []

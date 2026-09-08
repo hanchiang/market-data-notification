@@ -192,3 +192,37 @@ class TestCreationSearchBounds:
             fake, None, head=40_000_000, head_timestamp=1_800_000_000,
             constants=CONSTANTS,
         ) == (0, 40_000_000, 0)
+
+
+class TestTheJobActuallyPassesBothClients:
+    """`pin_block_and_window`'s `log_client` is OPTIONAL and defaults to None,
+    and with it absent the function is exactly the pre-fix behaviour: pin on the
+    state endpoint and read logs somewhere else. So dropping the third argument
+    at the one call site restores the defect in full, and every test above --
+    which calls the function directly with both clients -- stays green.
+
+    The call site is what the tests above cannot reach; an AST read of it is
+    cheaper than standing up two role clients and a registry to drive `run_build`.
+    """
+
+    def test_the_build_job_pins_with_the_log_client_as_well_as_the_state_client(self):
+        import ast
+        import pathlib
+
+        from src.job.onchain import build as build_job
+
+        tree = ast.parse(pathlib.Path(build_job.__file__).read_text())
+        calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'pin_block_and_window'
+        ]
+        assert len(calls) == 1, 'expected exactly one pin site in the build job'
+        passed = [
+            arg.id for arg in calls[0].args if isinstance(arg, ast.Name)
+        ] + [kw.arg for kw in calls[0].keywords]
+        assert 'state_client' in passed
+        assert 'log_client' in passed or 'log_client' in [
+            kw.arg for kw in calls[0].keywords
+        ]

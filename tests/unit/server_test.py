@@ -74,6 +74,66 @@ async def test_auth_check_does_not_use_localhost_host_bypass_in_prod(monkeypatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('method', 'path'),
+    [
+        # Each public route under the OTHER route's method. `PUBLIC_ROUTES` is
+        # keyed on the pair, and every allow-test above sends the matching pair,
+        # so degrading the membership test to the path alone leaves them all
+        # green while the tradingview webhook answers an unauthenticated GET.
+        ('POST', '/healthz'),
+        ('GET', '/tradingview/daily-stocks'),
+        ('DELETE', '/healthz'),
+    ],
+)
+async def test_auth_check_rejects_a_public_path_under_another_method(
+    monkeypatch,
+    method,
+    path,
+):
+    call_next = AsyncMock()
+    request = DummyRequest(method, f'https://example.com{path}')
+
+    monkeypatch.setattr(server.config, 'get_env', lambda: 'prod')
+    monkeypatch.setattr(server.config, 'get_api_auth_token', lambda: 'expected-token')
+
+    response = await server.auth_check(request, call_next)
+
+    assert response.status_code == 404
+    call_next.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'path',
+    [
+        # A path EXTENDING a public one, which is what a prefix comparison would
+        # wave through. The substring test below uses `/internal/healthz/details`,
+        # where the public route is in the middle -- that catches an `in`-the-path
+        # degradation but not a `startswith` one, and these two are different
+        # mistakes to make.
+        '/healthz/details',
+        '/healthzz',
+        '/tradingview/daily-stocks/all',
+    ],
+)
+async def test_auth_check_rejects_a_path_that_only_starts_with_a_public_route(
+    monkeypatch,
+    path,
+):
+    call_next = AsyncMock()
+    request = DummyRequest('GET', f'https://example.com{path}')
+
+    monkeypatch.setattr(server.config, 'get_env', lambda: 'prod')
+    monkeypatch.setattr(server.config, 'get_api_auth_token', lambda: 'expected-token')
+
+    response = await server.auth_check(request, call_next)
+
+    assert response.status_code == 404
+    call_next.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_auth_check_rejects_substring_match_on_public_route(monkeypatch):
     call_next = AsyncMock()
     request = DummyRequest('GET', 'https://example.com/internal/healthz/details')

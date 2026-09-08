@@ -249,3 +249,94 @@ class TestFetchCursor:
         onchain_repository.set_fetch_cursor(token_id, transfers.STREAM_TRANSFER, 100)
         onchain_repository.commit()
         assert onchain_repository.get_fetch_cursor(token_id, transfers.STREAM_TRANSFER) == 9000
+
+
+class TestMultiChunkBanking:
+    """The three cursor tests above all walk a range narrower than
+    `RESUME_CHUNK_BLOCKS`, so the chunk loop runs exactly once in every one of
+    them and `fake_fetch` never raises. Banking across chunks, and what the
+    cursor holds when a window fails partway, are therefore unreachable as
+    written -- and banking-then-failing is the whole reason the loop commits
+    inside itself rather than once at the end.
+    """
+
+    @staticmethod
+    def _walk(monkeypatch, behaviour):
+        import src.service.onchain.collectors.transfers as module
+
+        asked = []
+
+        async def fake_fetch(client, query, from_block, to_block, **kwargs):
+            asked.append((from_block, to_block))
+            return behaviour(len(asked), from_block, to_block)
+
+        monkeypatch.setattr(module, 'fetch_window', fake_fetch)
+        return asked
+
+    @pytest.mark.asyncio
+    async def test_a_long_history_is_banked_one_chunk_at_a_time(
+        self, onchain_repository, token_id, monkeypatch
+    ):
+        chunk = transfers.RESUME_CHUNK_BLOCKS
+        asked = self._walk(monkeypatch, lambda n, lo, hi: ([], []))
+
+        await transfers.advance_transfers(
+            onchain_repository, None, token_entity_id=token_id,
+            token_address='0x' + 'aa' * 20,
+            creation_block=0, to_block=(2 * chunk) + 500,
+        )
+
+        assert asked == [
+            (0, chunk - 1),
+            (chunk, (2 * chunk) - 1),
+            (2 * chunk, (2 * chunk) + 500),
+        ]
+        # No gap and no overlap between consecutive chunks: a gap loses transfers
+        # that the cursor then declares fetched.
+        for (_, previous_end), (next_start, _) in zip(asked, asked[1:]):
+            assert next_start == previous_end + 1
+
+    @pytest.mark.asyncio
+    async def test_a_window_that_fails_leaves_the_cursor_at_the_last_banked_chunk(
+        self, onchain_repository, token_id, monkeypatch
+    ):
+        """The cursor must never claim blocks the walk did not actually read.
+        Advancing it to `to_block` before the walk finished would mark an
+        unfetched range as done, and nothing re-reads it -- the holder table
+        would then be derived from a history with a hole in it, permanently.
+        """
+        chunk = transfers.RESUME_CHUNK_BLOCKS
+
+        def behaviour(n, lo, hi):
+            if n == 2:
+                raise RuntimeError('window failed')
+            return [], []
+
+        self._walk(monkeypatch, behaviour)
+
+        with pytest.raises(RuntimeError):
+            await transfers.advance_transfers(
+                onchain_repository, None, token_entity_id=token_id,
+                token_address='0x' + 'aa' * 20,
+                creation_block=0, to_block=(2 * chunk) + 500,
+            )
+
+        cursor = onchain_repository.get_fetch_cursor(token_id, transfers.STREAM_TRANSFER)
+        assert cursor == chunk - 1
+
+    @pytest.mark.asyncio
+    async def test_the_next_run_resumes_from_where_the_failed_walk_stopped(
+        self, onchain_repository, token_id, monkeypatch
+    ):
+        chunk = transfers.RESUME_CHUNK_BLOCKS
+        onchain_repository.set_fetch_cursor(token_id, transfers.STREAM_TRANSFER, chunk - 1)
+        onchain_repository.commit()
+        asked = self._walk(monkeypatch, lambda n, lo, hi: ([], []))
+
+        await transfers.advance_transfers(
+            onchain_repository, None, token_entity_id=token_id,
+            token_address='0x' + 'aa' * 20,
+            creation_block=0, to_block=(2 * chunk) + 500,
+        )
+
+        assert asked[0][0] == chunk

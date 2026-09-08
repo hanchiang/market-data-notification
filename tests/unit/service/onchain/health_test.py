@@ -136,7 +136,332 @@ class TestOwnerResolution:
         )
         assert list(owners) == [2]
         assert owners[2] == '0x' + 'bb' * 20
+        # One read per token, not one read that stopped at the bad one.
+        assert len(calls_made) == 2
+
+    @pytest.mark.asyncio
+    async def test_both_the_batch_and_the_fallback_ask_for_a_missing_value(
+        self, monkeypatch
+    ):
+        """`expect_value=False` is what lets an empty `0x` come back as a value
+        rather than as an error. The fakes above take it as a keyword default, so
+        a regression to `expect_value=True` -- which the collector's own docstring
+        says is wrong -- changes nothing they assert. Read it off the call."""
+        from market_data_library.core.onchain.evm.errors import EvmRpcError
+
+        flags = []
+
+        class Client:
+            endpoint = type('E', (), {'kind': 'alchemy'})()
+
+            async def batch_call(self, calls, block, *, expect_value=True):
+                flags.append(('batch', expect_value))
+                raise EvmRpcError('execution reverted', endpoint_kind='alchemy')
+
+            async def call(self, to, data, block, *, expect_value=True):
+                flags.append(('single', expect_value))
+                return ('0x' + '0' * 24 + 'bb' * 20, object())
+
+        class Context:
+            block = 100
+            state_client = Client()
+            project = type('P', (), {'key': 'x'})()
+
+            def record_jsonrpc(self, raw):
+                pass
+
+        await health._resolve_owners(Context(), '0xmanager', [self._position(1)])
+        assert flags == [('batch', False), ('single', False)]
+
+    @pytest.mark.asyncio
+    async def test_an_unresolved_token_keeps_its_provisional_holder(self):
+        """The half `_resolve_owners` cannot show on its own: a token whose read
+        failed must be absent from the mapping, so `apply_resolved_owners` leaves
+        the log-derived holder in place rather than blanking it."""
+        from market_data_library.core.onchain.evm.errors import EvmRpcError
+        from src.service.onchain.collectors import uniswap
+
+        class Client:
+            endpoint = type('E', (), {'kind': 'alchemy'})()
+
+            async def batch_call(self, calls, block, *, expect_value=True):
+                raise EvmRpcError('reverted', endpoint_kind='alchemy')
+
+            async def call(self, to, data, block, *, expect_value=True):
+                raise EvmRpcError('reverted', endpoint_kind='alchemy')
+
+        class Context:
+            block = 100
+            state_client = Client()
+            project = type('P', (), {'key': 'x'})()
+
+            def record_jsonrpc(self, raw):
+                pass
+
+        positions = [self._position(1, owner='0xprovisional')]
+        owners = await health._resolve_owners(Context(), '0xmanager', positions)
+        assert owners == {}
+        assert uniswap.apply_resolved_owners(positions, owners)[0].owner == '0xprovisional'
 
     @pytest.mark.asyncio
     async def test_no_open_position_issues_no_read(self):
         assert await health._resolve_owners(object(), '0xmanager', []) == {}
+
+
+# --------------------------------------------------------------------------
+# The scan bound and the conservation oracle.
+#
+# Two things escaped a green suite here on 2026-09-08 and neither had a test:
+#
+#   * `_custody_v3`/`_custody_v4` walked the chain from block 0 and did not
+#     terminate. The trigger was identity carrying `unavailable` forward, which
+#     `_creation_block` maps to 0 -- but the class of defect is wider than that
+#     one trigger, and nothing anywhere asserts what block a custody scan starts
+#     at. `TestCustodyScanBounds` pins it, so a start block that regresses to 0,
+#     or a resume that ignores the stored cursor, goes red.
+#   * The custody netting counted deposits that had already been withdrawn. The
+#     strongest available oracle for the whole subsystem -- that a pool with one
+#     open position nets to exactly the pool's own `getLiquidity` -- was written
+#     down as prose in `uniswap_test.TestWithdrawalNetting`'s docstring and
+#     executed by nothing. `TestCustodyConservation` executes it, through the
+#     real store, which is also the only test that drives the collector's whole
+#     fetch -> normalise -> attribute -> persist -> re-read -> net path.
+# --------------------------------------------------------------------------
+
+CREATION_BLOCK = 53_000_000
+MANAGER = '0x' + '33' * 20
+POOL_MANAGER = '0x' + '44' * 20
+STATE_VIEW = '0x' + '55' * 20
+V3_MANAGER = '0x' + '66' * 20
+POOL_ID = '0x' + 'ab' * 32
+POOL_ADDRESS = '0x' + '77' * 20
+ALICE = '0x' + '11' * 20
+
+
+def _v4_modify_log(*, delta, token_id, sender, block, index=0):
+    return {
+        'topics': [
+            health.uniswap.V4_MODIFY_LIQUIDITY.topic0,
+            POOL_ID,
+            '0x' + '0' * 24 + sender[2:],
+        ],
+        'data': '0x' + (
+            f'{-60 & ((1 << 256) - 1):064x}'
+            f'{60:064x}'
+            f'{delta & ((1 << 256) - 1):064x}'
+            f'{token_id:064x}'
+        ),
+        'blockNumber': hex(block),
+        'logIndex': hex(index),
+        'transactionHash': '0x' + f'{block * 100 + index:064x}',
+    }
+
+
+def _erc721_mint_log(*, token_id, to, block, index):
+    return {
+        'topics': [
+            health.uniswap.ERC721_TRANSFER.topic0,
+            '0x' + '0' * 64,
+            '0x' + '0' * 24 + to[2:],
+            '0x' + f'{token_id:064x}',
+        ],
+        'data': '0x',
+        'blockNumber': hex(block),
+        'logIndex': hex(index),
+        'transactionHash': '0x' + f'{block * 100 + 0:064x}',
+    }
+
+
+class _Repo:
+    """Only the four repository calls custody makes, with the cursor in memory."""
+
+    def __init__(self, cursor=None):
+        self.cursor = cursor
+        self.set_cursors = []
+        self.stored = []
+
+    def get_fetch_cursor(self, entity_id, stream):
+        return self.cursor
+
+    def set_fetch_cursor(self, entity_id, stream, block):
+        self.set_cursors.append((stream, block))
+
+    def insert_position_events(self, pool_id, rows):
+        self.stored.extend(rows)
+        return len(rows)
+
+    def get_position_events(self, pool_id):
+        return list(self.stored)
+
+
+class _CustodyContext:
+    """A build context with the chain reads faked and the log fetch spied on."""
+
+    block = 57_000_000
+
+    def __init__(self, *, version, cursor=None, pool_liquidity=1000, owner=ALICE):
+        self.identity = {'pool_id': POOL_ID, 'pool_address': POOL_ADDRESS}
+        self.repository = _Repo(cursor)
+        self.log_client = object()
+        self.state_client = self._StateClient(pool_liquidity, owner)
+        self.project = type('P', (), {'key': 'touch-grass', 'pool_ref': POOL_ID})()
+        self.chain = type('C', (), {
+            'uniswap': {
+                'v4_pool_manager': POOL_MANAGER,
+                'v4_position_manager': MANAGER,
+                'v4_state_view': STATE_VIEW,
+                'v3_position_manager': V3_MANAGER,
+            },
+            'lockers': [],
+        })()
+        self.charged_logs = 0
+
+    class _StateClient:
+        endpoint = type('E', (), {'kind': 'alchemy'})()
+
+        def __init__(self, pool_liquidity, owner):
+            self.pool_liquidity = pool_liquidity
+            self.owner = owner
+
+        async def call(self, to, data, block, *, expect_value=True):
+            return ('0x' + f'{self.pool_liquidity:064x}', object())
+
+        async def batch_call(self, calls, block, *, expect_value=True):
+            return [
+                ('0x' + '0' * 24 + self.owner[2:], object()) for _ in calls
+            ]
+
+    def charge_logs(self, requests):
+        self.charged_logs += requests
+
+    def charge(self, kind, count, methods=None):
+        pass
+
+    def record_jsonrpc(self, raw):
+        pass
+
+
+@pytest.fixture
+def scan(monkeypatch):
+    """Records every log window the collector asks for, keyed by query name."""
+    asked = []
+    served = {}
+
+    async def fake_fetch_window(client, query, from_block, to_block, **kwargs):
+        asked.append((query.name, from_block, to_block))
+        return list(served.get(query.name, [])), []
+
+    monkeypatch.setattr(
+        'src.service.project_monitor.logs.fetch_window', fake_fetch_window
+    )
+    return type('Scan', (), {'asked': asked, 'served': served})()
+
+
+class TestCustodyScanBounds:
+    @pytest.mark.asyncio
+    async def test_a_first_v4_scan_starts_at_the_creation_block_not_at_genesis(
+        self, scan
+    ):
+        context = _CustodyContext(version='v4')
+        await health._custody_v4(context, pool_entity_id=1, creation_block=CREATION_BLOCK)
+
+        pool_scan = next(w for w in scan.asked if w[0].startswith('v4_modify'))
+        assert pool_scan[1] == CREATION_BLOCK
+        assert pool_scan[2] == context.block
+
+    @pytest.mark.asyncio
+    async def test_a_first_v3_scan_starts_at_the_creation_block_not_at_genesis(
+        self, scan
+    ):
+        context = _CustodyContext(version='v3')
+        await health._custody_v3(context, pool_entity_id=1, creation_block=CREATION_BLOCK)
+
+        for name in ('v3_mint', 'v3_burn'):
+            window = next(w for w in scan.asked if w[0].startswith(name))
+            assert window[1] == CREATION_BLOCK, name
+            assert window[2] == context.block, name
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('version', ['v3', 'v4'])
+    async def test_a_resumed_scan_starts_one_past_the_stored_cursor(
+        self, scan, version
+    ):
+        """The cursor is what keeps a nightly build from re-walking the whole
+        history. Ignoring it is not a wrong answer -- it is the unbounded walk
+        again, arriving by a different route."""
+        context = _CustodyContext(version=version, cursor=56_000_000)
+        collect = health._custody_v4 if version == 'v4' else health._custody_v3
+        await collect(context, pool_entity_id=1, creation_block=CREATION_BLOCK)
+
+        pool_scans = [
+            w for w in scan.asked if w[0].startswith(f'{version}_modify')
+            or w[0].startswith(f'{version}_mint')
+        ]
+        assert pool_scans, scan.asked
+        for window in pool_scans:
+            assert window[1] == 56_000_001
+
+    @pytest.mark.asyncio
+    async def test_the_chain_wide_manager_is_never_scanned_over_the_whole_range(
+        self, scan
+    ):
+        """The position manager carries every project's events. Its windows must
+        be the pool's own event blocks, never the pool scan's full span -- that
+        is the walk that did not finish on 2026-09-08."""
+        context = _CustodyContext(version='v4')
+        scan.served['v4_modify:touch-grass'] = [
+            _v4_modify_log(delta=1000, token_id=7, sender=MANAGER, block=53_100_000)
+        ]
+        await health._custody_v4(context, pool_entity_id=1, creation_block=CREATION_BLOCK)
+
+        nft_windows = [w for w in scan.asked if w[0].startswith('v4_nft')]
+        assert nft_windows
+        for _, low, high in nft_windows:
+            assert low >= 53_100_000
+            assert high - low <= health.NFT_RANGE_GAP_BLOCKS
+
+
+class TestCustodyConservation:
+    """The oracle: for a pool whose one open position spans the current tick, the
+    netted position total must equal the pool's own reported liquidity. The
+    un-netted sum does not, which is what makes this the check the shipped defect
+    would have failed -- see `uniswap_test.TestWithdrawalNetting` for the real
+    figures it is drawn from.
+    """
+
+    LIQUIDITY = 29277002188455995842192
+    WITHDRAWN = 2409283290909037820703
+
+    @pytest.mark.asyncio
+    async def test_a_deposit_and_its_withdrawal_net_to_the_pools_own_liquidity(
+        self, scan
+    ):
+        context = _CustodyContext(
+            version='v4', pool_liquidity=self.LIQUIDITY, owner=ALICE
+        )
+        # One position: deposited in two parts, partly withdrawn. The withdrawal
+        # is emitted by the manager with no ERC-721 transfer of its own, which is
+        # the shape that used to land under a different owner and never net.
+        scan.served['v4_modify:touch-grass'] = [
+            _v4_modify_log(
+                delta=self.LIQUIDITY + self.WITHDRAWN, token_id=7,
+                sender=MANAGER, block=53_100_000,
+            ),
+            _v4_modify_log(
+                delta=-self.WITHDRAWN, token_id=7,
+                sender=MANAGER, block=53_200_000,
+            ),
+        ]
+        scan.served['v4_nft:touch-grass'] = [
+            _erc721_mint_log(token_id=7, to=ALICE, block=53_100_000, index=1)
+        ]
+
+        custody = await health._custody_v4(
+            context, pool_entity_id=1, creation_block=CREATION_BLOCK
+        )
+
+        assert custody['open_positions'] == 1
+        assert custody['position_liquidity_total'] == str(self.LIQUIDITY)
+        assert custody['position_liquidity_total'] == custody['pool_liquidity']
+        assert custody['largest_owner'] == ALICE.lower()
+        assert custody['largest_owner_share'] == 1.0

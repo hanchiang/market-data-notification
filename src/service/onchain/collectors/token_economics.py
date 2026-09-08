@@ -159,21 +159,7 @@ async def _v4_pool_held_share(context: BuildContext, total_supply: int) -> Any:
         return UNAVAILABLE
 
     stored = context.repository.get_position_events(pool_entity_id)
-    rows = [
-        uniswap.PositionRow(
-            block=int(row['block']),
-            tx_hash=row['tx_hash'],
-            log_index=int(row['log_index']),
-            kind=row['kind'],
-            owner=row['owner'],
-            nft_token_id=None if row['nft_token_id'] is None else int(row['nft_token_id']),
-            tick_lower=int(row['tick_lower']),
-            tick_upper=int(row['tick_upper']),
-            liquidity_delta=int(row['liquidity_delta']),
-            salt=row['salt'],
-        )
-        for row in stored
-    ]
+    rows = uniswap.rows_from_store(stored)
     positions = uniswap.net_positions(rows)
     if not positions:
         return {'method': 'v4_tick_math', 'amount': '0', 'share': 0.0, 'positions': 0}

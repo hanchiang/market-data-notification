@@ -23,7 +23,7 @@ MANAGER = '0x' + '33' * 20
 def _log(topics, data='0x', block=100, index=0, tx='0x' + 'ee' * 32):
     return {
         'topics': topics,
-        'data': data,
+        'data': data if data.startswith('0x') else '0x' + data,
         'blockNumber': hex(block),
         'logIndex': hex(index),
         'transactionHash': tx,
@@ -146,6 +146,116 @@ class TestNetting:
         assert positions == {(ALICE, -100): 800, (BOB, -100): 200, (ALICE, -200): 100}
 
 
+class TestWithdrawalNetting:
+    """The 2026-09-08 custody defect: a withdrawal never netted against its own
+    deposit, so every custody share was over liquidity already out of the pool.
+
+    Verified against pool entity 16 in `onchain_demo`: eleven burns, all under the
+    v4 position manager, netting against mints under twelve different holders. The
+    netted total (29277002188455995842192) is exactly the pool's own
+    `getLiquidity`; the un-netted mint sum was 31686285479365033662895.
+    """
+
+    def _v4_log(self, *, delta, token_id, sender, block, index, tick_lower=-60, tick_upper=60):
+        return _log(
+            [uniswap.V4_MODIFY_LIQUIDITY.topic0, '0x' + 'ab' * 32,
+             '0x' + '0' * 24 + sender[2:]],
+            block=block, index=index, tx='0x' + f'{block:064x}',
+            data=(f'{tick_lower & ((1 << 256) - 1):064x}'
+                  f'{tick_upper & ((1 << 256) - 1):064x}'
+                  f'{delta & ((1 << 256) - 1):064x}'
+                  f'{token_id:064x}'),
+        )
+
+    def test_a_v4_withdrawal_nets_against_its_deposit_under_a_different_owner(self):
+        logs = [
+            self._v4_log(delta=1000, token_id=7, sender=MANAGER, block=10, index=0),
+            self._v4_log(delta=-1000, token_id=7, sender=MANAGER, block=20, index=0),
+        ]
+        rows = uniswap.normalise_v4_events(logs, MANAGER)
+        assert [row.nft_token_id for row in rows] == [7, 7]
+        # The deposit is rewritten to the holder; the withdrawal has no ERC-721
+        # transfer of its own and keeps the manager. Owner-keyed netting fails here.
+        nft = [
+            _log([uniswap.ERC721_TRANSFER.topic0, '0x' + '0' * 64,
+                  '0x' + '0' * 24 + ALICE[2:], '0x' + f'{7:064x}'],
+                 block=10, index=1, tx='0x' + f'{10:064x}')
+        ]
+        attributed = uniswap.attribute_owners(rows, nft)
+        assert uniswap.net_positions(attributed) == []
+
+    def test_the_salt_is_only_read_as_a_token_id_for_the_manager(self):
+        """A direct provider's salt is arbitrary data of their choosing."""
+        logs = [self._v4_log(delta=1000, token_id=7, sender=ALICE, block=10, index=0)]
+        assert uniswap.normalise_v4_events(logs, MANAGER)[0].nft_token_id is None
+        assert uniswap.normalise_v4_events(logs, ALICE)[0].nft_token_id == 7
+
+    def test_a_v3_withdrawal_nets_through_the_managers_own_token_id_event(self):
+        deposit_tx, withdraw_tx = '0x' + 'a1' * 32, '0x' + 'b2' * 32
+        rows = [
+            uniswap.PositionRow(
+                block=10, tx_hash=deposit_tx, log_index=1, kind='mint', owner=MANAGER,
+                nft_token_id=None, tick_lower=-60, tick_upper=60,
+                liquidity_delta=1000, salt=None,
+            ),
+            uniswap.PositionRow(
+                block=20, tx_hash=withdraw_tx, log_index=1, kind='burn', owner=MANAGER,
+                nft_token_id=None, tick_lower=-60, tick_upper=60,
+                liquidity_delta=-1000, salt=None,
+            ),
+        ]
+        nft = [
+            _log([uniswap.ERC721_TRANSFER.topic0, '0x' + '0' * 64,
+                  '0x' + '0' * 24 + ALICE[2:], '0x' + f'{9:064x}'],
+                 block=10, index=2, tx=deposit_tx)
+        ]
+        # Without the DecreaseLiquidity join the burn keeps the manager as owner.
+        assert uniswap.net_positions(uniswap.attribute_owners(rows, nft)) != []
+        attributed = uniswap.attribute_owners(
+            rows, nft, {deposit_tx: 9, withdraw_tx: 9}
+        )
+        assert [row.nft_token_id for row in attributed] == [9, 9]
+        assert uniswap.net_positions(attributed) == []
+
+    def test_rows_sharing_a_token_id_net_even_when_their_owners_disagree(self):
+        """Why the netting key is the TOKEN ID and not the owner.
+
+        The store outlives one build. A row written by an earlier build under the
+        old attribution names the position manager, while a row written after the
+        fix names the holder -- exactly the shape sitting in `onchain_demo` before
+        the repair refetch. Keying on the owner would leave those two under
+        separate positions and report liquidity that is not there.
+        """
+        rows = [
+            uniswap.PositionRow(
+                block=10, tx_hash='0xa1', log_index=1, kind='mint', owner=ALICE,
+                nft_token_id=9, tick_lower=-60, tick_upper=60,
+                liquidity_delta=1000, salt=None,
+            ),
+            uniswap.PositionRow(
+                block=20, tx_hash='0xb2', log_index=1, kind='burn', owner=MANAGER,
+                nft_token_id=9, tick_lower=-60, tick_upper=60,
+                liquidity_delta=-1000, salt=None,
+            ),
+        ]
+        assert uniswap.net_positions(rows) == []
+
+    def test_the_pinned_block_owner_overrides_the_log_derived_holder(self):
+        positions = [
+            uniswap.Position(owner=ALICE, tick_lower=-60, tick_upper=60, salt=None,
+                             liquidity=1000, nft_token_ids=[9]),
+        ]
+        assert uniswap.apply_resolved_owners(positions, {9: BOB})[0].owner == BOB
+
+    def test_a_token_id_with_no_owner_read_keeps_its_provisional_holder(self):
+        """A reverted or failed `ownerOf` must not reassign someone's liquidity."""
+        positions = [
+            uniswap.Position(owner=ALICE, tick_lower=-60, tick_upper=60, salt=None,
+                             liquidity=1000, nft_token_ids=[9]),
+        ]
+        assert uniswap.apply_resolved_owners(positions, {})[0].owner == ALICE
+
+
 class TestOwnerAttribution:
     def test_a_position_manager_owner_becomes_the_nft_holder(self):
         """The join the design specifies: the pool event and the manager's mint
@@ -172,7 +282,11 @@ class TestOwnerAttribution:
         assert attributed[0].owner == ALICE
         assert attributed[0].nft_token_id == 7
 
-    def test_a_later_nft_transfer_moves_the_position(self):
+    def test_a_later_nft_transfer_inside_the_fetch_moves_the_provisional_holder(self):
+        """Provisional only. The ERC-721 stream is fetched over the blocks the
+        pool's own liquidity events occupy, so a sale in any other block is not
+        in `nft` at all. `apply_resolved_owners` is what settles the holder --
+        see `test_the_pinned_block_owner_overrides_the_log_derived_holder`."""
         tx = '0x' + 'cd' * 32
         rows = [
             uniswap.PositionRow(

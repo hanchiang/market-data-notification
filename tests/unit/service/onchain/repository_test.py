@@ -125,6 +125,25 @@ class TestEntityModel:
         assert onchain_repository.insert_transfers(token, [row]) == 0
         onchain_repository.commit()
 
+    def test_a_refetch_repairs_attribution_and_leaves_the_chain_facts_alone(
+        self, onchain_repository
+    ):
+        """A build that derives owner and token id better must be able to fix what
+        an earlier one wrote, without touching what came off the log itself."""
+        pool = onchain_repository.upsert_entity(level='pool', key='pool:1:0xp')
+        first = {'block': 10, 'tx_hash': '0xa', 'log_index': 1, 'kind': 'burn',
+                 'owner': '0xmanager', 'nft_token_id': None, 'tick_lower': -60,
+                 'tick_upper': 60, 'liquidity_delta': -1000, 'salt': '0x09'}
+        onchain_repository.insert_position_events(pool, [first])
+        repaired = dict(first, owner='0xalice', nft_token_id=9, liquidity_delta=-999)
+        onchain_repository.insert_position_events(pool, [repaired])
+        onchain_repository.commit()
+        rows = onchain_repository.get_position_events(pool)
+        assert len(rows) == 1
+        assert rows[0]['owner'] == '0xalice'
+        assert int(rows[0]['nft_token_id']) == 9
+        assert int(rows[0]['liquidity_delta']) == -1000
+
     def test_upsert_entity_is_keyed_by_key_not_by_name(self, onchain_repository):
         first = onchain_repository.upsert_entity(
             level='project', key='project:zzz', display_name='ZZZ'

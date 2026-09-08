@@ -1,0 +1,15 @@
+{
+  "block": 57519725,
+  "block_timestamp": 1788853287,
+  "captured_at": "2026-09-08T07:41:27.158729+00:00",
+  "chain_id": 4663,
+  "endpoint_kind": "alchemy",
+  "files": [
+    "touch-grass.dexscreener_pair.json",
+    "touch-grass.dexscreener_token_pairs.json",
+    "touch-grass.jsonrpc.json",
+    "touch-grass.logs.json",
+    "touch-grass.blockscout.json"
+  ],
+  "project": "touch-grass"
+}

@@ -371,45 +371,85 @@ def normalise_v3_events(
     return sorted(rows, key=lambda row: (row.block, row.log_index))
 
 
-def normalise_v4_events(logs: Sequence[Dict[str, Any]]) -> List[PositionRow]:
+def normalise_v4_events(
+    logs: Sequence[Dict[str, Any]], position_manager: Optional[str] = None
+) -> List[PositionRow]:
     """v4 `ModifyLiquidity` already carries a signed delta, so one event shape
     covers both directions. `sender` is the position manager, the hook, or a
-    launcher acting directly."""
+    launcher acting directly.
+
+    When `sender` IS the position manager, the event's `salt` is `bytes32(tokenId)`
+    -- the manager derives it that way so each NFT owns a distinct position under
+    one `msg.sender`. That makes the token id readable off the event itself, which
+    is the only reason a WITHDRAWAL can be attributed at all: a decrease emits no
+    ERC-721 transfer, so the same-transaction join that identifies a deposit finds
+    nothing. Without this, a burn and its own mint land under different owners and
+    never net (verified 2026-09-08 against pool entity 16: eleven burns, every one
+    of them under the manager, every salt equal to a mint's token id).
+
+    The salt is only read as a token id when the sender is the manager. For a
+    direct liquidity provider the salt is arbitrary data of their choosing, and
+    reading it as a token id would invent an NFT that does not exist.
+    """
+    manager = str(position_manager).lower() if position_manager else None
     rows: List[PositionRow] = []
     for log in logs:
         fields = abi.decode_log(V4_MODIFY_LIQUIDITY, log)
         delta = int(fields['liquidityDelta'])
+        sender = str(fields['sender']).lower()
+        salt = str(fields['salt'])
+        token_id = None
+        if manager is not None and sender == manager:
+            salt_value = int(salt, 16)
+            if salt_value:
+                token_id = salt_value
         rows.append(
             PositionRow(
                 block=_block_of(log),
                 tx_hash=log['transactionHash'],
                 log_index=_index_of(log),
                 kind='mint' if delta >= 0 else 'burn',
-                owner=str(fields['sender']).lower(),
-                nft_token_id=None,
+                owner=sender,
+                nft_token_id=token_id,
                 tick_lower=int(fields['tickLower']),
                 tick_upper=int(fields['tickUpper']),
                 liquidity_delta=delta,
-                salt=str(fields['salt']),
+                salt=salt,
             )
         )
     return sorted(rows, key=lambda row: (row.block, row.log_index))
 
 
 def attribute_owners(
-    rows: Sequence[PositionRow], nft_transfers: Sequence[Dict[str, Any]]
+    rows: Sequence[PositionRow],
+    nft_transfers: Sequence[Dict[str, Any]],
+    token_id_by_tx: Optional[Dict[str, int]] = None,
 ) -> List[PositionRow]:
-    """Replace a position-manager owner with the NFT's holder, where one is known.
+    """Give every row the NFT token id its liquidity belongs to, and a holder.
 
-    Joined on the TRANSACTION, which is the join the design names: a mint through
-    the position manager emits the pool's `Mint`/`ModifyLiquidity` and the
-    manager's ERC-721 `Transfer` from `0x0` in the same transaction, so the token
-    id and its first holder are recoverable without reading the manager's state.
-    Later transfers of that NFT then move the position to its current holder.
+    A row's token id is found three ways, in order of how directly the chain
+    states it:
 
-    A row whose transaction has no NFT transfer keeps its event owner: that is a
-    position held directly, and calling it unattributed would lose the fact that
-    someone holds it.
+    1. The row already carries one -- v4, where the manager writes the token id
+       into the event's own salt.
+    2. `token_id_by_tx`, built by the caller from the manager's own
+       `IncreaseLiquidity`/`DecreaseLiquidity` in the same transaction -- v3,
+       where the pool event names only the manager.
+    3. The ERC-721 mint (`from` = `0x0`) in the same transaction -- a first
+       deposit, and the only one of the three that a WITHDRAWAL never has.
+
+    Route 3 alone is what this did until 2026-09-08, and it is why custody was
+    wrong: a decrease has no NFT mint, so it kept the position manager as owner
+    while its own deposit had been rewritten to the holder. The two rows landed
+    under different owners and could not net, leaving every custody share
+    computed over liquidity that had already left the pool.
+
+    The holder assigned here is PROVISIONAL -- the last holder visible in the
+    fetched transfers. It is the current holder only if no transfer happened in a
+    block this fetch did not cover, which is why `resolve_position_owners` reads
+    `ownerOf` at the pinned block and overrides it. Rows with no token id by any
+    route keep their event owner: that is liquidity held directly, and calling it
+    unattributed would lose the fact that someone holds it.
     """
     minted_in: Dict[str, int] = {}
     holder_of: Dict[int, str] = {}
@@ -422,9 +462,15 @@ def attribute_owners(
             minted_in[str(log['transactionHash']).lower()] = token_id
         holder_of[token_id] = recipient
 
+    by_tx = {key.lower(): value for key, value in (token_id_by_tx or {}).items()}
     attributed: List[PositionRow] = []
     for row in rows:
-        token_id = minted_in.get(str(row.tx_hash).lower())
+        tx_hash = str(row.tx_hash).lower()
+        token_id = row.nft_token_id
+        if token_id is None:
+            token_id = by_tx.get(tx_hash)
+        if token_id is None:
+            token_id = minted_in.get(tx_hash)
         if token_id is None:
             attributed.append(row)
             continue
@@ -457,17 +503,55 @@ class Position:
     nft_token_ids: List[int] = field(default_factory=list)
 
 
-def net_positions(rows: Sequence[PositionRow]) -> List[Position]:
-    """Positions netted per (owner, tick range, salt), closed ones dropped.
+def rows_from_store(stored: Sequence[Dict[str, Any]]) -> List[PositionRow]:
+    """`position_event` rows back into `PositionRow`.
 
-    A closed position must contribute zero rather than disappear from the
-    history: it is netted to zero here and excluded from the returned list, so
-    the custody share is over open liquidity only while the events behind it stay
-    in the store.
+    One reconstruction shared by both readers -- custody and the token's
+    pool-held share -- so they cannot drift into netting the same events two
+    different ways.
     """
-    netted: Dict[Tuple[str, int, int, Optional[str]], Position] = {}
+    return [
+        PositionRow(
+            block=int(row['block']),
+            tx_hash=row['tx_hash'],
+            log_index=int(row['log_index']),
+            kind=row['kind'],
+            owner=row['owner'],
+            nft_token_id=None if row['nft_token_id'] is None else int(row['nft_token_id']),
+            tick_lower=int(row['tick_lower']),
+            tick_upper=int(row['tick_upper']),
+            liquidity_delta=int(row['liquidity_delta']),
+            salt=row['salt'],
+        )
+        for row in stored
+    ]
+
+
+def net_positions(rows: Sequence[PositionRow]) -> List[Position]:
+    """Positions netted per NFT token id where there is one, else per
+    (owner, tick range, salt). Closed ones are dropped.
+
+    The token id is the key that matters, and keying on the owner instead is the
+    bug this replaces: a deposit is attributed to the NFT's holder while its own
+    withdrawal names the position manager, so an owner-keyed pair never nets and
+    the pool looks to hold liquidity that was taken out. Two rows sharing a token
+    id ARE the same position by definition, whoever the manager reported.
+
+    The owner recorded on a netted position is the LAST contributing row's, which
+    is provisional for anything token-id-keyed -- `resolve_position_owners`
+    settles it against the chain at the pinned block.
+
+    A closed position contributes zero rather than disappearing from the history:
+    it is netted to zero here and excluded from the returned list, so the custody
+    share is over open liquidity only while the events behind it stay in the
+    store.
+    """
+    netted: Dict[Tuple[Any, ...], Position] = {}
     for row in rows:
-        key = (row.owner, row.tick_lower, row.tick_upper, row.salt)
+        if row.nft_token_id is not None:
+            key: Tuple[Any, ...] = ('nft', row.nft_token_id)
+        else:
+            key = ('raw', row.owner, row.tick_lower, row.tick_upper, row.salt)
         position = netted.get(key)
         if position is None:
             position = Position(
@@ -477,10 +561,37 @@ def net_positions(rows: Sequence[PositionRow]) -> List[Position]:
                 salt=row.salt,
             )
             netted[key] = position
+        else:
+            position.owner = row.owner
         position.liquidity += row.liquidity_delta
         if row.nft_token_id is not None and row.nft_token_id not in position.nft_token_ids:
             position.nft_token_ids.append(row.nft_token_id)
     return [position for position in netted.values() if position.liquidity > 0]
+
+
+def owner_of_call_data(token_id: int) -> str:
+    """`ownerOf(uint256)` calldata for a position-manager NFT."""
+    return abi.encode_call('ownerOf', ['uint256'], [token_id])
+
+
+def apply_resolved_owners(
+    positions: Sequence[Position], owners: Dict[int, str]
+) -> List[Position]:
+    """Replace each position's provisional owner with its `ownerOf` result.
+
+    Only the pinned-block read settles who holds a position: the log-derived
+    holder is the last transfer inside the fetched windows, and an NFT that
+    changed hands in a block carrying no liquidity event was never fetched. A
+    token id missing from `owners` keeps its provisional owner -- a failed or
+    reverted read must not silently reassign someone's liquidity.
+    """
+    for position in positions:
+        for token_id in position.nft_token_ids:
+            resolved = owners.get(token_id)
+            if resolved:
+                position.owner = resolved
+                break
+    return list(positions)
 
 
 def custody_shares(

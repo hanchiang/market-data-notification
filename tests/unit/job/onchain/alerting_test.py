@@ -21,6 +21,7 @@ import pytest
 
 from src.job.onchain import build as build_job
 from src.job.onchain import watch as watch_job
+from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain import builder
 from src.service.onchain.observability import failed_unit
 
@@ -76,7 +77,7 @@ class TestOneMessagePerRun:
             return result
 
         monkeypatch.setattr(build_job, 'run_build', failing_run)
-        exit_code = await build_job.main(force_run=True, test_mode=True)
+        exit_code = await build_job.main(test_mode=True)
 
         assert exit_code == 0
         assert len(sender.calls) == 1
@@ -91,7 +92,7 @@ class TestOneMessagePerRun:
             return result
 
         monkeypatch.setattr(build_job, 'run_build', failing_run)
-        await build_job.main(force_run=True, test_mode=True)
+        await build_job.main(test_mode=True)
 
         message = sender.calls[0]['message']
         assert 'onchain.build' in message.replace('\\', '')
@@ -109,7 +110,7 @@ class TestOneMessagePerRun:
             return builder.RunResult(run_id=1, outcome='ok')
 
         monkeypatch.setattr(build_job, 'run_build', clean_run)
-        await build_job.main(force_run=True, test_mode=True)
+        await build_job.main(test_mode=True)
         assert sender.calls == []
 
 
@@ -129,7 +130,7 @@ class TestRuntimeModeReachesTheSender:
             return result
 
         monkeypatch.setattr(build_job, 'run_build', failing_run)
-        await build_job.main(force_run=True, test_mode=True)
+        await build_job.main(test_mode=True)
 
         runtime_mode = sender.calls[0]['runtime_mode']
         assert runtime_mode is not None and runtime_mode.is_test_mode
@@ -141,6 +142,50 @@ class TestRuntimeModeReachesTheSender:
         await watch_job.main(test_mode=True)
         runtime_mode = sender.calls[0]['runtime_mode']
         assert runtime_mode is not None and runtime_mode.is_test_mode
+
+
+class TestOneChainPerRun:
+    """One run pins one block, so it cannot honestly span chains.
+
+    The registry file and the schema both admit several. Pinning the first
+    chain's head and then reading a second chain's state at that height would
+    produce a dossier of numbers from no particular moment -- silently, since
+    both chains have a block of that number.
+    """
+
+    @pytest.mark.asyncio
+    async def test_projects_on_two_chains_are_refused_rather_than_pinned_to_one(
+        self, onchain_repository, demo_url, monkeypatch, onchain_registry_payload
+    ):
+        from src.service.onchain import builder as builder_module
+        from src.service.onchain.registry import parse_registry
+
+        payload = onchain_registry_payload
+        payload['chains'] = list(payload['chains']) + [
+            dict(payload['chains'][0], chain_id=9999, key='other',
+                 display_name='Other', dexscreener_slug='other')
+        ]
+        payload['projects'] = list(payload['projects']) + [
+            {'key': 'other-project', 'display_name': 'Other', 'chain_id': 9999,
+             'archetype': 'launchpad-fixed-supply', 'pool_ref': '0x' + 'cd' * 20,
+             'sources': []}
+        ]
+        registry = parse_registry(payload)
+        monkeypatch.setattr(build_job, 'load_registry', lambda _path: registry)
+        monkeypatch.setattr(
+            build_job, 'upsert_registry', lambda repo, reg: {
+                key: repo.upsert_entity(level='project', key=f'project:{key}')
+                for key in reg.projects
+            }
+        )
+        monkeypatch.setattr(
+            builder_module, 'select_projects', lambda reg, key: list(reg.projects.values())
+        )
+        with pytest.raises(build_job.MultiChainRunError, match='cannot span chains'):
+            await build_job.run_build(
+                onchain_repository, 1,
+                runtime_mode=RuntimeMode.from_test_mode(True), project_key=None,
+            )
 
 
 class TestMissedRunWatcher:

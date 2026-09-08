@@ -232,7 +232,8 @@ async def _v3_creation(context: BuildContext, fields: Dict[str, Any]) -> Dict[st
         spec=uniswap.V3_POOL_CREATED,
     )
     try:
-        logs, _ = await fetch_window(context.log_client, query, 0, context.block)
+        logs, raws = await fetch_window(context.log_client, query, 0, context.block)
+        context.charge_logs(len(raws))
     except EvmClientError as exc:
         logger.warning('v3 creation log unavailable: %s', type(exc).__name__)
         return {'creation_block': UNAVAILABLE, 'creation_tx': UNAVAILABLE}
@@ -295,7 +296,8 @@ async def _v4_key(context: BuildContext, pool_id: str) -> Dict[str, Any]:
         spec=uniswap.V4_INITIALIZE,
     )
     try:
-        logs, _ = await fetch_window(context.log_client, query, 0, context.block)
+        logs, raws = await fetch_window(context.log_client, query, 0, context.block)
+        context.charge_logs(len(raws))
     except EvmClientError as exc:
         logger.warning('v4 Initialize log unavailable: %s', type(exc).__name__)
         logs = []

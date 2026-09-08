@@ -1,0 +1,163 @@
+{
+  "pair": {
+    "baseToken": {
+      "address": "0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b",
+      "name": "Touch Grass",
+      "symbol": "GRASS"
+    },
+    "chainId": "robinhood",
+    "dexId": "uniswap",
+    "fdv": 3400144,
+    "info": {
+      "header": "https://cdn.dexscreener.com/cms/images/C05MzBILtngQQK6h?width=1500&height=500&quality=95&format=auto",
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/_WUqhn710aynImSO?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x16391c40e85fb2246a2c8c17bfa2594c5d3ef84b?timestamp=1788853200000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/TouchGrassRWA"
+        }
+      ],
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://www.touchgrass.family/"
+        },
+        {
+          "label": "Docs",
+          "url": "https://www.touchgrass.family/docs"
+        }
+      ]
+    },
+    "labels": [
+      "v4"
+    ],
+    "liquidity": {
+      "base": 24762136,
+      "quote": 34.615,
+      "usd": 171033.01
+    },
+    "marketCap": 3400144,
+    "pairAddress": "0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77",
+    "pairCreatedAt": 1788450576000,
+    "priceChange": {
+      "h1": 4.34,
+      "h24": -24.4,
+      "h6": -6.76
+    },
+    "priceNative": "0.000001397",
+    "priceUsd": "0.003453",
+    "quoteToken": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "name": "Ether",
+      "symbol": "ETH"
+    },
+    "txns": {
+      "h1": {
+        "buys": 2,
+        "sells": 4
+      },
+      "h24": {
+        "buys": 530,
+        "sells": 502
+      },
+      "h6": {
+        "buys": 100,
+        "sells": 93
+      },
+      "m5": {
+        "buys": 0,
+        "sells": 0
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77",
+    "volume": {
+      "h1": 3831.28,
+      "h24": 441837.96,
+      "h6": 91949.14,
+      "m5": 0
+    }
+  },
+  "pairs": [
+    {
+      "baseToken": {
+        "address": "0x16391C40e85FB2246A2C8c17bfA2594C5d3EF84b",
+        "name": "Touch Grass",
+        "symbol": "GRASS"
+      },
+      "chainId": "robinhood",
+      "dexId": "uniswap",
+      "fdv": 3400144,
+      "info": {
+        "header": "https://cdn.dexscreener.com/cms/images/C05MzBILtngQQK6h?width=1500&height=500&quality=95&format=auto",
+        "imageUrl": "https://cdn.dexscreener.com/cms/images/_WUqhn710aynImSO?width=800&height=800&quality=95&format=auto",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x16391c40e85fb2246a2c8c17bfa2594c5d3ef84b?timestamp=1788853200000",
+        "socials": [
+          {
+            "type": "twitter",
+            "url": "https://x.com/TouchGrassRWA"
+          }
+        ],
+        "websites": [
+          {
+            "label": "Website",
+            "url": "https://www.touchgrass.family/"
+          },
+          {
+            "label": "Docs",
+            "url": "https://www.touchgrass.family/docs"
+          }
+        ]
+      },
+      "labels": [
+        "v4"
+      ],
+      "liquidity": {
+        "base": 24762136,
+        "quote": 34.615,
+        "usd": 171033.01
+      },
+      "marketCap": 3400144,
+      "pairAddress": "0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77",
+      "pairCreatedAt": 1788450576000,
+      "priceChange": {
+        "h1": 4.34,
+        "h24": -24.4,
+        "h6": -6.76
+      },
+      "priceNative": "0.000001397",
+      "priceUsd": "0.003453",
+      "quoteToken": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "name": "Ether",
+        "symbol": "ETH"
+      },
+      "txns": {
+        "h1": {
+          "buys": 2,
+          "sells": 4
+        },
+        "h24": {
+          "buys": 530,
+          "sells": 502
+        },
+        "h6": {
+          "buys": 100,
+          "sells": 93
+        },
+        "m5": {
+          "buys": 0,
+          "sells": 0
+        }
+      },
+      "url": "https://dexscreener.com/robinhood/0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77",
+      "volume": {
+        "h1": 3831.28,
+        "h24": 441837.96,
+        "h6": 91949.14,
+        "m5": 0
+      }
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}

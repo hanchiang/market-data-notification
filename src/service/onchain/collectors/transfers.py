@@ -39,7 +39,12 @@ ZERO_ADDRESS = '0x' + '0' * 40
 DEAD_ADDRESS = '0x000000000000000000000000000000000000dead'
 
 STREAM_TRANSFER = 'transfer'
-STREAM_POSITION = 'position'
+# Bumped from 'position' on 2026-09-08 so the next build re-walks the position
+# stream from the pool's creation block. The rows themselves are fine; their
+# derived `owner` and `nft_token_id` were not, and the re-walk plus the upsert in
+# `insert_position_events` repairs them in place. A cursor left at head would
+# fetch nothing and repair nothing.
+STREAM_POSITION = 'position:v2'
 
 # How much of the history is banked at a time. Two million blocks is about two
 # days on this chain (~9.9 blocks a second), so a first build banks progress

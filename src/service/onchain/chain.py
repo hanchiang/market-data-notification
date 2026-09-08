@@ -169,10 +169,34 @@ async def find_block_at_or_before(
 
 
 async def pin_block_and_window(
-    client: EvmClient, constants: ChainConstants
+    client: EvmClient, constants: ChainConstants, log_client: Optional[EvmClient] = None
 ) -> PinnedBlock:
-    """The run's pinned block plus the block 24 hours before it."""
+    """The run's pinned block plus the block 24 hours before it.
+
+    Pinned at the LOWER of the two endpoints' heads when the logs come from a
+    different node than the state reads, which in production they do: the keyed
+    archive endpoint refuses `eth_getLogs` beyond ten blocks, so logs go to the
+    public node. A block the state endpoint has and the public node has not yet
+    seen comes back from `eth_getLogs` as an empty range, not as an error --
+    silently missing transfers. The per-chunk cursor commit then banks that gap
+    as done and no later build re-reads it, so the loss is permanent and the
+    holder derivation fails every night afterwards with nothing to point at.
+
+    Taking the lower head costs at most a few seconds of chain and removes the
+    whole failure mode. When there is one client, this is the old behaviour.
+    """
     head, head_timestamp, _ = await pin_run_block(client)
+    if log_client is not None:
+        log_head, _ = await log_client.block_number()
+        if log_head < head:
+            logger.info(
+                'pinning at the log endpoint head %s; the state endpoint is %s blocks ahead',
+                log_head,
+                head - log_head,
+            )
+            head = log_head
+            header, _ = await client.get_block_by_number(head)
+            head_timestamp = int(header['timestamp'], 16)
     start_block, start_timestamp, reads = await find_block_at_or_before(
         client,
         head_timestamp - SECONDS_PER_DAY,

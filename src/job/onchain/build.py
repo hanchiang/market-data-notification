@@ -3,11 +3,15 @@
 Not a `JobWrapper` subclass, for the monitor's reasons: that base class starts
 Redis, which this job does not use, and posts the exception TEXT to the admin
 chat, which can carry the keyed archive URL. The CLI contract is the same
-(`--force_run`, `--test_mode`) so a cron line reads like the monitor's.
+(`--test_mode`) so a cron line reads like the monitor's. It deliberately has NO
+`--force_run`: the monitor's flag bypasses that job's own schedule check, and
+this job has none -- cron decides when it runs, and every invocation builds. A
+flag that is parsed and then ignored is worse than no flag, because a cron line
+carrying it looks like it is doing something.
 
 Usage:
   ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/onchain/build.py \\
-      --force_run=1 [--project touch-grass] [--test_mode=1]
+      [--project touch-grass] [--test_mode=1]
 
 The alert is sent ONCE per run and never once per failed unit (A11), after the
 run row is written, with `runtime_mode` passed through so a `--test_mode 1` run
@@ -43,6 +47,10 @@ logger = logging.getLogger('Onchain build')
 JOB_NAME = builder.JOB_BUILD
 
 
+class MultiChainRunError(RuntimeError):
+    """The selected projects span more than one chain (see `run_build`)."""
+
+
 async def run_build(
     repository: OnchainRepository,
     run_id: int,
@@ -66,10 +74,19 @@ async def run_build(
     explorers: Dict[int, BlockscoutService] = {}
     try:
         async with state_role.client() as state_client, log_role.client() as log_client:
-            constants = get_chain_constants(
-                next(iter(registry.chains.values())).chain_id
-            )
-            pinned = await chain_module.pin_block_and_window(state_client, constants)
+            # One pinned block per run, so one chain per run. The registry file
+            # and the schema both admit several; pinning the first one's head and
+            # reading another chain's state at that height would produce a
+            # dossier of numbers from no particular moment. Refused rather than
+            # guessed -- when a second chain is added, the run splits per chain.
+            chain_ids = {registry.chain_for(project).chain_id for project in projects}
+            if len(chain_ids) > 1:
+                raise MultiChainRunError(
+                    'one run pins one block, so it cannot span chains '
+                    f'{sorted(chain_ids)}; run one --project at a time'
+                )
+            constants = get_chain_constants(next(iter(chain_ids)))
+            pinned = await chain_module.pin_block_and_window(state_client, constants, log_client)
             chain_module.add_spend(
                 spend, state_role.endpoint.kind, pinned.header_reads, pinned.header_reads * 16
             )
@@ -126,7 +143,6 @@ async def run_build(
 
 
 async def main(
-    force_run: bool = False,
     test_mode: bool = False,
     project: Optional[str] = None,
 ) -> int:
@@ -186,16 +202,11 @@ async def main(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--force_run', type=int, default=0)
     parser.add_argument('--test_mode', type=int, default=0)
     parser.add_argument('--project', type=str, default=None)
     args = parser.parse_args()
     raise SystemExit(
         asyncio.run(
-            main(
-                force_run=bool(args.force_run),
-                test_mode=bool(args.test_mode),
-                project=args.project,
-            )
+            main(test_mode=bool(args.test_mode), project=args.project)
         )
     )

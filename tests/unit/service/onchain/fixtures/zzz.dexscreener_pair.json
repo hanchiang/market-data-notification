@@ -1,0 +1,145 @@
+{
+  "pair": {
+    "baseToken": {
+      "address": "0x7dbf38976f6D3b9c529e7D9484A71898B409eE6a",
+      "name": "ZZZ",
+      "symbol": "ZZZ"
+    },
+    "chainId": "robinhood",
+    "dexId": "uniswap",
+    "fdv": 13342511,
+    "info": {
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/AndrewCurran_/status/2095990287709737314"
+        }
+      ],
+      "websites": []
+    },
+    "labels": [
+      "v4"
+    ],
+    "liquidity": {
+      "base": 11489685,
+      "quote": 74.601,
+      "usd": 369400.63
+    },
+    "marketCap": 13342511,
+    "pairAddress": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
+    "pairCreatedAt": 1788566099000,
+    "priceChange": {
+      "h1": 0.22,
+      "h24": -41.38,
+      "h6": -22.63,
+      "m5": 2.55
+    },
+    "priceNative": "0.000006492",
+    "priceUsd": "0.01607",
+    "quoteToken": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "name": "Ether",
+      "symbol": "ETH"
+    },
+    "txns": {
+      "h1": {
+        "buys": 52,
+        "sells": 73
+      },
+      "h24": {
+        "buys": 2288,
+        "sells": 2392
+      },
+      "h6": {
+        "buys": 644,
+        "sells": 645
+      },
+      "m5": {
+        "buys": 2,
+        "sells": 3
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
+    "volume": {
+      "h1": 56844.49,
+      "h24": 2399335.79,
+      "h6": 770489.24,
+      "m5": 2825.05
+    }
+  },
+  "pairs": [
+    {
+      "baseToken": {
+        "address": "0x7dbf38976f6D3b9c529e7D9484A71898B409eE6a",
+        "name": "ZZZ",
+        "symbol": "ZZZ"
+      },
+      "chainId": "robinhood",
+      "dexId": "uniswap",
+      "fdv": 13342511,
+      "info": {
+        "imageUrl": "https://cdn.dexscreener.com/cms/images/GTfH5Ev7boUT-3bd?width=800&height=800&quality=95&format=auto",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x7dbf38976f6d3b9c529e7d9484a71898b409ee6a?timestamp=1788854700000",
+        "socials": [
+          {
+            "type": "twitter",
+            "url": "https://x.com/AndrewCurran_/status/2095990287709737314"
+          }
+        ],
+        "websites": []
+      },
+      "labels": [
+        "v4"
+      ],
+      "liquidity": {
+        "base": 11489685,
+        "quote": 74.601,
+        "usd": 369400.63
+      },
+      "marketCap": 13342511,
+      "pairAddress": "0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
+      "pairCreatedAt": 1788566099000,
+      "priceChange": {
+        "h1": 0.22,
+        "h24": -41.38,
+        "h6": -22.63,
+        "m5": 2.55
+      },
+      "priceNative": "0.000006492",
+      "priceUsd": "0.01607",
+      "quoteToken": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "name": "Ether",
+        "symbol": "ETH"
+      },
+      "txns": {
+        "h1": {
+          "buys": 52,
+          "sells": 73
+        },
+        "h24": {
+          "buys": 2288,
+          "sells": 2392
+        },
+        "h6": {
+          "buys": 644,
+          "sells": 645
+        },
+        "m5": {
+          "buys": 2,
+          "sells": 3
+        }
+      },
+      "url": "https://dexscreener.com/robinhood/0x6538e2c223ed70228114983afecbe5e69fe627e2fafdf367bdd6bdeff2ad391f",
+      "volume": {
+        "h1": 56844.49,
+        "h24": 2399335.79,
+        "h6": 770489.24,
+        "m5": 2825.05
+      }
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}

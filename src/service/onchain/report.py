@@ -137,7 +137,21 @@ def _render_section(section: Dict[str, Any]) -> List[str]:
 
     lines.extend(_render_changes(section))
 
-    for name, value in sorted((section['fields'] or {}).items()):
+    fields = section['fields'] or {}
+    # A4 is a RENDERING rule as much as a collection one: "no gameable metric
+    # appears without its paired counterpart on the same row". A field that is
+    # already a metric inside `pairs` must therefore not also get a bare line of
+    # its own, where it would read as an unguarded figure. Enforced here rather
+    # than only in the collector so a future collector storing a paired metric at
+    # the top level cannot quietly reintroduce the unguarded row.
+    paired = {
+        str(pair.get('metric'))
+        for pair in (fields.get('pairs') or [])
+        if isinstance(pair, dict)
+    }
+    for name, value in sorted(fields.items()):
+        if name in paired:
+            continue
         if diff_module.is_failed(value):
             lines.append(
                 f"  {name}: FAILED ({value.get('error_class')}), "

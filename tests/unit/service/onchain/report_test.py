@@ -14,6 +14,13 @@ PAIRS = [
         'guards_against': 'wash_trading: volume without new counterparties',
     },
     {
+        'metric': 'holder_count', 'value': 41, 'source': 'transfer_history',
+        'counterpart': 'new_vs_returning_24h_and_top_ten_share',
+        'counterpart_value': {'new': 3, 'returning': 8, 'top_ten_share': 0.4},
+        'counterpart_source': 'transfer_history',
+        'guards_against': 'wallet_splitting: one holder becoming twenty',
+    },
+    {
         'metric': 'liquidity_usd', 'value': 48000.0, 'source': 'dex_provider',
         'counterpart': 'custody', 'counterpart_value': {'pool_type': 'v4'},
         'counterpart_source': 'position_events',
@@ -47,6 +54,18 @@ def _dossier(**overrides):
 
 
 class TestPairing:
+    def test_a_paired_metric_never_also_gets_an_unguarded_line_of_its_own(self):
+        """The dossier stores `holder_count` inside its pair. A collector that
+        also stored it at the top level would put the same gameable figure on the
+        page WITHOUT its counterpart, which is the thing A4 forbids."""
+        text = report.render_dossier(_dossier())
+        assert '  holder_count: 41' not in text
+        assert not any(
+            line.strip().startswith('holder_count:') for line in text.splitlines()
+        )
+        # It is still on the page -- inside the row that guards it.
+        assert any('holder_count=41' in line for line in text.splitlines())
+
     def test_every_gameable_metric_prints_beside_its_counterpart(self):
         text = report.render_dossier(_dossier())
         for pair in PAIRS:

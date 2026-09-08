@@ -744,7 +744,15 @@ class OnchainRepository:
                     '(pool_id, block, tx_hash, log_index, kind, owner, nft_token_id, '
                     ' tick_lower, tick_upper, liquidity_delta, salt) '
                     'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) '
-                    'ON CONFLICT DO NOTHING',
+                    # Attribution is the ONLY thing a re-fetch may rewrite. The
+                    # chain facts -- block, kind, ticks, delta, salt -- came from
+                    # the same log and cannot have changed, so overwriting them
+                    # would be noise; owner and token id are derived, and a build
+                    # that derives them better must be able to repair what an
+                    # earlier one wrote. Without this, a store carrying rows from
+                    # before the 2026-09-08 netting fix keeps them for ever.
+                    'ON CONFLICT (tx_hash, log_index) DO UPDATE SET '
+                    ' owner = EXCLUDED.owner, nft_token_id = EXCLUDED.nft_token_id',
                     (
                         pool_id,
                         row['block'],

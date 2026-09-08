@@ -272,6 +272,32 @@ class TestProjectSelection:
             'fifth-project'
         ]
 
+    def test_a_provider_link_already_admitted_is_not_stored_again_as_a_candidate(
+        self, onchain_repository
+    ):
+        """Upsert is idempotent per (class, url), so the same handle admitted as
+        class `x` would otherwise reappear as a `web` candidate and phase 1b's
+        admission run would see two rows for one source."""
+        project = onchain_repository.upsert_entity(
+            level='project', key='project:touch-grass'
+        )
+        handle = 'https://x.com/TouchGrassRWA'
+        admitted = onchain_repository.upsert_source(
+            source_class='x', url_or_handle=handle, admission='admitted',
+            admitted_by='registry', evidence={},
+        )
+        onchain_repository.link_source_to_entity(admitted, project)
+        stored = builder.store_candidate_sources(
+            onchain_repository, project, [handle, 'https://touchgrass.family/new']
+        )
+        onchain_repository.commit()
+        assert stored == 1
+        urls = [
+            row['url_or_handle']
+            for row in onchain_repository.get_sources_for_entity(project)
+        ]
+        assert sorted(urls) == sorted([handle, 'https://touchgrass.family/new'])
+
     def test_an_unknown_project_says_what_to_edit(self, onchain_registry_payload):
         registry = parse_registry(onchain_registry_payload)
         with pytest.raises(KeyError, match='projects.json'):

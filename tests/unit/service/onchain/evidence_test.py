@@ -11,7 +11,39 @@ from src.service.onchain.evidence import (
     MissingRunContextError,
     store_response,
 )
+from market_data_library.core.onchain.evm import ALCHEMY_CU_COSTS
+
+from src.service.onchain import chain
 from src.service.onchain.observability import collector_span, run_context
+
+
+class _FakeEndpoint:
+    def __init__(self, kind):
+        self.kind = kind
+
+
+class _FakeClient:
+    def __init__(self, kind):
+        self.endpoint = _FakeEndpoint(kind)
+
+
+class _Raw:
+    def __init__(self, method, endpoint_kind):
+        self.method = method
+        self.endpoint_kind = endpoint_kind
+        self.params = []
+        self.body = {'jsonrpc': '2.0', 'result': '0x0'}
+
+
+def _raw(method, endpoint_kind):
+    return _Raw(method, endpoint_kind)
+
+
+def _pinned():
+    return chain.PinnedBlock(
+        block=100, timestamp=1, window_start_block=1,
+        window_start_timestamp=0, header_reads=1,
+    )
 
 
 class TestProvenance:
@@ -210,3 +242,66 @@ class TestKeyedUrlByValue:
             )
         onchain_repository.commit()
         assert len(onchain_repository.get_evidence_for_run(run_id)) == 1
+
+
+class TestSpendAccounting:
+    """P13's run ledger: `spend_json` must say what the run cost per endpoint.
+
+    Until 2026-09-08 it recorded only the pinning header reads and the explorer
+    call count, so run 6 in `onchain_demo` reported 23 alchemy requests against a
+    build that made 15 archive reads it never counted plus every log window on the
+    public node, which had no key in the ledger at all. The capacity envelope in
+    the design rests on this figure.
+    """
+
+    def _context(self, repository, spend):
+        from src.service.onchain.collectors.base import BuildContext
+
+        entity = repository.upsert_entity(level='project', key='project:spend')
+        return BuildContext(
+            repository=repository, registry=None, chain=None, project=None,
+            chain_entity_id=entity, project_entity_id=entity,
+            pinned=_pinned(), state_client=None, log_client=_FakeClient('public'),
+            dexscreener=None, explorer=None, spend=spend,
+        )
+
+    def test_a_jsonrpc_read_is_billed_at_its_own_compute_unit_cost(
+        self, onchain_repository
+    ):
+        spend = chain.spend_counters()
+        context = self._context(onchain_repository, spend)
+        run_id = onchain_repository.start_run('onchain.build')
+        with run_context(run_id, 'onchain.build'):
+            context.record_jsonrpc(_raw('eth_getBlockByNumber', 'alchemy'))
+            context.record_jsonrpc(_raw('eth_call', 'alchemy'))
+        onchain_repository.commit()
+        assert spend['requests']['alchemy'] == 2
+        assert spend['compute_units']['alchemy'] == (
+            ALCHEMY_CU_COSTS['eth_getBlockByNumber'] + ALCHEMY_CU_COSTS['eth_call']
+        )
+
+    def test_log_windows_are_billed_to_the_log_endpoint(
+        self, onchain_repository
+    ):
+        """Log responses are never stored as evidence, so nothing else counts
+        them -- and they are the bulk of a first build's traffic."""
+        spend = chain.spend_counters()
+        context = self._context(onchain_repository, spend)
+        context.charge_logs(7)
+        assert spend['requests']['public'] == 7
+
+    def test_the_public_endpoint_is_counted_in_requests_and_never_in_units(
+        self, onchain_repository
+    ):
+        """It publishes no cost model. Billing it Alchemy's table would invent a
+        number the operator could not check against any invoice."""
+        spend = chain.spend_counters()
+        context = self._context(onchain_repository, spend)
+        context.charge_logs(4)
+        assert spend['requests']['public'] == 4
+        assert 'public' not in spend['compute_units']
+
+    def test_charging_nothing_creates_no_key(self, onchain_repository):
+        spend = chain.spend_counters()
+        self._context(onchain_repository, spend).charge_logs(0)
+        assert spend['requests'] == {}

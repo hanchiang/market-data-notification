@@ -16,7 +16,7 @@ whatever the cron interval happened to be -- measuring cadence, not gaming.
 import logging
 from typing import Any, Dict, List, Optional
 
-from market_data_library.core.onchain.evm import abi
+from market_data_library.core.onchain.evm import EvmClientError, abi
 
 from src.service.onchain.collectors import transfers, uniswap
 from src.service.onchain.collectors.base import (
@@ -61,6 +61,7 @@ async def collect(context: BuildContext) -> SectionResult:
         creation_block=creation_block,
         to_block=context.block,
     )
+    context.charge_logs(outcome.windows)
 
     holders = transfers.holder_summary(context.repository, token_entity_id)
     ok, mismatches = await transfers.check_derivation(
@@ -68,6 +69,14 @@ async def collect(context: BuildContext) -> SectionResult:
         token_address=token_address,
         block=context.block,
         holders=holders['top_holders'],
+    )
+    # One `balanceOf` per top holder, batched into few requests but billed per
+    # member. `check_derivation` takes a client rather than the context, so the
+    # charge is raised here from the count the caller already knows.
+    context.charge(
+        context.state_client.endpoint.kind,
+        len(holders['top_holders']),
+        methods=['eth_call'] * len(holders['top_holders']),
     )
     if not ok:
         logger.error(
@@ -108,8 +117,13 @@ async def collect(context: BuildContext) -> SectionResult:
             'windows': outcome.windows,
             'resumed': outcome.resumed,
         },
-        'holder_count': holders['holder_count'],
-        'top_holders': holders['top_holders'],
+        # `holder_count` and `top_holders` are deliberately NOT stored at this
+        # level. Both are gameable, A4 forbids a gameable metric appearing
+        # without its counterpart on the same row, and the report renders every
+        # non-`pairs` field on a line of its own -- so storing them here put an
+        # unguarded holder count in the dossier beside the guarded one. They live
+        # inside the `holder_count` pair, which carries the new-versus-returning
+        # split and the top-ten share that guard them.
         'derivation_check': 'ok',
         'pairs': _pairs(
             provider=provider,
@@ -200,9 +214,10 @@ async def _fetch_events(
     from src.service.project_monitor.logs import fetch_window
 
     try:
-        logs, _ = await fetch_window(
+        logs, raws = await fetch_window(
             context.log_client, query, from_block, context.block if to_block is None else to_block
         )
+        context.charge_logs(len(raws))
         return logs
     except EvmClientError as exc:
         logger.warning('%s log window failed: %s', query.name, type(exc).__name__)
@@ -250,6 +265,32 @@ async def _fetch_owner_transfers(
     return collected
 
 
+async def _v3_token_ids(
+    context: BuildContext, manager: str, events: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    """`{transaction hash: NFT token id}` from the v3 manager's own liquidity events.
+
+    Restricted to the blocks the pool's events occupy for the same reason the
+    ERC-721 fetch is (see `_fetch_owner_transfers`): the manager is chain-wide,
+    and only a transaction carrying this pool's `Mint`/`Burn` can contribute.
+    """
+    from src.service.project_monitor.logs import LogQuery
+
+    found: Dict[str, int] = {}
+    for spec, label in (
+        (uniswap.V3_INCREASE_LIQUIDITY, 'increase'),
+        (uniswap.V3_DECREASE_LIQUIDITY, 'decrease'),
+    ):
+        query = LogQuery(
+            f'v3_{label}:{context.project.key}', [manager], [spec.topic0], spec
+        )
+        for low, high in _event_ranges(events):
+            for log in await _fetch_events(context, query, low, high):
+                fields = abi.decode_log(spec, log)
+                found[str(log['transactionHash']).lower()] = int(fields['tokenId'])
+    return found
+
+
 async def _custody_v3(
     context: BuildContext, pool_entity_id: int, creation_block: int
 ) -> Dict[str, Any]:
@@ -271,13 +312,17 @@ async def _custody_v3(
         LogQuery(f'v3_burn:{context.project.key}', [pool], [uniswap.V3_BURN.topic0], uniswap.V3_BURN),
         from_block,
     )
+    manager = context.chain.uniswap['v3_position_manager']
     nft = await _fetch_owner_transfers(
-        context,
-        f'v3_nft:{context.project.key}',
-        context.chain.uniswap['v3_position_manager'],
-        mints + burns,
+        context, f'v3_nft:{context.project.key}', manager, mints + burns
     )
-    rows = uniswap.attribute_owners(uniswap.normalise_v3_events(mints, burns), nft)
+    # v3's pool events name only the manager, and a decrease emits no ERC-721
+    # transfer, so the manager's own token-id events are the only thing that ties
+    # a withdrawal back to the position it came out of.
+    token_id_by_tx = await _v3_token_ids(context, manager, mints + burns)
+    rows = uniswap.attribute_owners(
+        uniswap.normalise_v3_events(mints, burns), nft, token_id_by_tx
+    )
     context.repository.insert_position_events(pool_entity_id, [row.as_row() for row in rows])
     context.repository.set_fetch_cursor(
         pool_entity_id, transfers.STREAM_POSITION, context.block
@@ -287,8 +332,12 @@ async def _custody_v3(
         pool, uniswap.call_data('liquidity'), context.block
     )
     context.record_jsonrpc(raw)
-    return _custody_shape(
-        context, pool_entity_id, 'v3', int(abi.decode_single('uint128', liquidity_data))
+    return await _custody_shape(
+        context,
+        pool_entity_id,
+        'v3',
+        int(abi.decode_single('uint128', liquidity_data)),
+        manager,
     )
 
 
@@ -319,7 +368,10 @@ async def _custody_v4(
         context.chain.uniswap['v4_position_manager'],
         modify,
     )
-    rows = uniswap.attribute_owners(uniswap.normalise_v4_events(modify), nft)
+    rows = uniswap.attribute_owners(
+        uniswap.normalise_v4_events(modify, context.chain.uniswap['v4_position_manager']),
+        nft,
+    )
     context.repository.insert_position_events(pool_entity_id, [row.as_row() for row in rows])
     context.repository.set_fetch_cursor(
         pool_entity_id, transfers.STREAM_POSITION, context.block
@@ -331,31 +383,28 @@ async def _custody_v4(
         context.block,
     )
     context.record_jsonrpc(raw)
-    return _custody_shape(
-        context, pool_entity_id, 'v4', int(abi.decode_single('uint128', data))
+    return await _custody_shape(
+        context,
+        pool_entity_id,
+        'v4',
+        int(abi.decode_single('uint128', data)),
+        context.chain.uniswap['v4_position_manager'],
     )
 
 
-def _custody_shape(
-    context: BuildContext, pool_entity_id: int, pool_type: str, pool_liquidity: int
+async def _custody_shape(
+    context: BuildContext,
+    pool_entity_id: int,
+    pool_type: str,
+    pool_liquidity: int,
+    position_manager: str,
 ) -> Dict[str, Any]:
     stored = context.repository.get_position_events(pool_entity_id)
-    rows = [
-        uniswap.PositionRow(
-            block=int(row['block']),
-            tx_hash=row['tx_hash'],
-            log_index=int(row['log_index']),
-            kind=row['kind'],
-            owner=row['owner'],
-            nft_token_id=None if row['nft_token_id'] is None else int(row['nft_token_id']),
-            tick_lower=int(row['tick_lower']),
-            tick_upper=int(row['tick_upper']),
-            liquidity_delta=int(row['liquidity_delta']),
-            salt=row['salt'],
-        )
-        for row in stored
-    ]
+    rows = uniswap.rows_from_store(stored)
     positions = uniswap.net_positions(rows)
+    positions = uniswap.apply_resolved_owners(
+        positions, await _resolve_owners(context, position_manager, positions)
+    )
     shares = uniswap.custody_shares(positions, _owner_classes(context, positions))
     return {
         'pool_type': pool_type,
@@ -363,6 +412,59 @@ def _custody_shape(
         'open_positions': len(positions),
         **shares,
     }
+
+
+async def _resolve_owners(
+    context: BuildContext, manager: str, positions
+) -> Dict[int, str]:
+    """`ownerOf(tokenId)` at the pinned block for every open position's NFT.
+
+    This is what makes "the position moved when the NFT was sold" true. The
+    log-derived holder cannot be trusted for it: the ERC-721 stream is fetched
+    only over blocks carrying a liquidity event, so a sale in any other block is
+    invisible. One batched read over the OPEN positions is cheap -- twelve for
+    touch-grass, not one per historical event.
+
+    A burned NFT REVERTS -- "ERC721: owner query for nonexistent token" -- and a
+    revert inside a JSON-RPC batch fails the whole batch, not one member of it
+    (observed on predict-fwa 2026-09-08, where it failed the entire health
+    section). `expect_value=False` does not help: it covers an empty `0x` result,
+    not an error object. So the batch is tried first for the common case and a
+    failure falls back to one call per token id, where a revert costs only that
+    token its resolved owner. An unresolved token keeps its provisional holder.
+    """
+    token_ids = [
+        token_id for position in positions for token_id in position.nft_token_ids
+    ]
+    if not token_ids:
+        return {}
+    calls = [(manager, uniswap.owner_of_call_data(token_id)) for token_id in token_ids]
+    owners: Dict[int, str] = {}
+    try:
+        results = await context.state_client.batch_call(
+            calls, context.block, expect_value=False
+        )
+    except EvmClientError:
+        logger.info(
+            'owner batch reverted for %s; falling back to %s single reads',
+            context.project.key,
+            len(token_ids),
+        )
+        results = []
+        for call in calls:
+            try:
+                results.append(
+                    (await context.state_client.call(*call, context.block, expect_value=False))
+                )
+            except EvmClientError:
+                results.append((None, None))
+    for token_id, (data, raw) in zip(token_ids, results):
+        if raw is not None:
+            context.record_jsonrpc(raw)
+        if not data or data == '0x':
+            continue
+        owners[token_id] = str(abi.decode_single('address', data)).lower()
+    return owners
 
 
 def _owner_classes(context: BuildContext, positions) -> Dict[str, str]:

@@ -107,6 +107,26 @@ class TestBoundarySearch:
         assert pinned.timestamp - pinned.window_start_timestamp >= chain.SECONDS_PER_DAY
 
 
+    @pytest.mark.asyncio
+    async def test_the_run_pins_at_the_lower_of_the_two_endpoint_heads(self):
+        """Logs come from a different node than state reads. A block the state
+        endpoint has and the log node has not returns an EMPTY log range, not an
+        error -- and the per-chunk cursor commit banks that gap as done."""
+        state = FakeChain(1_000_000, 2_000_000, interval=0.1)
+        logs = FakeChain(999_990, 2_000_000, interval=0.1)
+        pinned = await chain.pin_block_and_window(state, CONSTANTS, logs)
+        assert pinned.block == 999_990
+
+    @pytest.mark.asyncio
+    async def test_a_log_endpoint_ahead_of_the_state_endpoint_does_not_move_the_pin(self):
+        """The state endpoint's head is the ceiling for state reads, so a log node
+        further ahead cannot raise it."""
+        state = FakeChain(1_000_000, 2_000_000, interval=0.1)
+        logs = FakeChain(1_000_050, 2_000_000, interval=0.1)
+        pinned = await chain.pin_block_and_window(state, CONSTANTS, logs)
+        assert pinned.block == 1_000_000
+
+
 class TestDecodeString:
     def test_a_dynamic_string_return_value_decodes(self):
         payload = (

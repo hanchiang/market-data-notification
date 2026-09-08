@@ -1,0 +1,173 @@
+{
+  "pair": {
+    "baseToken": {
+      "address": "0xa934bA4F59070149d37A93F8A002Af79BAe35563",
+      "name": "predict FWA",
+      "symbol": "PFWA"
+    },
+    "chainId": "robinhood",
+    "dexId": "uniswap",
+    "fdv": 342023,
+    "info": {
+      "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/pfwafun"
+        },
+        {
+          "type": "telegram",
+          "url": "https://t.me/pfwafun"
+        }
+      ],
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://www.pfwa.fun/"
+        },
+        {
+          "label": "Docs",
+          "url": "https://www.pfwa.fun/docs"
+        }
+      ]
+    },
+    "labels": [
+      "v3"
+    ],
+    "liquidity": {
+      "base": 104633193,
+      "quote": 13.132,
+      "usd": 68381.68
+    },
+    "marketCap": 342023,
+    "pairAddress": "0x5313A71595178721E1D58FD4cb459e4981aaE441",
+    "pairCreatedAt": 1785625763000,
+    "priceChange": {
+      "h1": 2.96,
+      "h24": -41.93,
+      "h6": -15.49,
+      "m5": -0.19
+    },
+    "priceNative": "0.0000001384",
+    "priceUsd": "0.0003428",
+    "quoteToken": {
+      "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+      "name": "WETH",
+      "symbol": "WETH"
+    },
+    "txns": {
+      "h1": {
+        "buys": 6,
+        "sells": 20
+      },
+      "h24": {
+        "buys": 526,
+        "sells": 752
+      },
+      "h6": {
+        "buys": 76,
+        "sells": 147
+      },
+      "m5": {
+        "buys": 0,
+        "sells": 1
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x5313a71595178721e1d58fd4cb459e4981aae441",
+    "volume": {
+      "h1": 862.83,
+      "h24": 159210.63,
+      "h6": 20281.56,
+      "m5": 7.35
+    }
+  },
+  "pairs": [
+    {
+      "baseToken": {
+        "address": "0xa934bA4F59070149d37A93F8A002Af79BAe35563",
+        "name": "predict FWA",
+        "symbol": "PFWA"
+      },
+      "chainId": "robinhood",
+      "dexId": "uniswap",
+      "fdv": 342023,
+      "info": {
+        "header": "https://cdn.dexscreener.com/cms/images/huaHCVAjLNkBpqE7?width=1500&height=500&quality=95&format=auto",
+        "imageUrl": "https://cdn.dexscreener.com/cms/images/51dOC9kRebX2Yf2v?width=800&height=800&quality=95&format=auto",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0xa934ba4f59070149d37a93f8a002af79bae35563?timestamp=1788854700000",
+        "socials": [
+          {
+            "type": "twitter",
+            "url": "https://x.com/pfwafun"
+          },
+          {
+            "type": "telegram",
+            "url": "https://t.me/pfwafun"
+          }
+        ],
+        "websites": [
+          {
+            "label": "Website",
+            "url": "https://www.pfwa.fun/"
+          },
+          {
+            "label": "Docs",
+            "url": "https://www.pfwa.fun/docs"
+          }
+        ]
+      },
+      "labels": [
+        "v3"
+      ],
+      "liquidity": {
+        "base": 104633193,
+        "quote": 13.132,
+        "usd": 68381.68
+      },
+      "marketCap": 342023,
+      "pairAddress": "0x5313A71595178721E1D58FD4cb459e4981aaE441",
+      "pairCreatedAt": 1785625763000,
+      "priceChange": {
+        "h1": 2.96,
+        "h24": -41.93,
+        "h6": -15.49,
+        "m5": -0.19
+      },
+      "priceNative": "0.0000001384",
+      "priceUsd": "0.0003428",
+      "quoteToken": {
+        "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+        "name": "WETH",
+        "symbol": "WETH"
+      },
+      "txns": {
+        "h1": {
+          "buys": 6,
+          "sells": 20
+        },
+        "h24": {
+          "buys": 526,
+          "sells": 752
+        },
+        "h6": {
+          "buys": 76,
+          "sells": 147
+        },
+        "m5": {
+          "buys": 0,
+          "sells": 1
+        }
+      },
+      "url": "https://dexscreener.com/robinhood/0x5313a71595178721e1d58fd4cb459e4981aae441",
+      "volume": {
+        "h1": 862.83,
+        "h24": 159210.63,
+        "h6": 20281.56,
+        "m5": 7.35
+      }
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}

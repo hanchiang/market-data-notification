@@ -319,9 +319,21 @@ def store_candidate_sources(
     Phase 1a's whole participation in source admission (P5, P6): the structural
     hop is recorded so phase 1b's admission run has something to admit, and no
     scheduled capture touches them until the operator's queue does.
+
+    A link the project already has as a source is SKIPPED, whatever class it
+    carries. Upsert is idempotent per `(class, url)`, so without this the same
+    `https://x.com/...` the registry admitted as class `x` is stored again as a
+    `candidate` of class `web`, and phase 1b's admission run sees two rows for
+    one source -- one already admitted, one asking to be.
     """
+    known = {
+        str(row['url_or_handle']).lower()
+        for row in repository.get_sources_for_entity(project_entity_id)
+    }
     stored = 0
     for url in links:
+        if str(url).lower() in known:
+            continue
         source_id = repository.upsert_source(
             source_class='web',
             url_or_handle=url,
@@ -330,6 +342,7 @@ def store_candidate_sources(
             evidence={'hop_from': 'dex_provider', 'phase': '1a'},
         )
         repository.link_source_to_entity(source_id, project_entity_id)
+        known.add(str(url).lower())
         stored += 1
     return stored
 

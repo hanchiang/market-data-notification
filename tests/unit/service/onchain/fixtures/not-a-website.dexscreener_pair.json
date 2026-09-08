@@ -1,0 +1,165 @@
+{
+  "pair": {
+    "baseToken": {
+      "address": "0x0762C1708F0D23F86b29D6B857121FF7DF357506",
+      "name": "this is not a website",
+      "symbol": "website"
+    },
+    "chainId": "robinhood",
+    "dexId": "uniswap",
+    "fdv": 4761359,
+    "info": {
+      "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
+      "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
+      "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+      "socials": [
+        {
+          "type": "twitter",
+          "url": "https://x.com/notawebsite_rh"
+        }
+      ],
+      "websites": [
+        {
+          "label": "Website",
+          "url": "https://linktr.ee/notawebsite"
+        },
+        {
+          "label": "Public SDK",
+          "url": "https://websitekit.org"
+        }
+      ]
+    },
+    "labels": [
+      "v3"
+    ],
+    "liquidity": {
+      "base": 29946790,
+      "quote": 54.6841,
+      "usd": 288182.1
+    },
+    "marketCap": 4761359,
+    "pairAddress": "0x6D489e07d7Fe2b4Bc5749f75d56337888B68a34a",
+    "pairCreatedAt": 1785782601000,
+    "priceChange": {
+      "h1": 2.36,
+      "h24": 0.33,
+      "h6": 7.58,
+      "m5": -0.52
+    },
+    "priceNative": "0.000002055",
+    "priceUsd": "0.005095",
+    "quoteToken": {
+      "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+      "name": "WETH",
+      "symbol": "WETH"
+    },
+    "txns": {
+      "h1": {
+        "buys": 15,
+        "sells": 22
+      },
+      "h24": {
+        "buys": 700,
+        "sells": 851
+      },
+      "h6": {
+        "buys": 135,
+        "sells": 159
+      },
+      "m5": {
+        "buys": 2,
+        "sells": 3
+      }
+    },
+    "url": "https://dexscreener.com/robinhood/0x6d489e07d7fe2b4bc5749f75d56337888b68a34a",
+    "volume": {
+      "h1": 19218.93,
+      "h24": 366683.73,
+      "h6": 88270.68,
+      "m5": 545.6
+    }
+  },
+  "pairs": [
+    {
+      "baseToken": {
+        "address": "0x0762C1708F0D23F86b29D6B857121FF7DF357506",
+        "name": "this is not a website",
+        "symbol": "website"
+      },
+      "chainId": "robinhood",
+      "dexId": "uniswap",
+      "fdv": 4761359,
+      "info": {
+        "header": "https://cdn.dexscreener.com/cms/images/qws6FUNMJC6S82eI?width=1500&height=500&quality=95&format=auto",
+        "imageUrl": "https://cdn.dexscreener.com/cms/images/RVxlgrmh9azMmaBk?width=800&height=800&quality=95&format=auto",
+        "openGraph": "https://cdn.dexscreener.com/token-images/og/robinhood/0x0762c1708f0d23f86b29d6b857121ff7df357506?timestamp=1788853200000",
+        "socials": [
+          {
+            "type": "twitter",
+            "url": "https://x.com/notawebsite_rh"
+          }
+        ],
+        "websites": [
+          {
+            "label": "Website",
+            "url": "https://linktr.ee/notawebsite"
+          },
+          {
+            "label": "Public SDK",
+            "url": "https://websitekit.org"
+          }
+        ]
+      },
+      "labels": [
+        "v3"
+      ],
+      "liquidity": {
+        "base": 29946790,
+        "quote": 54.6841,
+        "usd": 288182.1
+      },
+      "marketCap": 4761359,
+      "pairAddress": "0x6D489e07d7Fe2b4Bc5749f75d56337888B68a34a",
+      "pairCreatedAt": 1785782601000,
+      "priceChange": {
+        "h1": 2.36,
+        "h24": 0.33,
+        "h6": 7.58,
+        "m5": -0.52
+      },
+      "priceNative": "0.000002055",
+      "priceUsd": "0.005095",
+      "quoteToken": {
+        "address": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+        "name": "WETH",
+        "symbol": "WETH"
+      },
+      "txns": {
+        "h1": {
+          "buys": 15,
+          "sells": 22
+        },
+        "h24": {
+          "buys": 700,
+          "sells": 851
+        },
+        "h6": {
+          "buys": 135,
+          "sells": 159
+        },
+        "m5": {
+          "buys": 2,
+          "sells": 3
+        }
+      },
+      "url": "https://dexscreener.com/robinhood/0x6d489e07d7fe2b4bc5749f75d56337888b68a34a",
+      "volume": {
+        "h1": 19218.93,
+        "h24": 366683.73,
+        "h6": 88270.68,
+        "m5": 545.6
+      }
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}

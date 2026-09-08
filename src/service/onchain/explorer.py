@@ -73,6 +73,11 @@ class ExplorerUnit:
         try:
             result = await method(identifier)
         except BlockscoutApiError as exc:
+            # A failed read still cost a request -- three of them, after the
+            # client's retries -- so it is counted before the early return. A
+            # ledger that only counts successes understates exactly the night
+            # the operator is trying to explain.
+            self.calls += 1
             # The CLASS only. `str(exc)` carries the endpoint and, for some
             # failures, the upstream body -- neither belongs in a field the
             # report prints or an alert sends.

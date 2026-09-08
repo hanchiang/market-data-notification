@@ -44,6 +44,9 @@ class FakeContext:
     block = 57_000_000
     log_client = object()
 
+    def charge_logs(self, requests):
+        """Spend accounting is P2-2's concern, not this test's."""
+
 
 class TestFetchOwnerTransfers:
     @pytest.fixture
@@ -52,7 +55,7 @@ class TestFetchOwnerTransfers:
 
         async def fake_fetch_window(client, query, from_block, to_block):
             seen.append((query.name, from_block, to_block))
-            return [{'blockNumber': hex(from_block)}], None
+            return [{'blockNumber': hex(from_block)}], []
 
         monkeypatch.setattr(
             'src.service.project_monitor.logs.fetch_window', fake_fetch_window
@@ -82,3 +85,58 @@ class TestFetchOwnerTransfers:
         # The regression: the old code passed `context.block` as the upper bound,
         # so a single query covered 57M blocks of an unrelated stream.
         assert all(to_block != FakeContext.block for _, _, to_block in windows)
+
+
+class TestOwnerResolution:
+    """A burned NFT reverts, and a revert inside a JSON-RPC batch fails the WHOLE
+    batch rather than one member of it. Observed 2026-09-08 on predict-fwa, where
+    "ERC721: owner query for nonexistent token" failed the entire health section
+    for a position that had simply been closed.
+    """
+
+    class _Positions(list):
+        pass
+
+    def _position(self, token_id, owner='0xalice'):
+        from src.service.onchain.collectors import uniswap
+
+        return uniswap.Position(
+            owner=owner, tick_lower=-60, tick_upper=60, salt=None,
+            liquidity=10, nft_token_ids=[token_id],
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_reverting_token_costs_only_its_own_owner(self, monkeypatch):
+        from market_data_library.core.onchain.evm.errors import EvmRpcError
+
+        calls_made = []
+
+        class Client:
+            endpoint = type('E', (), {'kind': 'alchemy'})()
+
+            async def batch_call(self, calls, block, *, expect_value=True):
+                raise EvmRpcError('execution reverted', endpoint_kind='alchemy')
+
+            async def call(self, to, data, block, *, expect_value=True):
+                calls_made.append(data)
+                if len(calls_made) == 1:
+                    raise EvmRpcError('execution reverted', endpoint_kind='alchemy')
+                return ('0x' + '0' * 24 + 'bb' * 20, object())
+
+        class Context:
+            block = 100
+            state_client = Client()
+            project = type('P', (), {'key': 'x'})()
+
+            def record_jsonrpc(self, raw):
+                pass
+
+        owners = await health._resolve_owners(
+            Context(), '0xmanager', [self._position(1), self._position(2)]
+        )
+        assert list(owners) == [2]
+        assert owners[2] == '0x' + 'bb' * 20
+
+    @pytest.mark.asyncio
+    async def test_no_open_position_issues_no_read(self):
+        assert await health._resolve_owners(object(), '0xmanager', []) == {}

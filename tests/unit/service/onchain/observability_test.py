@@ -329,6 +329,58 @@ class TestAlertBoundary:
         assert UNRECOGNISED in message
         assert 'run 9' in message
 
+    @pytest.mark.parametrize('detail', [
+        # A numeric-looking STRING: the fence is a type check, not a format
+        # check, and a string that merely looks numeric is exactly what a
+        # careless caller would pass first.
+        '25',
+        # The actual hazard the fence exists for: `detail` reaching the admin
+        # chat as a string is a second route for a keyed URL, the leak
+        # `_ERROR_CLASS` was built to block.
+        'https://rhc.g.alchemy.com/v2/SECRETKEY',
+        # `bool` is an `int` subclass in Python -- `isinstance(True, int)` is
+        # `True` -- so this is not redundant with the string cases above.
+        True,
+        [],
+    ])
+    def test_a_non_numeric_detail_is_refused_at_construction(self, detail):
+        with pytest.raises(AlertPayloadError):
+            failed_unit('zzz/watch/missed_run', 'BuildDeadlineExceeded', detail=detail)
+
+    def test_a_text_detail_renders_with_no_suffix_and_is_logged(self, job_log):
+        """A unit built some other way (or read back from a row written before
+        the fence existed) must not reach the chat with the text intact --
+        the render-time half of the same fence `failed_unit` enforces at
+        construction. Degrades like the other two fields: the alert still
+        fires with no suffix, and the drop is logged so it can be found."""
+        with run_context(4, 'onchain.build'):
+            message = format_alert(4, 'onchain.build', [
+                {'unit': 'zzz/watch/missed_run', 'error_class': 'BuildDeadlineExceeded',
+                 'detail': 'https://rhc.g.alchemy.com/v2/SECRETKEY'},
+            ])
+        assert message == (
+            'onchain onchain.build run 4\n- zzz/watch/missed_run: BuildDeadlineExceeded'
+        )
+        assert 'SECRETKEY' not in message
+        assert '(' not in message
+        assert any(
+            'alert payload dropped a non-numeric detail' in line['message']
+            for line in _read_lines(job_log)
+        )
+
+    def test_a_bool_detail_is_omitted_at_render_too(self):
+        """`bool` is excluded at BOTH fences, not only at construction: a unit
+        built by any other path (a stored row, a hand-built dict) must not
+        render `True`/`False` as if it were the number `1`/`0`."""
+        message = format_alert(5, 'onchain.build', [
+            {'unit': 'zzz/watch/missed_run', 'error_class': 'BuildDeadlineExceeded',
+             'detail': True},
+        ])
+        assert '(' not in message
+        assert message == (
+            'onchain onchain.build run 5\n- zzz/watch/missed_run: BuildDeadlineExceeded'
+        )
+
     def test_a_trailing_newline_does_not_slip_through_the_unit_pattern(self):
         """`$` matches before a single trailing newline; `\\Z` does not. Nothing
         leaks either way -- this pins the anchor so a rewrite cannot loosen it."""

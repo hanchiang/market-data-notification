@@ -136,6 +136,17 @@ def test_window_too_wide_is_recognised_from_the_endpoints_own_wording():
     assert _is_window_too_wide(
         EvmRpcError('block range too large', endpoint_kind='public', code=-32600)
     )
+    # The RESULT cap, verbatim from the endpoint on 2026-09-08. Note the word
+    # order: `limit exceeded` above does not match `exceeds limit of 10000`, so
+    # this needs its own marker. Without it the refusal propagates as a hard
+    # failure and a section dies on a window that only needed narrowing.
+    assert _is_window_too_wide(
+        EvmRpcError(
+            'logs matched by query exceeds limit of 10000',
+            endpoint_kind='public',
+            code=-32000,
+        )
+    )
     # And it must NOT narrow for an unrelated fault, or a real error becomes an
     # infinite halving loop.
     assert not _is_window_too_wide(

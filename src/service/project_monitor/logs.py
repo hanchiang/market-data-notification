@@ -207,7 +207,21 @@ def _is_window_too_wide(exc: EvmRpcError) -> bool:
     text = str(exc).lower()
     return any(
         marker in text
-        for marker in ('timed out', 'timeout', 'block range', 'too many', 'limit exceeded')
+        for marker in (
+            'timed out',
+            'timeout',
+            'block range',
+            'too many',
+            'limit exceeded',
+            # The public RPC's RESULT cap, measured 2026-09-06 and hit for real
+            # on 2026-09-08: "logs matched by query exceeds limit of 10000".
+            # `limit exceeded` above does not match it -- the words are the other
+            # way round -- so without this marker the refusal propagates as a
+            # hard failure and the whole section dies on a window that simply
+            # needed narrowing. This is the dossier design's D9; the monitor's
+            # own log plane needs it for the same reason.
+            'exceeds limit',
+        )
     )
 
 

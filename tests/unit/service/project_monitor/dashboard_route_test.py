@@ -1081,6 +1081,14 @@ def test_the_dashboard_app_carries_only_the_read_routes_and_no_startup_hook():
         '/project-monitor/',
         '/project-monitor/static/chart.umd.js',
         '/project-monitor/netnet/report',
+        # The dossier's two read surfaces, added 2026-09-08. They are on THIS
+        # app rather than a third entrypoint for the reason the docstring gives
+        # about the second one: both read the same Postgres on the same machine
+        # for the same operator, behind this middleware. Both are read-only, and
+        # adding them does not add a startup hook -- which is what the two
+        # assertions below still pin.
+        '/project-monitor/onchain/runs',
+        '/project-monitor/onchain/dossier/{project}',
     }
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []

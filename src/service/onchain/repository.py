@@ -20,7 +20,7 @@ Three things differ from the monitor's store and each is deliberate:
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import psycopg
 from psycopg.rows import dict_row
@@ -785,6 +785,201 @@ class OnchainRepository:
                 '  updated_at = now()',
                 (entity_id, stream, last_block),
             )
+
+    # -- derived reads over the transfer history -------------------------
+    #
+    # These aggregate in SQL rather than in Python because the holder set is
+    # recomputed over the FULL history on every build, and a ZZZ-like project was
+    # sized at ~1.8M transfer rows a month (design, Scaling envelope). Pulling
+    # those rows into the process to sum them is the step that binds first; the
+    # replacement, when it does, is an incremental balance table updated per
+    # fetched window, and these method signatures are what it would keep.
+
+    def holder_balances(
+        self,
+        token_id: int,
+        *,
+        exclude: Optional[Sequence[str]] = None,
+        limit: Optional[int] = None,
+    ) -> List[Tuple[str, int]]:
+        """Net balance per address over the whole stored history, largest first.
+
+        Net, not gross: every address that ever touched the token contributes
+        `sum(received) - sum(sent)`, and only a positive result is a holder. An
+        address that received and then sent everything nets to zero and is not in
+        the result -- which is why the holder COUNT out of this is a count of
+        current holders and not of everyone who ever held.
+        """
+        excluded = [address.lower() for address in (exclude or [])]
+        rows = self.fetch_all(
+            f"""
+            WITH moves AS (
+                SELECT to_addr AS addr, amount FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s
+                UNION ALL
+                SELECT from_addr AS addr, -amount FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s
+            )
+            SELECT addr, SUM(amount) AS balance FROM moves
+            WHERE NOT (addr = ANY(%s))
+            GROUP BY addr HAVING SUM(amount) > 0
+            ORDER BY SUM(amount) DESC, addr
+            {'LIMIT %s' if limit is not None else ''}
+            """,
+            (token_id, token_id, excluded) + ((limit,) if limit is not None else ()),
+        )
+        return [(row['addr'], int(row['balance'])) for row in rows]
+
+    def transfer_row_count(self, token_id: int) -> int:
+        row = self.fetch_one(
+            f'SELECT count(*) AS n FROM {ONCHAIN_SCHEMA}.transfer WHERE token_id = %s',
+            (token_id,),
+        )
+        return 0 if row is None else int(row['n'])
+
+    def active_addresses(self, token_id: int, from_block: int, to_block: int) -> int:
+        """Distinct addresses on either side of a transfer in the window.
+
+        The counterpart to the provider's 24-hour VOLUME: volume without new
+        counterparties is what wash trading looks like from outside.
+        """
+        row = self.fetch_one(
+            f"""
+            SELECT count(DISTINCT addr) AS n FROM (
+                SELECT from_addr AS addr FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s AND block BETWEEN %s AND %s
+                UNION
+                SELECT to_addr AS addr FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s AND block BETWEEN %s AND %s
+            ) both_sides
+            """,
+            (token_id, from_block, to_block, token_id, from_block, to_block),
+        )
+        return 0 if row is None else int(row['n'])
+
+    def pool_counterparties(
+        self,
+        token_id: int,
+        pool_addresses: Sequence[str],
+        from_block: int,
+        to_block: int,
+    ) -> int:
+        """Distinct addresses trading against the pool in the window.
+
+        The counterpart to the provider's 24-hour TRADE COUNT. "Touching the
+        pool" is defined per pool type by the caller, which is why the addresses
+        are a parameter: a v4 pool has no address of its own, so its
+        counterparties are found through the pool manager and the hook.
+        """
+        addresses = [address.lower() for address in pool_addresses if address]
+        if not addresses:
+            return 0
+        row = self.fetch_one(
+            f"""
+            SELECT count(DISTINCT addr) AS n FROM (
+                SELECT to_addr AS addr FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s AND block BETWEEN %s AND %s
+                      AND from_addr = ANY(%s) AND NOT (to_addr = ANY(%s))
+                UNION
+                SELECT from_addr AS addr FROM {ONCHAIN_SCHEMA}.transfer
+                    WHERE token_id = %s AND block BETWEEN %s AND %s
+                      AND to_addr = ANY(%s) AND NOT (from_addr = ANY(%s))
+            ) counterparties
+            """,
+            (
+                token_id, from_block, to_block, addresses, addresses,
+                token_id, from_block, to_block, addresses, addresses,
+            ),
+        )
+        return 0 if row is None else int(row['n'])
+
+    def new_versus_returning(
+        self, token_id: int, from_block: int, to_block: int
+    ) -> Dict[str, int]:
+        """Receivers in the window split by whether the token had ever reached
+        them before it.
+
+        The counterpart to the HOLDER COUNT: one person splitting a balance
+        across twenty wallets raises the holder count and shows up here as twenty
+        new addresses on one day, which is the shape wallet-splitting has.
+        """
+        row = self.fetch_one(
+            f"""
+            WITH first_seen AS (
+                SELECT to_addr AS addr, min(block) AS first_block
+                FROM {ONCHAIN_SCHEMA}.transfer WHERE token_id = %s GROUP BY to_addr
+            ),
+            in_window AS (
+                SELECT DISTINCT to_addr AS addr FROM {ONCHAIN_SCHEMA}.transfer
+                WHERE token_id = %s AND block BETWEEN %s AND %s
+            )
+            SELECT
+                count(*) FILTER (WHERE first_seen.first_block >= %s) AS new_addresses,
+                count(*) FILTER (WHERE first_seen.first_block <  %s) AS returning_addresses
+            FROM in_window JOIN first_seen USING (addr)
+            """,
+            (token_id, token_id, from_block, to_block, from_block, from_block),
+        )
+        if row is None:
+            return {'new': 0, 'returning': 0}
+        return {
+            'new': int(row['new_addresses'] or 0),
+            'returning': int(row['returning_addresses'] or 0),
+        }
+
+    def burned_amount(
+        self, token_id: int, sinks: Sequence[str], *, mint_source: str
+    ) -> int:
+        """Everything ever sent to a burn sink, minus anything spent back out of
+        a sink that is a real address.
+
+        `mint_source` -- the zero address -- is a sink for the first sum and is
+        EXCLUDED from the second, and that asymmetry is the whole subtlety: a
+        transfer *from* `0x0` is a mint, not an un-burn. Subtracting mints made
+        the burn figure negative by the entire minted supply, which on a
+        fixed-supply launchpad token is every token there is. `0x…dEaD`, by
+        contrast, is an ordinary address a contract could in principle spend
+        from, so an outflow from it genuinely un-burns.
+        """
+        to_sinks = [address.lower() for address in sinks]
+        spendable = [address for address in to_sinks if address != mint_source.lower()]
+        row = self.fetch_one(
+            f"""
+            SELECT
+                COALESCE(SUM(amount) FILTER (WHERE to_addr = ANY(%s)), 0)
+              - COALESCE(SUM(amount) FILTER (WHERE from_addr = ANY(%s)), 0) AS burned
+            FROM {ONCHAIN_SCHEMA}.transfer WHERE token_id = %s
+            """,
+            (to_sinks, spendable, token_id),
+        )
+        return 0 if row is None else int(row['burned'] or 0)
+
+    def get_position_events(self, pool_id: int) -> List[Dict[str, Any]]:
+        return self.fetch_all(
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.position_event WHERE pool_id = %s '
+            'ORDER BY block, log_index',
+            (pool_id,),
+        )
+
+    def get_builds_for_project(
+        self, project_id: int, limit: int = 30
+    ) -> List[Dict[str, Any]]:
+        return self.fetch_all(
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE project_id = %s '
+            'ORDER BY id DESC LIMIT %s',
+            (project_id, limit),
+        )
+
+    def get_build(self, build_id: int) -> Optional[Dict[str, Any]]:
+        return self.fetch_one(
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE id = %s', (build_id,)
+        )
+
+    def get_projects(self) -> List[Dict[str, Any]]:
+        return self.fetch_all(
+            f"SELECT * FROM {ONCHAIN_SCHEMA}.entity WHERE level = 'project' "
+            'ORDER BY key'
+        )
 
     # -- thresholds ------------------------------------------------------
 

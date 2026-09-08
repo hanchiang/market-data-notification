@@ -76,6 +76,12 @@ class TestPairing:
             # lines below would satisfy a field-level check and fail A4.
             assert pair['counterpart'] in row
             assert pair['guards_against'] in row
+            # F5 (test round 1): the counterpart's NAME appearing is not the
+            # counterpart's VALUE appearing -- `_render_pairs` would happily
+            # print `counterpart=None` and this loop stayed green until the
+            # value itself was checked.
+            assert pair['counterpart_value'] is not None
+            assert f"{report._short(pair['counterpart_value'])}" in row
 
     def test_the_liquidity_row_names_its_pool_type(self):
         """A4's last clause: the custody read is defined differently for v3 and
@@ -179,7 +185,9 @@ class TestPairingAgainstTheProductsOwnList:
     # Frozen deliberately: this is the tripwire, not a restatement. A sixth pair
     # is a real product decision (a new gameable metric and the counterpart that
     # guards it), and it must not land by a test quietly widening to accept it --
-    # the design's pairing table has to move in the same change.
+    # the design's pairing table has to move in the same change (E-2, test
+    # round 1: docs/design/2026-09-06-project-dossier-collectors.md, the
+    # Gameable-metric table -- this set is exactly its five rows).
     GAMEABLE_METRICS = {
         'dex_volume_h24_usd',
         'dex_trades_h24',

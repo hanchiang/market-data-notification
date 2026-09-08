@@ -40,11 +40,18 @@ logger = logging.getLogger('Onchain watch')
 JOB_NAME = builder.JOB_WATCH
 WATCHED_JOB = builder.JOB_BUILD
 
-# The unit name the alert carries. `watch/missed_run` is the `project/section`
-# shape the payload validator enforces -- "watch" stands in for the project
-# because the thing that failed is not a project, it is the schedule.
-MISSED_RUN_UNIT = 'watch/missed_run'
-NEVER_RAN_UNIT = 'watch/never_ran'
+# The unit name the alert carries. `<job>/missed_run` is the `project/section`
+# shape the payload validator enforces -- the watched job's short name stands
+# in for the project because the thing that failed is not a project, it is the
+# schedule. Named after WATCHED_JOB (test-stage F/E-1) rather than hardcoded as
+# `watch/...`, because a payload naming only the watcher told the operator
+# nothing about which job's cron line was silent -- A11 requires the message
+# to name the missing run. `_UNIT`'s project segment forbids `.`, so the
+# `onchain.` prefix is dropped rather than the dotted job name reaching the
+# validator and failing sanitisation.
+_WATCHED_JOB_SHORT = WATCHED_JOB.rsplit('.', 1)[-1]
+MISSED_RUN_UNIT = f'{_WATCHED_JOB_SHORT}/missed_run'
+NEVER_RAN_UNIT = f'{_WATCHED_JOB_SHORT}/never_ran'
 
 
 def evaluate(

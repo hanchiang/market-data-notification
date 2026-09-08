@@ -159,6 +159,12 @@ async def _run_section(
     unanticipated exception into a lost build rather than a named section.
     """
     with collector_span(context.project.key) as span_id:
+        # F2 residual (test round 1): a collector that succeeds leaves its span
+        # id on the section row with nothing to grep for, because the only
+        # other line the section can produce is the FAILURE line below. A12's
+        # join needs at least one log line per span whichever way the section
+        # ends.
+        logger.info('section %s started', name)
         # Cleared per section so `evidence_ids` on a section row are that
         # section's own, which is what A12's "the rows this collector wrote"
         # means.

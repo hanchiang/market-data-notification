@@ -201,6 +201,33 @@ def test_the_alert_has_exactly_two_call_sites_in_the_product():
     }, dict(sites)
 
 
+def test_no_collector_reaches_the_telegram_transport_directly():
+    """F6 (test round 1): the tripwire above only counts `send_run_alert(`.
+
+    A collector under `src/service/onchain` calling
+    `telegram_notification.send_message_to_admin` or `send_alert_to_telegram`
+    directly -- instead of going through the one alert at `main()`'s end --
+    would add a message per unit invisibly, since every cardinality test in
+    this file stubs `run_build` and never sees inside it. `observability.py` is
+    the one sanctioned call site (`send_run_alert`'s own body) and is excluded.
+    """
+    import pathlib
+
+    src = pathlib.Path(build_job.__file__).resolve().parents[3] / 'src'
+    hits = []
+    for package in ('service/onchain', 'job/onchain'):
+        for path in (src / package).rglob('*.py'):
+            if path.name == 'observability.py':
+                continue
+            for line in path.read_text().splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith(('#', 'def ', 'async def ', 'from ', 'import ')):
+                    continue
+                if 'send_message_to_admin(' in line or 'send_alert_to_telegram(' in line:
+                    hits.append(f'{path.relative_to(src)}: {stripped}')
+    assert hits == []
+
+
 class TestRuntimeModeReachesTheSender:
     """The carried sub-stage A requirement. `runtime_mode` defaults to None,
     which resolves to the LIVE crypto admin chat, and forgetting it is silent:
@@ -295,7 +322,11 @@ class TestMissedRunWatcher:
 
         assert exit_code == 0
         assert len(sender.calls) == 1
-        assert 'watch/missed_run' in sender.calls[0]['message'].replace('\\', '')
+        # Names the WATCHED job ('build'), not the watcher itself (E-1, test
+        # stage round 1): the watcher's own run id is already in the "run N"
+        # line, so the unit's project segment is the one place the message can
+        # say which job's cron line went silent.
+        assert 'build/missed_run' in sender.calls[0]['message'].replace('\\', '')
         assert 'BuildDeadlineExceeded' in sender.calls[0]['message']
 
     @pytest.mark.asyncio

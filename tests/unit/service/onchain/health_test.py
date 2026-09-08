@@ -357,6 +357,35 @@ def scan(monkeypatch):
     return type('Scan', (), {'asked': asked, 'served': served})()
 
 
+class TestCreationBlockFallback:
+    """F4 (test round 1): `TestCustodyScanBounds` below always passes an
+    explicit `creation_block=`, so `_creation_block` itself -- the one place
+    that maps identity's `creation_block` field to a scan's start -- had only
+    the identity carry-forward test (M9/M10) standing between a non-int value
+    and a genesis walk, one layer away from the code that actually walks.
+
+    The fallback to 0 is deliberate ("slow and correct" per the function's own
+    docstring), not a bug to fail the section over, so this pins the choice
+    directly at the layer that makes it rather than reversing it.
+    """
+
+    def test_a_resolved_int_creation_block_is_used_as_is(self):
+        context = type('C', (), {'identity': {'creation_block': 53_000_000}})()
+        assert health._creation_block(context) == 53_000_000
+
+    @pytest.mark.parametrize(
+        'value', ['unavailable', None, 53_000_000.5, [53_000_000]],
+        ids=['string', 'none', 'float', 'list'],
+    )
+    def test_anything_other_than_an_int_falls_back_to_genesis(self, value):
+        context = type('C', (), {'identity': {'creation_block': value}})()
+        assert health._creation_block(context) == 0
+
+    def test_a_missing_creation_block_key_falls_back_to_genesis(self):
+        context = type('C', (), {'identity': {}})()
+        assert health._creation_block(context) == 0
+
+
 class TestCustodyScanBounds:
     @pytest.mark.asyncio
     async def test_a_first_v4_scan_starts_at_the_creation_block_not_at_genesis(

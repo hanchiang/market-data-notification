@@ -32,8 +32,12 @@ class TestDeadline:
         fire is caught at an age of 26 hours."""
         verdict = watch.evaluate(_run(26), deadline_hours=25, now=NOW)
         assert verdict['state'] == 'missed'
+        # Names the watched job ('build'), not the watcher (E-1, test round 1):
+        # the watcher's own run id is already on the "run N" line the alert
+        # sends, and it is the ONLY place a message can say which job's cron
+        # line went silent.
         assert verdict['unit'] == {
-            'unit': 'watch/missed_run', 'error_class': 'BuildDeadlineExceeded'
+            'unit': 'build/missed_run', 'error_class': 'BuildDeadlineExceeded'
         }
         assert verdict['age_hours'] == 26.0
 

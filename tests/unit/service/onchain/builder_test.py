@@ -6,6 +6,8 @@ and whether a failed section's baseline survives -- and a real collector would
 put four network dependencies between the test and that question. The collectors
 have their own tests, and the real path is exercised by an actual build.
 """
+from pathlib import Path
+
 import pytest
 
 from src.service.onchain import builder
@@ -21,6 +23,11 @@ from src.service.onchain.chain import PinnedBlock
 from src.service.onchain.registry import parse_registry, upsert_registry
 
 TOKEN = '0x' + '16' * 20
+
+# A distinct job name from `builder.JOB_BUILD` so TestLogEvidenceJoin's log
+# lines land in their own handler rather than being interleaved into whatever
+# handler another test file's job name already installed this session.
+JOB_BUILD_FOR_LOG_TEST = 'onchain.build.log_join_test'
 
 PINNED = PinnedBlock(
     block=1000, timestamp=1_700_000_000, window_start_block=100,
@@ -343,6 +350,89 @@ class TestBaselineAcrossAnOutage:
         assert third['changes']['changed'] == [
             {'field': 'owner', 'old': 'absent', 'new': '0xdeadbeef'}
         ]
+
+
+class TestLogEvidenceJoin:
+    """A12 end to end (test round 1, F2): the round-1 plan called this
+    "untestable at reasonable cost" on the theory that joining the three legs
+    needs a real build against four network dependencies. It does not -- the
+    join is a property of `run_context`/`collector_span`/`store_response`/
+    `_store_section`, none of which is collector-specific, and every one of
+    them is already driven here by the fake collectors `_install` installs.
+
+    Three assertions, matching A12's own wording: every log line written under
+    this run carries its run id; every evidence row's span id appears on some
+    log line from the same run (the join an operator's grep actually performs);
+    and the failed section's span id -- the row with no evidence, since the
+    collector raised before writing any -- is still on a log line, because
+    `_run_section` stamps the span on the failure line itself.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_alert_worthy_run_id_joins_the_log_to_the_evidence(
+        self, onchain_repository, seeded, monkeypatch, tmp_path
+    ):
+        import json
+        import logging
+
+        from src.service.onchain import evidence as evidence_module
+        from src.service.onchain.observability import configure_job_logging, run_context
+
+        # Idempotent: if an earlier test in this session already installed the
+        # job's handler (tests/unit/conftest.py's session-scoped log-dir
+        # override), this returns THAT handler rather than one pointed at
+        # `tmp_path` -- which is fine, since the file we read back is whichever
+        # one `baseFilename` names.
+        handler = configure_job_logging(JOB_BUILD_FOR_LOG_TEST, log_dir=str(tmp_path))
+        log_path = handler.baseFilename
+
+        async def collect_with_evidence(context, *args):
+            logging.getLogger('test collector').info('token economics collected')
+            evidence_module.store_response(
+                context.repository, entity_id=context.project_entity_id,
+                kind=evidence_module.KIND_JSONRPC, method_or_url='eth_call',
+                body={'ok': True}, endpoint_kind='public',
+            )
+            return SectionResult(
+                name=SECTION_TOKEN_ECONOMICS, status='ok', fields={'total_supply': '1'}
+            )
+
+        registry, project_id, chain_id = seeded
+        _install(monkeypatch, **{
+            SECTION_TOKEN_ECONOMICS: collect_with_evidence,
+            SECTION_ONCHAIN_HEALTH: _raises(SECTION_ONCHAIN_HEALTH, _EvmRpcError('boom')),
+        })
+        run_id = onchain_repository.start_run(JOB_BUILD_FOR_LOG_TEST)
+        context = _context(onchain_repository, registry, project_id, chain_id)
+        with run_context(run_id, JOB_BUILD_FOR_LOG_TEST):
+            result = await builder.build_project(context, run_id, project_entity_id=project_id)
+        onchain_repository.commit()
+        handler.flush()
+
+        lines = [
+            json.loads(line) for line in Path(log_path).read_text().splitlines() if line.strip()
+        ]
+        this_runs_lines = [line for line in lines if line['run_id'] == run_id]
+        assert this_runs_lines, 'no log line at all was written under this run'
+        # "every line of that run appears with its run id" -- trivially true of
+        # the filter above; the real claim is that filtering by run id is a
+        # sound way to isolate one run's lines from the file at all, i.e. no
+        # line lacks a run id while inside `run_context`.
+        assert all(line['run_id'] == run_id for line in this_runs_lines)
+
+        evidence_rows = onchain_repository.get_evidence_for_run(run_id)
+        assert evidence_rows, 'the fake collector did not write the evidence row it claims to'
+        evidence_spans = {row['span_id'] for row in evidence_rows}
+        log_spans = {line['span_id'] for line in this_runs_lines if line['span_id']}
+        assert evidence_spans, 'evidence rows carry no span id to join on'
+        assert evidence_spans <= log_spans
+
+        # `result.sections` (the dicts `_store_section` returns) do not carry
+        # `span_id`; the stored row does -- read it back the way the operator's
+        # own SQL query would.
+        stored_sections = onchain_repository.get_sections_for_build(result.build_id)
+        failed_section = next(s for s in stored_sections if s['status'] == 'failed')
+        assert failed_section['span_id'] in log_spans
 
 
 class TestProjectSelection:

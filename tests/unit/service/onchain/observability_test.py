@@ -532,3 +532,56 @@ class TestAlertBoundary:
         assert len(seen) == 1
         assert seen[0] is not None, 'the runtime mode was dropped before the sender'
         assert seen[0].use_dev_telegram is True
+
+
+class TestNoHandlerWritesUnderHome:
+    """F1's guard, exercised without ever creating a real file under the
+    operator's home directory.
+
+    `tests/unit/conftest.py`'s session-scoped `_isolate_onchain_log_dir`
+    fixture is what keeps `alerting_test.py`'s real `build.main()`/`watch.main()`
+    calls out of `~/onchain-data/logs/onchain/` -- the exact directory A12's
+    runbook procedure greps by run id. Its own assertion function is loaded
+    directly by file path (the `tests/` tree has no `__init__.py`, so it is not
+    importable as a package) and driven with a stand-in object carrying a
+    `baseFilename` under `Path.home()`, rather than a real
+    `TimedRotatingFileHandler`, which would have to open that path to exist at
+    all -- the one file write this test must never cause.
+    """
+
+    @staticmethod
+    def _load_conftest():
+        import importlib.util
+
+        conftest_path = Path(__file__).resolve().parents[2] / 'conftest.py'
+        spec = importlib.util.spec_from_file_location(
+            '_onchain_unit_conftest_under_test', conftest_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_a_handler_pointed_at_the_real_home_directory_fails_the_guard(self):
+        conftest = self._load_conftest()
+        root = logging.getLogger()
+        fake_handler = type(
+            'FakeHandler', (), {'baseFilename': str(Path.home() / 'onchain-data' / 'logs' / 'onchain' / 'onchain.build.log')}
+        )()
+        root.handlers.append(fake_handler)
+        try:
+            with pytest.raises(pytest.fail.Exception):
+                conftest._assert_no_root_handler_writes_under_home()
+        finally:
+            root.handlers.remove(fake_handler)
+
+    def test_a_handler_pointed_at_a_scratch_directory_passes_the_guard(self, tmp_path):
+        conftest = self._load_conftest()
+        root = logging.getLogger()
+        fake_handler = type(
+            'FakeHandler', (), {'baseFilename': str(tmp_path / 'onchain.build.log')}
+        )()
+        root.handlers.append(fake_handler)
+        try:
+            conftest._assert_no_root_handler_writes_under_home()  # must not raise
+        finally:
+            root.handlers.remove(fake_handler)

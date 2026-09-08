@@ -16,12 +16,70 @@ schema lives inside the monitor's database by design (one store, one schema per
 concern). `PROJECT_MONITOR_TEST_DATABASE_URL` therefore selects both suites'
 server, and it must not be pointed at the operator database.
 """
+import logging
 import os
+from pathlib import Path
 
 import psycopg
 import pytest
 
 from src.service.onchain.repository import OnchainRepository
+
+
+def _assert_no_root_handler_writes_under_home() -> None:
+    """The F1 guard: `tests/unit/job/onchain/alerting_test.py` drives the real
+    `build.main()`/`watch.main()` entrypoints, which install a
+    `TimedRotatingFileHandler` on the ROOT logger at `ONCHAIN_LOG_DIR` (default
+    the operator's `~/onchain-data/logs/onchain/` -- the exact directory A12's
+    runbook procedure greps by run id). Without `_isolate_onchain_log_dir`
+    below, every test run appends real files' worth of test run ids into that
+    directory, permanently interleaving them with the operator's own runs.
+
+    Checked at session teardown rather than only trusted from the env-var
+    override, because the override only works for a caller that goes through
+    `get_log_dir()` -- a call site that hardcodes the default path (or a future
+    job that reads `Path.home()` directly) would still write home and this is
+    the check that would catch it.
+    """
+    home = Path.home().resolve()
+    for handler in logging.getLogger().handlers:
+        base_filename = getattr(handler, 'baseFilename', None)
+        if base_filename is None:
+            continue
+        if home in Path(base_filename).resolve().parents:
+            pytest.fail(
+                f'root logger handler {handler!r} writes under the operator\'s '
+                f'home directory ({base_filename}); ONCHAIN_LOG_DIR must stay '
+                'overridden for the whole test session'
+            )
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _isolate_onchain_log_dir(tmp_path_factory):
+    """Session-scoped so every onchain job entrypoint call in the suite --
+    however deep, however many tests -- resolves `ONCHAIN_LOG_DIR` to a scratch
+    directory instead of the operator's real one. `configure_job_logging` is
+    idempotent per job name (it returns the handler already installed for that
+    job rather than opening a second one), so setting the env var once before
+    the session's first call is what makes every later call in the session
+    share this directory rather than falling back to the default.
+    """
+    directory = tmp_path_factory.mktemp('onchain-logs')
+    previous = os.environ.get('ONCHAIN_LOG_DIR')
+    os.environ['ONCHAIN_LOG_DIR'] = str(directory)
+    try:
+        yield directory
+    finally:
+        _assert_no_root_handler_writes_under_home()
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            if getattr(handler, '_onchain_job', None):
+                root.removeHandler(handler)
+                handler.close()
+        if previous is None:
+            os.environ.pop('ONCHAIN_LOG_DIR', None)
+        else:
+            os.environ['ONCHAIN_LOG_DIR'] = previous
 
 DEFAULT_TEST_DATABASE_URL = (
     'postgresql://postgres:devpass@127.0.0.1:55432/project_monitor_test'

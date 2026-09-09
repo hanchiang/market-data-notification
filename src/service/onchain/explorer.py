@@ -34,11 +34,24 @@ from market_data_library.core.crypto.blockscout import (
 )
 from market_data_library.util.exception import BlockscoutApiError
 
+from src.service.onchain.config import get_blockscout_api_key
+
 logger = logging.getLogger('Onchain explorer')
 
 STATE_OK = 'ok'
 STATE_UNAVAILABLE = 'unavailable'
 STATE_FAILED = 'failed'
+
+
+def build_explorer_service(explorer_api: str) -> BlockscoutService:
+    """The only place an explorer client is constructed.
+
+    A caller that builds one directly gets an unkeyed client, which 403s on
+    every read and costs six fields per project a night while still looking
+    like ordinary explorer flakiness. `explorer_factory_test.py` pins that
+    no other module constructs one, because forgetting the key is silent.
+    """
+    return BlockscoutService(explorer_api, api_key=get_blockscout_api_key())
 
 
 @dataclass

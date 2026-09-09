@@ -147,6 +147,17 @@ def get_dexscreener_slug(chain_id: int) -> str:
     return DEXSCREENER_CHAIN_SLUG[chain_id]
 
 
+def get_blockscout_api_key() -> Optional[str]:
+    """The explorer key, or None where none is configured.
+
+    Optional rather than required so a checkout without a key still builds: the
+    explorer is its own failure unit (design D8), so an unkeyed run degrades to
+    `partial` with the chain-derived fields intact instead of refusing to start.
+    Empty and whitespace-only read as absent. Why stripping matters: PR #41.
+    """
+    return os.getenv('BLOCKSCOUT_API_KEY', '').strip() or None
+
+
 def get_onchain_database_url(runtime_mode: Optional[object] = None) -> str:
     """The dossier's store is the monitor's database, one schema over.
 
@@ -172,6 +183,7 @@ __all__ = [
     'VERIFIED_UNISWAP_ADDRESSES',
     'ChainConstants',
     'get_archive_endpoint',
+    'get_blockscout_api_key',
     'get_build_deadline_hours',
     'get_chain_constants',
     'get_dexscreener_slug',

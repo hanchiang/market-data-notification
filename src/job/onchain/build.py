@@ -29,6 +29,7 @@ from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain import builder, chain as chain_module
 from src.service.onchain.collectors.base import BuildContext
 from src.service.onchain.config import (
+    get_blockscout_api_key,
     get_chain_constants,
     get_onchain_database_url,
     get_registry_path,
@@ -98,7 +99,9 @@ async def run_build(
                 chain_entry = registry.chain_for(project)
                 explorer_service = explorers.get(chain_entry.chain_id)
                 if explorer_service is None:
-                    explorer_service = BlockscoutService(chain_entry.explorer_api)
+                    explorer_service = BlockscoutService(
+                        chain_entry.explorer_api, api_key=get_blockscout_api_key()
+                    )
                     explorers[chain_entry.chain_id] = explorer_service
                 chain_entity = repository.get_entity_by_key(chain_entry.entity_key)
                 context = BuildContext(

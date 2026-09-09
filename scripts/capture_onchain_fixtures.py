@@ -40,7 +40,11 @@ from market_data_library.core.crypto.dexscreener import DexscreenerService
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain import chain as chain_module
 from src.service.onchain.collectors import uniswap
-from src.service.onchain.config import get_dexscreener_slug, get_registry_path
+from src.service.onchain.config import (
+    get_blockscout_api_key,
+    get_dexscreener_slug,
+    get_registry_path,
+)
 from src.service.onchain.registry import load_registry
 
 logging.basicConfig(level=logging.INFO)
@@ -71,7 +75,14 @@ async def capture(project_key: str, out_dir: Path, test_mode: bool) -> Dict[str,
     out_dir.mkdir(parents=True, exist_ok=True)
 
     dexscreener = DexscreenerService()
-    explorer = BlockscoutService(chain_entry.explorer_api)
+    # Keyed like the build job. This script calls the service directly rather
+    # than through `ExplorerUnit`, so it has no degradation path: an unkeyed 403
+    # aborts after the dexscreener and log files are rewritten, leaving them
+    # beside the previous run's explorer bodies -- a block-inconsistent fixture
+    # set the replay tests load without complaint.
+    explorer = BlockscoutService(
+        chain_entry.explorer_api, api_key=get_blockscout_api_key()
+    )
     role = chain_module.state_role(RuntimeMode.from_test_mode(test_mode))
     try:
         pairs, pair_body = await dexscreener.get_pairs_raw(

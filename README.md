@@ -183,6 +183,12 @@ TELEGRAM_CONNECT_TIMEOUT_SECONDS=20
 TELEGRAM_READ_TIMEOUT_SECONDS=20
 TELEGRAM_WRITE_TIMEOUT_SECONDS=20
 TELEGRAM_POOL_TIMEOUT_SECONDS=5
+
+# Chain-explorer key for the project dossier, sent as an `x-api-key` header.
+# Free tier at dev.blockscout.com covers the nightly build many times over.
+# Optional, but an unset key silently costs six fields per project per night
+# (design D8). Set it.
+BLOCKSCOUT_API_KEY=...
 ```
 
 For Coinalyze, configured symbols must resolve through futures metadata as BTC

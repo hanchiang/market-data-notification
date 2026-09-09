@@ -918,7 +918,7 @@ files = [
 
 [[package]]
 name = "market-data-library"
-version = "1.9.0"
+version = "1.10.0"
 description = "Unified, type-safe access to stocks and cryptocurrency market data providers."
 optional = false
 python-versions = ">=3.12"
@@ -938,8 +938,8 @@ tenacity = ">=9.1.2,<10"
 [package.source]
 type = "git"
 url = "ssh://git@github.com/hanchiang/market_data_api.git"
-reference = "1.9.0"
-resolved_reference = "38fe655a3f431da53b9a7917d3810a8087d908d4"
+reference = "1.10.0"
+resolved_reference = "c94f7b2ef74f243900af457270a5b3d2415e0a51"
 
 [[package]]
 name = "multidict"
@@ -2441,4 +2441,4 @@ redis = []
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.13"
-content-hash = "578e5a28faca1bc1f051736315aafa50d710d4a08de32162c2d3decad9293b92"
+content-hash = "d98d64f2811c9128c39a7263c6ef0088a5a03aaddd13af4d5f5a51d82d287e50"

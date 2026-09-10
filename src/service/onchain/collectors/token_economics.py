@@ -13,7 +13,7 @@ computed from the open positions by tick math, and that derivation is validated
 by running it on a v3 pool where `balanceOf` can check it (design, Testing).
 """
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from market_data_library.core.onchain.evm import abi
 
@@ -21,9 +21,11 @@ from src.service.onchain.collectors import transfers, uniswap
 from src.service.onchain.collectors.base import (
     SECTION_TOKEN_ECONOMICS,
     STATUS_OK,
+    STATUS_PARTIAL,
     BuildContext,
     SectionResult,
 )
+from src.service.onchain.diff import failed_field
 from src.service.onchain.config import ARCHETYPES_WITHOUT_TREASURY
 
 logger = logging.getLogger('Onchain token economics')
@@ -46,21 +48,16 @@ async def collect(context: BuildContext) -> SectionResult:
     context.record_jsonrpc(raw)
     total_supply = int(abi.decode_single('uint256', supply_data))
 
-    burned = context.repository.burned_amount(
-        token_entity_id,
-        list(transfers.burn_addresses()),
-        mint_source=transfers.ZERO_ADDRESS,
-    )
-    holders = transfers.holder_summary(context.repository, token_entity_id)
+    # Five fields below are sums over stored `Transfer` rows, which a failed log
+    # fetch leaves short of the pinned block. Derived from nothing they come out
+    # as 0, [] and `fixed` -- answers, not gaps. `burned: 0` beside a supply that
+    # fell reads as an unexplained loss, and `mint_path: fixed` is the field the
+    # threshold table watches, so a mintable token would read as fixed.
+    stale = _transfer_store_lag(context, token_entity_id)
 
     fields: Dict[str, Any] = {
         'total_supply': str(total_supply),
         'decimals': context.identity.get('decimals', UNAVAILABLE),
-        'burned': str(burned),
-        'burned_share': None if not total_supply else round(burned / total_supply, 6),
-        'mint_path': await _mint_path(context, token_entity_id),
-        'top_holders': holders['top_holders'],
-        'top_ten_share': holders['top_ten_share'],
         'lockers': _lockers(context),
         'treasury': (
             NOT_APPLICABLE
@@ -68,13 +65,65 @@ async def collect(context: BuildContext) -> SectionResult:
             else UNAVAILABLE
         ),
     }
-    fields['pool_held_share'] = await _pool_held_share(context, total_supply)
+
+    if stale is not None:
+        marker = failed_field(stale)
+        fields.update(
+            burned=marker,
+            burned_share=marker,
+            mint_path=marker,
+            top_holders=marker,
+            top_ten_share=marker,
+            pool_held_share=marker,
+        )
+        return SectionResult(
+            name=SECTION_TOKEN_ECONOMICS,
+            # `partial`, matching what identity and contract safety do when the
+            # explorer drops out: the section built, some fields did not.
+            status=STATUS_PARTIAL,
+            fields=fields,
+            error_class=stale,
+            evidence_ids=list(context.evidence_ids),
+        )
+
+    burned = context.repository.burned_amount(
+        token_entity_id,
+        list(transfers.burn_addresses()),
+        mint_source=transfers.ZERO_ADDRESS,
+    )
+    holders = transfers.holder_summary(context.repository, token_entity_id)
+    fields.update(
+        burned=str(burned),
+        burned_share=None if not total_supply else round(burned / total_supply, 6),
+        mint_path=await _mint_path(context, token_entity_id),
+        top_holders=holders['top_holders'],
+        top_ten_share=holders['top_ten_share'],
+        pool_held_share=await _pool_held_share(context, total_supply),
+    )
     return SectionResult(
         name=SECTION_TOKEN_ECONOMICS,
         status=STATUS_OK,
         fields=fields,
         evidence_ids=list(context.evidence_ids),
     )
+
+
+def _transfer_store_lag(context: BuildContext, token_entity_id: int) -> Optional[str]:
+    """The error class to mark transfer-derived fields with, or None if current.
+
+    Current means the cursor reached this run's pinned block. A cursor behind it
+    is the ordinary shape of the failure -- `advance_transfers` commits per
+    chunk, so a fetch that dies mid-walk leaves real rows covering part of the
+    range, and partial rows sum to a confident wrong number rather than to zero.
+    """
+    cursor = context.repository.get_fetch_cursor(
+        token_entity_id, transfers.STREAM_TRANSFER
+    )
+    if cursor is None:
+        return 'TransferStoreEmpty'
+    if cursor < context.block:
+        return 'TransferStoreBehind'
+    return None
 
 
 async def _mint_path(context: BuildContext, token_entity_id: int) -> str:

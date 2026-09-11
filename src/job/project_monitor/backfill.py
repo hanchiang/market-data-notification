@@ -392,6 +392,12 @@ async def main(
     if archive is None:
         print('backfill needs the archive endpoint; ROBINHOOD_CHAIN_RPC_URL is unset')
         return 1
+    # `--test_mode` never spends on the metered account (operator, 2026-09-11),
+    # matching `record.py`: state reads go to the public node instead.
+    if runtime_mode.is_test_mode:
+        state_endpoint, state_budget = get_public_endpoint(supports_batch=False), public_rpc_budget()
+    else:
+        state_endpoint, state_budget = archive, alchemy_budget()
 
     notes = []
     with ProjectMonitorRepository(
@@ -420,7 +426,7 @@ async def main(
             # job's per-sample burst is short and bounded and so does not
             # need the slowdown -- prospective, not a claim about its
             # operational history, which does not exist yet.
-            async with EvmClient(archive, alchemy_budget()) as state_client, EvmClient(
+            async with EvmClient(state_endpoint, state_budget) as state_client, EvmClient(
                 get_public_endpoint(supports_batch=True),
                 public_rpc_budget(
                     min_request_interval_seconds=BACKFILL_MIN_REQUEST_INTERVAL_SECONDS

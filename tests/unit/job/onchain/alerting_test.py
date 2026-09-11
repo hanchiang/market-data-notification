@@ -352,3 +352,93 @@ class TestMissedRunWatcher:
         behind the first."""
         await watch_job.main(test_mode=True)
         assert onchain_repository.get_latest_run(builder.JOB_WATCH) is not None
+
+
+class TestCeilingHitIsRecordedAndAlertedOnce:
+    """The cost gate: skip the call, record the skip, alert once per run.
+
+    The refusal is raised from the metered budget before any send, so the run
+    that hits it has spent nothing past the ceiling; what must survive is the
+    record -- the run row carries the spend the run DID make and the alert
+    names the class -- and the cardinality: one message, however many
+    sections the refusal took down.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_run_refused_while_pinning_writes_its_spend_and_alerts_once(
+        self, onchain_repository, demo_url, sender, monkeypatch
+    ):
+        from src.service.onchain.spend import SpendCeilingReachedError
+
+        async def refused_run(*args, ledger=None, **kwargs):
+            # What a real run does before the refusal: a few attempts land on
+            # the meter, then the next one crosses the line.
+            ledger.meter('alchemy', bills_units=True).admit(20)
+            raise SpendCeilingReachedError('alchemy', spent=20, cost=26, ceiling=40)
+
+        monkeypatch.setattr(build_job, 'run_build', refused_run)
+        exit_code = await build_job.main(test_mode=True)
+
+        run = onchain_repository.get_latest_run(builder.JOB_BUILD)
+        assert exit_code == 1
+        assert run['outcome'] == 'failed'
+        assert 'SpendCeilingReachedError' in run['notes']
+        assert run['spend_json'] == {'requests': {'alchemy': 1}, 'compute_units': {'alchemy': 20}}
+        assert len(sender.calls) == 1
+        # The alert prints units, not notes: a run refused while pinning has
+        # no section unit, so the run itself is the unit, and the class is
+        # what tells the operator this is the ceiling and not an outage.
+        assert 'SpendCeilingReachedError' in sender.calls[0]['message']
+        assert run['failed_units_json'] == [failed_unit('run/setup', 'SpendCeilingReachedError')]
+
+    @pytest.mark.asyncio
+    async def test_a_refusal_inside_a_section_is_that_sections_error_class(
+        self, onchain_repository, demo_url, sender, monkeypatch
+    ):
+        """Mid-run, the builder's per-section failure unit carries it (A3), so
+        the build is `partial` with the skip named, not lost."""
+
+        units = [failed_unit('zzz/onchain_health', 'SpendCeilingReachedError')]
+
+        async def partial_run(*args, ledger=None, **kwargs):
+            ledger.meter('alchemy', bills_units=True).admit(26)
+            result = kwargs['result']
+            result.outcome = 'partial'
+            result.failed_units.extend(units)
+            return result
+
+        monkeypatch.setattr(build_job, 'run_build', partial_run)
+        await build_job.main(test_mode=True)
+
+        run = onchain_repository.get_latest_run(builder.JOB_BUILD)
+        assert run['spend_json']['compute_units'] == {'alchemy': 26}
+        assert len(sender.calls) == 1
+        assert 'SpendCeilingReachedError' in sender.calls[0]['message']
+        assert run['failed_units_json'] == units
+
+    @pytest.mark.asyncio
+    async def test_run_build_draws_its_roles_from_the_callers_ledger_and_result(
+        self, onchain_repository, monkeypatch
+    ):
+        """The two objects `main` owns must be the ones `run_build` writes to,
+        or a raise mid-run snapshots an empty ledger and an empty notes list
+        and the row looks like an outage rather than a ceiling."""
+        from src.service.onchain import chain as chain_module
+        from src.service.onchain.spend import SpendLedger
+
+        async def refuse_to_pin(*args, **kwargs):
+            raise RuntimeError('stop before any network read')
+
+        monkeypatch.setattr(chain_module, 'pin_block_and_window', refuse_to_pin)
+        ledger = SpendLedger()
+        result = builder.RunResult(run_id=1, outcome='failed')
+        with pytest.raises(RuntimeError, match='stop before'):
+            await build_job.run_build(
+                onchain_repository, 1,
+                runtime_mode=RuntimeMode.from_test_mode(True), project_key=None,
+                ledger=ledger, result=result,
+            )
+        # Both roles were built on THIS ledger (test mode: both public)...
+        assert list(ledger.meters) == ['public']
+        # ...and the routing note landed on THIS result before the raise.
+        assert any(note.startswith('state via public, logs via public') for note in result.notes)

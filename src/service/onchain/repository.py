@@ -521,6 +521,23 @@ class OnchainRepository:
             (job,),
         )
 
+    def units_spent_this_month(self, kind: str = 'alchemy') -> int:
+        """Compute units every run of every onchain job charged to `kind` since
+        the start of the current UTC calendar month.
+
+        The job's ceiling is monthly but a run's ledger is per run, so the
+        month-to-date is re-read from the rows at each run start. UTC month,
+        not the provider's billing cycle: the two can differ by hours at the
+        boundary, and the provider's own cap covers that gap.
+        """
+        row = self.fetch_one(
+            "SELECT COALESCE(SUM((spend_json->'compute_units'->>%s)::bigint), 0) AS units "
+            f'FROM {ONCHAIN_SCHEMA}.run '
+            "WHERE started_at >= date_trunc('month', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'",
+            (kind,),
+        )
+        return int(row['units']) if row else 0
+
     def get_runs(self, job: Optional[str] = None, limit: int = 30) -> List[Dict[str, Any]]:
         if job is None:
             return self.fetch_all(

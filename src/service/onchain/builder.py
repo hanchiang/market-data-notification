@@ -85,7 +85,6 @@ class RunResult:
     outcome: str
     builds: List[ProjectBuildResult] = field(default_factory=list)
     failed_units: List[Dict[str, str]] = field(default_factory=list)
-    spend: Dict[str, Dict[str, int]] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
 
 

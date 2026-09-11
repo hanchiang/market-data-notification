@@ -71,9 +71,11 @@ class TestShippedRegistry:
             for key, value in VERIFIED_UNISWAP_ADDRESSES[ROBINHOOD_CHAIN_ID].items()
         }
 
-    def test_only_touch_grass_has_operator_supplied_sources(self):
-        """The other three had none; their published surfaces arrive in phase 1b
-        through the structural hop, not by being typed into the registry."""
+    def test_operator_supplied_sources_are_exactly_what_was_given(self):
+        """Touch Grass (2026-09-06) and Not A Website (2026-09-11) carry the
+        sources the operator supplied, verbatim from the ticket; the other two
+        have none, and their published surfaces arrive in phase 1b through the
+        structural hop, not by being typed into the registry."""
         registry = load_registry(DEFAULT_REGISTRY_PATH)
         assert {s.url for s in registry.projects['touch-grass'].sources} == {
             'https://www.touchgrass.family',
@@ -81,7 +83,13 @@ class TestShippedRegistry:
             'https://www.touchgrass.family/docs',
             'https://x.com/TouchGrassRWA',
         }
-        for key in ('not-a-website', 'predict-fwa', 'zzz'):
+        assert {s.url for s in registry.projects['not-a-website'].sources} == {
+            'http://notawebsite.fun/',
+            'https://notawebsite.fun/docs',
+            'https://pagemarkets.com/',
+            'https://x.com/notawebsite_rh',
+        }
+        for key in ('predict-fwa', 'zzz'):
             assert registry.projects[key].sources == ()
 
 

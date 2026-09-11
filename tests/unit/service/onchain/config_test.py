@@ -6,6 +6,8 @@ That deliberate softness is why the reading is pinned here: absent, empty and
 whitespace-only must all resolve the same way, because none of them produces a
 loud failure at runtime to reveal a mistake.
 """
+import pytest
+
 from src.service.onchain import config
 
 
@@ -44,3 +46,35 @@ class TestBlockscoutApiKey:
         # rejects less legibly than sending none at all.
         monkeypatch.setenv('BLOCKSCOUT_API_KEY', '')
         assert config.get_blockscout_api_key() is None
+
+
+class TestAlchemyMonthlyCuCeiling:
+    def test_the_default_stays_inside_the_jobs_share_of_the_provider_cap(self) -> None:
+        # The only number bounding metered spend, pinned to its derivation
+        # rather than to itself: raising it means re-deriving the headroom the
+        # NETNET monitor keeps on the same key.
+        usd = config.DEFAULT_ALCHEMY_MONTHLY_CU_CEILING / 1_000_000 * config.ALCHEMY_USD_PER_MILLION_CU
+        assert 0 < usd <= config.ALCHEMY_JOB_SHARE_OF_CAP_USD
+        assert config.ALCHEMY_JOB_SHARE_OF_CAP_USD < 1.0  # the operator's $1 cap
+
+    def test_unset_is_the_default(self, monkeypatch) -> None:
+        from src.service.onchain import config
+
+        monkeypatch.delenv('ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING', raising=False)
+        assert config.get_alchemy_monthly_cu_ceiling() == config.DEFAULT_ALCHEMY_MONTHLY_CU_CEILING
+
+    def test_a_positive_integer_is_read(self, monkeypatch) -> None:
+        from src.service.onchain import config
+
+        monkeypatch.setenv('ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING', ' 4200 ')
+        assert config.get_alchemy_monthly_cu_ceiling() == 4200
+
+    @pytest.mark.parametrize('value', ['abc', '0', '-5', '1.5', '\u00b2'])
+    def test_anything_else_is_rejected_by_name(self, monkeypatch, value) -> None:
+        # `0` would refuse every call while looking configured; `abc` would
+        # fail the run as a bare ValueError with no setting named.
+        from src.service.onchain import config
+
+        monkeypatch.setenv('ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING', value)
+        with pytest.raises(ValueError, match='ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING'):
+            config.get_alchemy_monthly_cu_ceiling()

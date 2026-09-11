@@ -6,8 +6,12 @@ share them and a second copy would be a second answer:
 
 * **Endpoint roles.** State reads go to the keyed archive endpoint under its
   compute-unit budget; log windows go to the public RPC under its request
-  budget. `--test_mode 1` routes state to the public endpoint too, so a manual
-  run spends nothing on the metered account (the monitor's rule, same reasoning).
+  budget, or to the archive endpoint when `ONCHAIN_LOG_ENDPOINT=archive` (the
+  one-off backfill; `kb/decisions.md` 2026-09-10). `--test_mode 1` routes
+  both to the public endpoint, so a manual run spends nothing on the metered
+  account (the monitor's rule, same reasoning). Every role's budget is wrapped
+  by the run's spend ledger, which counts each attempt and enforces the
+  monthly ceiling (`spend.py`).
 * **One pinned block per run**, not per project. Sections of different projects
   are only comparable if they were read at the same height, and a build that
   pinned per project would silently compare a project read at head with one read
@@ -20,7 +24,7 @@ share them and a second copy would be a second answer:
 """
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from market_data_library.core.onchain.evm import (
     EvmClient,
@@ -30,10 +34,14 @@ from market_data_library.core.onchain.evm import (
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain.config import (
+    LOG_ENDPOINT_ARCHIVE,
     ChainConstants,
+    get_alchemy_monthly_cu_ceiling,
     get_archive_endpoint,
+    get_log_endpoint,
     get_public_endpoint,
 )
+from src.service.onchain.spend import SpendLedger
 
 logger = logging.getLogger('Onchain chain')
 
@@ -57,22 +65,59 @@ class EndpointRole:
         return EvmClient(self.endpoint, self.budget)
 
 
-def state_role(runtime_mode: RuntimeMode) -> EndpointRole:
+def _archive_role(ledger: SpendLedger, *, alchemy_spent_this_month: int) -> EndpointRole:
+    """The keyed endpoint under the ledger's one metered meter.
+
+    Both roles that land here share the meter (`SpendLedger.meter`), so the
+    ceiling is one number for the account, not one per role.
+    """
+    return EndpointRole(
+        get_archive_endpoint(),
+        ledger.budget_for(
+            alchemy_budget(),
+            bills_units=True,
+            ceiling_units=get_alchemy_monthly_cu_ceiling(),
+            spent_before_run=alchemy_spent_this_month,
+        ),
+    )
+
+
+def _public_role(ledger: SpendLedger, *, supports_batch: bool) -> EndpointRole:
+    return EndpointRole(
+        get_public_endpoint(supports_batch=supports_batch),
+        ledger.budget_for(public_rpc_budget()),
+    )
+
+
+def state_role(
+    runtime_mode: RuntimeMode, ledger: SpendLedger, *, alchemy_spent_this_month: int = 0
+) -> EndpointRole:
     """Where state reads go: the archive endpoint, unless this is a test run or
     no archive key is configured."""
-    archive = get_archive_endpoint()
-    if archive is None or runtime_mode.is_test_mode:
+    if get_archive_endpoint() is None or runtime_mode.is_test_mode:
         # `supports_batch=False`: the public node is sent unbatched until
         # batching on it is measured (the monitor's finding, not re-tested here).
-        return EndpointRole(get_public_endpoint(supports_batch=False), public_rpc_budget())
-    return EndpointRole(archive, alchemy_budget())
+        return _public_role(ledger, supports_batch=False)
+    return _archive_role(ledger, alchemy_spent_this_month=alchemy_spent_this_month)
 
 
-def log_role() -> EndpointRole:
-    """Where log windows go: always the public RPC. The free archive tier
-    refuses `eth_getLogs` beyond a ten-block range, two orders below the
-    narrowest window the fetcher will ask for."""
-    return EndpointRole(get_public_endpoint(supports_batch=True), public_rpc_budget())
+def log_role(
+    runtime_mode: RuntimeMode, ledger: SpendLedger, *, alchemy_spent_this_month: int = 0
+) -> EndpointRole:
+    """Where log windows go: the public RPC by default.
+
+    The archive endpoint serves logs only when `ONCHAIN_LOG_ENDPOINT=archive`,
+    a key is configured and this is not a test run. The free archive tier
+    refuses `eth_getLogs` beyond a ten-block range, so the setting is for the
+    pay-as-you-go backfill window and is turned back off afterwards.
+    """
+    wants_archive = get_log_endpoint() == LOG_ENDPOINT_ARCHIVE
+    if wants_archive and get_archive_endpoint() is not None and not runtime_mode.is_test_mode:
+        logger.info('log windows routed to the archive endpoint by ONCHAIN_LOG_ENDPOINT')
+        return _archive_role(ledger, alchemy_spent_this_month=alchemy_spent_this_month)
+    if wants_archive:
+        logger.info('ONCHAIN_LOG_ENDPOINT=archive ignored: test mode or no archive key')
+    return _public_role(ledger, supports_batch=True)
 
 
 @dataclass(frozen=True)
@@ -246,21 +291,3 @@ def decode_string(data: str) -> Optional[str]:
     if len(raw) == 32:
         return raw.rstrip(b'\x00').decode('utf-8', errors='replace') or None
     return None
-
-
-def spend_counters() -> Dict[str, Dict[str, int]]:
-    """The empty `spend_json` shape a run starts from.
-
-    Counted per endpoint kind rather than per call site: the ledger's job is to
-    say what the run cost on each metered account, and a per-call-site breakdown
-    would be a profiler, not a budget.
-    """
-    return {'requests': {}, 'compute_units': {}}
-
-
-def add_spend(spend: Dict[str, Dict[str, int]], kind: str, requests: int, units: int = 0) -> None:
-    spend.setdefault('requests', {})
-    spend.setdefault('compute_units', {})
-    spend['requests'][kind] = spend['requests'].get(kind, 0) + requests
-    if units:
-        spend['compute_units'][kind] = spend['compute_units'].get(kind, 0) + units

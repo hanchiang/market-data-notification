@@ -12,18 +12,19 @@ close a build, and a section that raises still leaves the build to continue (A3)
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 from market_data_library.core.crypto.dexscreener import DexscreenerService
-from market_data_library.core.onchain.evm import ALCHEMY_CU_COSTS, EvmClient
+from market_data_library.core.onchain.evm import EvmClient
 
 from src.service.onchain import chain as chain_module
 from src.service.onchain import evidence as evidence_store
 from src.service.onchain.explorer import ExplorerUnit
 from src.service.onchain.registry import ChainEntry, ProjectEntry, Registry
 from src.service.onchain.repository import OnchainRepository
+from src.service.onchain.spend import SpendLedger
 
-CU_COSTS_BY_ENDPOINT = {'alchemy': ALCHEMY_CU_COSTS}
+EXPLORER_KIND = 'blockscout'
 
 logger = logging.getLogger('Onchain collectors')
 
@@ -67,45 +68,18 @@ class BuildContext:
     # `partial` identity section instead -- the chain-resolved addresses are
     # immutable, so an old one is as good as a new one (design, The build, 4).
     identity: Dict[str, Any] = field(default_factory=dict)
-    spend: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    # RPC spend is not charged here. The two clients' budgets are wrapped by
+    # this ledger, which counts every attempt at `reserve` (P13; `spend.py`).
+    # Collectors only add the HTTP providers that have no budget object.
+    ledger: SpendLedger = field(default_factory=SpendLedger)
     evidence_ids: List[int] = field(default_factory=list)
 
     @property
     def block(self) -> int:
         return self.pinned.block
 
-    def charge(self, endpoint_kind: str, requests: int, *, methods: Sequence[str] = ()) -> None:
-        """Bill one endpoint for work this collector caused (P13).
-
-        Counted per JSON-RPC MEMBER, not per HTTP request, because that is how
-        the metered endpoint bills: a batch of five `eth_call` costs five members'
-        worth of compute units whether it travels as one request or five. A count
-        of HTTP requests would understate the bill by the batch size and make the
-        capacity envelope the design rests on read low.
-        """
-        # Compute units exist on the METERED endpoint only. The public node
-        # publishes no cost model, so charging it Alchemy's table would invent a
-        # bill -- it gets a request count and no units, which is what the
-        # capacity envelope needs from it.
-        table = CU_COSTS_BY_ENDPOINT.get(endpoint_kind, {})
-        units = sum(table.get(method, 0) for method in methods)
-        chain_module.add_spend(self.spend, endpoint_kind, requests, units)
-
-    def charge_logs(self, requests: int) -> None:
-        """Bill the LOG endpoint for `eth_getLogs` round trips.
-
-        Log responses are not stored as evidence -- they are the raw material the
-        decoded rows already carry -- so they never pass through
-        `record_jsonrpc` and would otherwise be free in the ledger. They are the
-        bulk of a first build's traffic, which is exactly what the capacity
-        envelope needs to see.
-        """
-        if requests:
-            self.charge(self.log_client.endpoint.kind, requests, methods=['eth_getLogs'] * requests)
-
     def record_jsonrpc(self, raw: Any, *, entity_id: Optional[int] = None) -> int:
-        """Store one JSON-RPC response as evidence, charge it, and remember its id."""
-        self.charge(raw.endpoint_kind, 1, methods=[raw.method])
+        """Store one JSON-RPC response as evidence and remember its id."""
         evidence_id = evidence_store.store_response(
             self.repository,
             entity_id=entity_id if entity_id is not None else self.project_entity_id,
@@ -128,7 +102,11 @@ class BuildContext:
         entity_id: Optional[int] = None,
         params: Optional[Any] = None,
     ) -> int:
-        self.charge(endpoint_kind, 1)
+        # The explorer unit counts its own calls, failures included, and the
+        # job adds them at the end of each build; counting it here too would
+        # double every blockscout request.
+        if endpoint_kind != EXPLORER_KIND:
+            self.ledger.add_requests(endpoint_kind, 1)
         evidence_id = evidence_store.store_response(
             self.repository,
             entity_id=entity_id if entity_id is not None else self.project_entity_id,

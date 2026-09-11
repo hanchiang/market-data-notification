@@ -44,9 +44,6 @@ class FakeContext:
     block = 57_000_000
     log_client = object()
 
-    def charge_logs(self, requests):
-        """Spend accounting is P2-2's concern, not this test's."""
-
 
 class TestFetchOwnerTransfers:
     @pytest.fixture
@@ -314,7 +311,6 @@ class _CustodyContext:
             },
             'lockers': [],
         })()
-        self.charged_logs = 0
 
     class _StateClient:
         endpoint = type('E', (), {'kind': 'alchemy'})()
@@ -330,12 +326,6 @@ class _CustodyContext:
             return [
                 ('0x' + '0' * 24 + self.owner[2:], object()) for _ in calls
             ]
-
-    def charge_logs(self, requests):
-        self.charged_logs += requests
-
-    def charge(self, kind, count, methods=None):
-        pass
 
     def record_jsonrpc(self, raw):
         pass

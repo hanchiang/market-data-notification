@@ -11,10 +11,9 @@ from src.service.onchain.evidence import (
     MissingRunContextError,
     store_response,
 )
-from market_data_library.core.onchain.evm import ALCHEMY_CU_COSTS
-
 from src.service.onchain import chain
 from src.service.onchain.observability import collector_span, run_context
+from src.service.onchain.spend import SpendLedger
 
 
 class _FakeEndpoint:
@@ -244,17 +243,18 @@ class TestKeyedUrlByValue:
         assert len(onchain_repository.get_evidence_for_run(run_id)) == 1
 
 
-class TestSpendAccounting:
+class TestSpendLedgerFromEvidence:
     """P13's run ledger: `spend_json` must say what the run cost per endpoint.
 
-    Until 2026-09-08 it recorded only the pinning header reads and the explorer
-    call count, so run 6 in `onchain_demo` reported 23 alchemy requests against a
-    build that made 15 archive reads it never counted plus every log window on the
-    public node, which had no key in the ledger at all. The capacity envelope in
-    the design rests on this figure.
+    RPC calls are no longer charged from here at all -- the run's ledger counts
+    them where the client reserves budget (`spend_test.py`), and until
+    2026-09-11 the per-call-site charges recorded 2 public requests for a run
+    that sent dozens. What this file still pins is the HTTP side: providers
+    with no budget object are counted when their evidence is recorded, except
+    the explorer, whose unit counts its own calls (failures included).
     """
 
-    def _context(self, repository, spend):
+    def _context(self, repository, ledger):
         from src.service.onchain.collectors.base import BuildContext
 
         entity = repository.upsert_entity(level='project', key='project:spend')
@@ -262,46 +262,35 @@ class TestSpendAccounting:
             repository=repository, registry=None, chain=None, project=None,
             chain_entity_id=entity, project_entity_id=entity,
             pinned=_pinned(), state_client=None, log_client=_FakeClient('public'),
-            dexscreener=None, explorer=None, spend=spend,
+            dexscreener=None, explorer=None, ledger=ledger,
         )
 
-    def test_a_jsonrpc_read_is_billed_at_its_own_compute_unit_cost(
-        self, onchain_repository
-    ):
-        spend = chain.spend_counters()
-        context = self._context(onchain_repository, spend)
+    def test_recording_a_jsonrpc_response_charges_nothing_here(self, onchain_repository):
+        """Charging here AND at `reserve` would bill every stored read twice."""
+        ledger = SpendLedger()
+        context = self._context(onchain_repository, ledger)
         run_id = onchain_repository.start_run('onchain.build')
         with run_context(run_id, 'onchain.build'):
-            context.record_jsonrpc(_raw('eth_getBlockByNumber', 'alchemy'))
             context.record_jsonrpc(_raw('eth_call', 'alchemy'))
         onchain_repository.commit()
-        assert spend['requests']['alchemy'] == 2
-        assert spend['compute_units']['alchemy'] == (
-            ALCHEMY_CU_COSTS['eth_getBlockByNumber'] + ALCHEMY_CU_COSTS['eth_call']
-        )
+        assert ledger.snapshot() == {'requests': {}, 'compute_units': {}}
 
-    def test_log_windows_are_billed_to_the_log_endpoint(
-        self, onchain_repository
-    ):
-        """Log responses are never stored as evidence, so nothing else counts
-        them -- and they are the bulk of a first build's traffic."""
-        spend = chain.spend_counters()
-        context = self._context(onchain_repository, spend)
-        context.charge_logs(7)
-        assert spend['requests']['public'] == 7
+    def test_a_provider_http_response_counts_one_request(self, onchain_repository):
+        ledger = SpendLedger()
+        context = self._context(onchain_repository, ledger)
+        run_id = onchain_repository.start_run('onchain.build')
+        with run_context(run_id, 'onchain.build'):
+            context.record_http('dexscreener:pairs/x', {'pairs': []}, 'dexscreener')
+            context.record_http('dexscreener:pairs/y', {'pairs': []}, 'dexscreener')
+        onchain_repository.commit()
+        assert ledger.snapshot()['requests'] == {'dexscreener': 2}
 
-    def test_the_public_endpoint_is_counted_in_requests_and_never_in_units(
-        self, onchain_repository
-    ):
-        """It publishes no cost model. Billing it Alchemy's table would invent a
-        number the operator could not check against any invoice."""
-        spend = chain.spend_counters()
-        context = self._context(onchain_repository, spend)
-        context.charge_logs(4)
-        assert spend['requests']['public'] == 4
-        assert 'public' not in spend['compute_units']
-
-    def test_charging_nothing_creates_no_key(self, onchain_repository):
-        spend = chain.spend_counters()
-        self._context(onchain_repository, spend).charge_logs(0)
-        assert spend['requests'] == {}
+    def test_an_explorer_response_is_not_counted_here(self, onchain_repository):
+        """The explorer unit counts its own calls and the job adds them once."""
+        ledger = SpendLedger()
+        context = self._context(onchain_repository, ledger)
+        run_id = onchain_repository.start_run('onchain.build')
+        with run_context(run_id, 'onchain.build'):
+            context.record_http('blockscout:smart-contracts/x', {}, 'blockscout')
+        onchain_repository.commit()
+        assert ledger.snapshot()['requests'] == {}

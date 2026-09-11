@@ -27,7 +27,7 @@ from market_data_library.core.crypto.dexscreener import DexscreenerService
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain import builder, chain as chain_module
-from src.service.onchain.collectors.base import BuildContext
+from src.service.onchain.collectors.base import EXPLORER_KIND, BuildContext
 from src.service.onchain.config import (
     get_chain_constants,
     get_onchain_database_url,
@@ -36,11 +36,13 @@ from src.service.onchain.config import (
 from src.service.onchain.explorer import ExplorerUnit, build_explorer_service
 from src.service.onchain.observability import (
     configure_job_logging,
+    failed_unit,
     run_context,
     send_run_alert,
 )
 from src.service.onchain.registry import load_registry, upsert_registry
 from src.service.onchain.repository import LockNotAcquiredError, OnchainRepository
+from src.service.onchain.spend import SpendLedger
 
 logger = logging.getLogger('Onchain build')
 
@@ -57,18 +59,40 @@ async def run_build(
     *,
     runtime_mode: RuntimeMode,
     project_key: Optional[str] = None,
+    ledger: Optional[SpendLedger] = None,
+    result: Optional[builder.RunResult] = None,
 ) -> builder.RunResult:
-    """Everything between the run row opening and closing."""
+    """Everything between the run row opening and closing.
+
+    `ledger` is the caller's so a run that raises still leaves its spend where
+    `main` can write it to the run row; a ledger created here would die with
+    the exception.
+    """
     registry = load_registry(get_registry_path())
     project_ids = upsert_registry(repository, registry)
     repository.commit()
 
     projects = builder.select_projects(registry, project_key)
-    result = builder.RunResult(run_id=run_id, outcome='ok')
-    spend = chain_module.spend_counters()
+    # Caller-owned, like the ledger: a run that raises mid-way has still
+    # written notes (which endpoints, month-to-date spend) and per-section
+    # failed units for the projects that did build, and the row must keep them.
+    result = result if result is not None else builder.RunResult(run_id=run_id, outcome='ok')
 
-    state_role = chain_module.state_role(runtime_mode)
-    log_role = chain_module.log_role()
+    # One ledger for the run: both roles' budgets are wrapped by it, so every
+    # RPC attempt is counted and the monthly ceiling is checked before each
+    # send (P13, cost gates). Month-to-date comes from earlier runs' rows.
+    ledger = ledger if ledger is not None else SpendLedger()
+    spent_this_month = repository.units_spent_this_month('alchemy')
+    state_role = chain_module.state_role(
+        runtime_mode, ledger, alchemy_spent_this_month=spent_this_month
+    )
+    log_role = chain_module.log_role(
+        runtime_mode, ledger, alchemy_spent_this_month=spent_this_month
+    )
+    result.notes.append(
+        f'state via {state_role.endpoint.kind}, logs via {log_role.endpoint.kind}; '
+        f'{spent_this_month} alchemy CU already spent this month'
+    )
 
     dexscreener = DexscreenerService()
     explorers: Dict[int, BlockscoutService] = {}
@@ -87,9 +111,6 @@ async def run_build(
                 )
             constants = get_chain_constants(next(iter(chain_ids)))
             pinned = await chain_module.pin_block_and_window(state_client, constants, log_client)
-            chain_module.add_spend(
-                spend, state_role.endpoint.kind, pinned.header_reads, pinned.header_reads * 16
-            )
             result.notes.append(
                 f'pinned block {pinned.block}; 24h window from {pinned.window_start_block}'
             )
@@ -113,18 +134,21 @@ async def run_build(
                     log_client=log_client,
                     dexscreener=dexscreener,
                     explorer=ExplorerUnit(explorer_service),
-                    spend=spend,
+                    ledger=ledger,
                 )
-                build = await builder.build_project(
-                    context, run_id, project_entity_id=project_ids[project.key]
-                )
-                links = context.identity.get('published_links') or []
-                if links:
-                    builder.store_candidate_sources(
-                        repository, project_ids[project.key], links
+                try:
+                    build = await builder.build_project(
+                        context, run_id, project_entity_id=project_ids[project.key]
                     )
-                repository.commit()
-                chain_module.add_spend(spend, 'blockscout', context.explorer.calls)
+                    links = context.identity.get('published_links') or []
+                    if links:
+                        builder.store_candidate_sources(
+                            repository, project_ids[project.key], links
+                        )
+                    repository.commit()
+                finally:
+                    # Explorer calls made before a raise still cost requests.
+                    ledger.add_requests(EXPLORER_KIND, context.explorer.calls)
                 result.builds.append(build)
                 result.failed_units.extend(build.failed_units)
                 result.notes.append(
@@ -137,7 +161,6 @@ async def run_build(
         for service in explorers.values():
             await service.cleanup()
 
-    result.spend = spend
     result.outcome = builder.run_outcome(result.builds)
     return result
 
@@ -152,22 +175,34 @@ async def main(
     repository: Optional[OnchainRepository] = None
     run_id: Optional[int] = None
     outcome = 'failed'
-    failed_units: List[Dict[str, Any]] = []
-    notes: List[str] = []
-    spend: Dict[str, Any] = {}
+    # Owned here, not by `run_build`: a run that raises mid-way (a ceiling hit
+    # while pinning, a transport failure) has still spent and still recorded
+    # which endpoints it used and which sections failed, and the row must say
+    # so (P13). Read at the end whichever way the run ended.
+    ledger = SpendLedger()
+    result = builder.RunResult(run_id=0, outcome='failed')
+    failed_units: List[Dict[str, Any]] = result.failed_units
+    notes: List[str] = result.notes
     try:
         repository = OnchainRepository(get_onchain_database_url(runtime_mode))
         run_id = repository.start_run(JOB_NAME)
+        result.run_id = run_id
         with run_context(run_id, JOB_NAME):
             try:
                 with repository.advisory_lock():
                     result = await run_build(
-                        repository, run_id, runtime_mode=runtime_mode, project_key=project
+                        repository,
+                        run_id,
+                        runtime_mode=runtime_mode,
+                        project_key=project,
+                        ledger=ledger,
+                        result=result,
                     )
                     outcome = result.outcome
+                    # The same object in production; read back regardless so a
+                    # stand-in `run_build` that builds its own result still counts.
                     failed_units = result.failed_units
                     notes = result.notes
-                    spend = result.spend
             except LockNotAcquiredError:
                 outcome = 'skipped'
                 notes.append('another onchain run holds the advisory lock')
@@ -175,6 +210,10 @@ async def main(
         # The CLASS, never the message: the message can carry the keyed URL.
         outcome = 'failed'
         notes.append(f'run failed: {type(exc).__name__}')
+        # The alert prints units, not notes: without this it reads "failed with
+        # no unit recorded", once an hour for the rest of the month when the
+        # refusal lands while pinning the block.
+        failed_units.append(failed_unit('run/setup', type(exc).__name__))
         logger.error('onchain build failed: %s', type(exc).__name__, exc_info=True)
         if repository is not None:
             repository.rollback()
@@ -184,7 +223,7 @@ async def main(
                 run_id,
                 outcome=outcome,
                 failed_units=failed_units,
-                spend=spend,
+                spend=ledger.snapshot(),
                 notes='; '.join(notes),
             )
         if repository is not None:

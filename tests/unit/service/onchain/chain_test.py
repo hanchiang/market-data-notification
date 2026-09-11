@@ -9,6 +9,7 @@ import pytest
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain import chain
 from src.service.onchain.config import ChainConstants
+from src.service.onchain.spend import MeteredBudget, SpendLedger
 
 CONSTANTS = ChainConstants(chain_id=4663, blocks_per_second=10.0, blocks_per_hour=36000)
 
@@ -31,28 +32,87 @@ class FakeChain:
         return self.head, None
 
 
+LIVE = RuntimeMode.from_test_mode(False)
+TEST = RuntimeMode.from_test_mode(True)
+
+
+def _archive(monkeypatch):
+    from market_data_library.core.onchain.evm import Endpoint
+
+    monkeypatch.setattr(
+        chain, 'get_archive_endpoint',
+        lambda: Endpoint(kind='alchemy', url='https://example.invalid/key'),
+    )
+
+
 class TestEndpointRoles:
-    def test_logs_always_go_to_the_public_endpoint(self):
+    def test_logs_go_to_the_public_endpoint_by_default(self, monkeypatch):
         """The free archive tier refuses `eth_getLogs` beyond ten blocks, two
         orders below the narrowest window the fetcher asks for."""
-        assert chain.log_role().endpoint.kind == 'public'
+        _archive(monkeypatch)
+        monkeypatch.delenv('ONCHAIN_LOG_ENDPOINT', raising=False)
+        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'public'
 
-    def test_test_mode_keeps_state_reads_off_the_metered_account(self):
-        role = chain.state_role(RuntimeMode.from_test_mode(True))
-        assert role.endpoint.kind == 'public'
+    def test_the_setting_moves_logs_to_the_archive_endpoint(self, monkeypatch):
+        """The backfill switch (`kb/decisions.md` 2026-09-10): on for the one
+        pay-as-you-go window, off again afterwards."""
+        _archive(monkeypatch)
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'archive')
+        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'alchemy'
+
+    def test_the_setting_cannot_move_a_test_run_onto_the_metered_account(self, monkeypatch):
+        _archive(monkeypatch)
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'archive')
+        assert chain.log_role(TEST, SpendLedger()).endpoint.kind == 'public'
+
+    def test_the_setting_without_a_key_falls_back_to_public(self, monkeypatch):
+        monkeypatch.setattr(chain, 'get_archive_endpoint', lambda: None)
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'archive')
+        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'public'
+
+    def test_a_misspelt_setting_is_refused_not_defaulted(self, monkeypatch):
+        _archive(monkeypatch)
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'archvie')
+        with pytest.raises(ValueError):
+            chain.log_role(LIVE, SpendLedger())
+
+    def test_test_mode_keeps_state_reads_off_the_metered_account(self, monkeypatch):
+        _archive(monkeypatch)
+        assert chain.state_role(TEST, SpendLedger()).endpoint.kind == 'public'
 
     def test_a_live_run_uses_the_archive_endpoint_when_one_is_configured(self, monkeypatch):
-        from market_data_library.core.onchain.evm import Endpoint
-
-        monkeypatch.setattr(
-            chain, 'get_archive_endpoint',
-            lambda: Endpoint(kind='alchemy', url='https://example.invalid/key'),
-        )
-        assert chain.state_role(RuntimeMode.from_test_mode(False)).endpoint.kind == 'alchemy'
+        _archive(monkeypatch)
+        assert chain.state_role(LIVE, SpendLedger()).endpoint.kind == 'alchemy'
 
     def test_no_archive_key_falls_back_rather_than_raising(self, monkeypatch):
         monkeypatch.setattr(chain, 'get_archive_endpoint', lambda: None)
-        assert chain.state_role(RuntimeMode.from_test_mode(False)).endpoint.kind == 'public'
+        assert chain.state_role(LIVE, SpendLedger()).endpoint.kind == 'public'
+
+    def test_every_role_budget_is_metered(self, monkeypatch):
+        """The count lives at `reserve`; a role handed an unwrapped budget
+        would be the uncounted call site the ledger was rebuilt to remove."""
+        _archive(monkeypatch)
+        ledger = SpendLedger()
+        for role in (chain.state_role(LIVE, ledger), chain.log_role(LIVE, ledger),
+                     chain.state_role(TEST, ledger)):
+            assert isinstance(role.budget, MeteredBudget)
+
+    def test_the_archive_meter_carries_the_ceiling_and_month_to_date(self, monkeypatch):
+        _archive(monkeypatch)
+        monkeypatch.setenv('ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING', '4200')
+        role = chain.state_role(LIVE, SpendLedger(), alchemy_spent_this_month=17)
+        assert role.budget.meter.ceiling_units == 4200
+        assert role.budget.meter.spent_before_run == 17
+        assert role.budget.meter.bills_units is True
+
+    def test_the_public_meter_has_no_ceiling(self, monkeypatch):
+        # `load_dotenv()` at import means a repo `.env` set for the backfill
+        # (`ONCHAIN_LOG_ENDPOINT=archive` plus a key) reaches this test.
+        monkeypatch.delenv('ONCHAIN_LOG_ENDPOINT', raising=False)
+        monkeypatch.setattr(chain, 'get_archive_endpoint', lambda: None)
+        role = chain.log_role(LIVE, SpendLedger())
+        assert role.budget.meter.ceiling_units is None
+        assert role.budget.meter.bills_units is False
 
 
 class TestBoundarySearch:
@@ -143,16 +203,6 @@ class TestDecodeString:
     def test_an_empty_return_value_is_none(self):
         assert chain.decode_string('0x') is None
         assert chain.decode_string('') is None
-
-
-class TestSpendCounters:
-    def test_counters_accumulate_per_endpoint_kind(self):
-        spend = chain.spend_counters()
-        chain.add_spend(spend, 'alchemy', requests=3, units=48)
-        chain.add_spend(spend, 'alchemy', requests=2, units=32)
-        chain.add_spend(spend, 'public', requests=5)
-        assert spend['requests'] == {'alchemy': 5, 'public': 5}
-        assert spend['compute_units'] == {'alchemy': 80}
 
 
 class TestCreationSearchBounds:

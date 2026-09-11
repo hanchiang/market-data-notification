@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional
 from market_data_library.core.onchain.evm import abi
 from market_data_library.core.onchain.evm.keccak import keccak256
 
+from src.service.onchain.spend import SpendCeilingReachedError
+
 from src.service.onchain.collectors import uniswap
 from src.service.onchain.collectors.base import (
     SECTION_CONTRACT_SAFETY,
@@ -233,6 +235,10 @@ async def _roles(
             )
             context.record_jsonrpc(raw)
             fields['owner'] = str(abi.decode_single('address', data)).lower()
+        except SpendCeilingReachedError:
+            # A refused call is not a revert: storing `reverted` here would
+            # publish a renounced-ownership claim the chain never made.
+            raise
         except Exception as exc:
             # A present selector that reverts is a fact worth storing, not a
             # failure: it means the function exists but refuses, which is what
@@ -256,6 +262,8 @@ async def _roles(
             context.record_jsonrpc(raw)
             if abi.decode_single('bool', data):
                 holders.append(address)
+        except SpendCeilingReachedError:
+            raise
         except Exception as exc:
             logger.info('hasRole reverted for %s: %s', address, type(exc).__name__)
     fields['role_holders'] = holders

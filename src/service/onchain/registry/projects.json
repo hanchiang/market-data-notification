@@ -36,7 +36,12 @@
       "chain_id": 4663,
       "archetype": "launchpad-fixed-supply",
       "pool_ref": "0x6d489e07d7fe2b4bc5749f75d56337888b68a34a",
-      "sources": []
+      "sources": [
+        {"class": "web", "url": "http://notawebsite.fun/"},
+        {"class": "web", "url": "https://notawebsite.fun/docs"},
+        {"class": "web", "url": "https://pagemarkets.com/"},
+        {"class": "x", "url": "https://x.com/notawebsite_rh"}
+      ]
     },
     {
       "key": "predict-fwa",

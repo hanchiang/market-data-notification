@@ -7,9 +7,11 @@ code. These tests build bytecode by hand rather than fixture it, because what
 must be asserted is that a selector present in the code IS found and one absent
 is NOT -- and a recorded fixture proves neither direction on its own.
 """
+import pytest
 from market_data_library.core.onchain.evm import abi
 
 from src.service.onchain.collectors import contract_safety as safety
+from src.service.onchain.spend import SpendCeilingReachedError
 
 ZERO = '0x' + '0' * 40
 ALICE = '0x' + '11' * 20
@@ -123,3 +125,37 @@ class TestFrozen:
             {'privileged_selectors': ['hasRole'], 'owner': 'absent',
              'role_holders': [ALICE], 'proxy': 'none'}
         ) is False
+
+
+class _RefusingClient:
+    """A state client whose next call is refused by the spend ceiling."""
+
+    async def call(self, *args, **kwargs):
+        raise SpendCeilingReachedError('alchemy', spent=10, cost=26, ceiling=20)
+
+
+class _Context:
+    def __init__(self):
+        self.state_client = _RefusingClient()
+        self.block = 1
+        self.identity = {'hooks': ALICE}
+
+    def record_jsonrpc(self, raw):
+        raise AssertionError('nothing was sent, so nothing is recorded')
+
+
+class TestARefusedCallIsNotARevert:
+    """Both `_roles` handlers catch `Exception` because a present selector that
+    reverts is a fact worth storing. A spend-ceiling refusal is not that fact:
+    stored as `owner: reverted` it would publish a renounced-ownership claim the
+    chain never made, in a section reading `ok` with no unit and no alert."""
+
+    @pytest.mark.asyncio
+    async def test_owner_refused_by_the_ceiling_raises_rather_than_reading_reverted(self):
+        with pytest.raises(SpendCeilingReachedError):
+            await safety._roles(_Context(), ALICE, ALICE, ['owner'])
+
+    @pytest.mark.asyncio
+    async def test_has_role_refused_by_the_ceiling_raises_rather_than_reading_no_holders(self):
+        with pytest.raises(SpendCeilingReachedError):
+            await safety._roles(_Context(), ALICE, ALICE, ['hasRole'])

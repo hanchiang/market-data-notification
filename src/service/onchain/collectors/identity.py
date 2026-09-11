@@ -202,7 +202,7 @@ async def creation_search_bounds(
 
 
 async def _creation_bounds(context: BuildContext, fields: Dict[str, Any]) -> Tuple[int, int]:
-    """`creation_search_bounds` for this build, with its header reads billed."""
+    """`creation_search_bounds` for this build, with its header reads logged."""
     from src.service.onchain.config import get_chain_constants
 
     from_block, to_block, reads = await creation_search_bounds(
@@ -212,12 +212,6 @@ async def _creation_bounds(context: BuildContext, fields: Dict[str, Any]) -> Tup
         head_timestamp=context.pinned.timestamp,
         constants=get_chain_constants(context.chain.chain_id),
     )
-    if reads:
-        context.charge(
-            context.state_client.endpoint.kind,
-            reads,
-            methods=['eth_getBlockByNumber'] * reads,
-        )
     logger.info(
         'creation log for %s searched over blocks %s-%s after %s header reads',
         context.project.key, from_block, to_block, reads,
@@ -318,8 +312,7 @@ async def _v3_creation(
     )
     from_block, to_block = await _creation_bounds(context, provider)
     try:
-        logs, raws = await fetch_window(context.log_client, query, from_block, to_block)
-        context.charge_logs(len(raws))
+        logs, _ = await fetch_window(context.log_client, query, from_block, to_block)
     except EvmClientError as exc:
         logger.warning('v3 creation log unavailable: %s', type(exc).__name__)
         return {'creation_block': UNAVAILABLE, 'creation_tx': UNAVAILABLE}
@@ -387,8 +380,7 @@ async def _v4_key(
     )
     from_block, to_block = await _creation_bounds(context, provider)
     try:
-        logs, raws = await fetch_window(context.log_client, query, from_block, to_block)
-        context.charge_logs(len(raws))
+        logs, _ = await fetch_window(context.log_client, query, from_block, to_block)
     except EvmClientError as exc:
         logger.warning('v4 Initialize log unavailable: %s', type(exc).__name__)
         logs = []

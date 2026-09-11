@@ -948,8 +948,9 @@ class _FakeEndpointClient:
         return 12_345, {'result': '0x3039'}
 
 
+@pytest.mark.parametrize('test_mode', [False, True])
 def test_backfill_main_splits_the_state_and_log_planes_across_two_endpoints(
-    monkeypatch, database_url,
+    monkeypatch, database_url, test_mode,
 ):
     """The routing this job's whole failure history has turned on.
 
@@ -1004,14 +1005,17 @@ def test_backfill_main_splits_the_state_and_log_planes_across_two_endpoints(
         lambda runtime_mode: database_url,
     )
 
-    result = asyncio.run(backfill.main([1, 2, 3, 4]))
+    result = asyncio.run(backfill.main([1, 2, 3, 4], test_mode=test_mode))
 
+    # `--test_mode` never spends on the metered account (operator, 2026-09-11):
+    # the state steps move to the public endpoint AND its request-paced budget.
+    state = 'public' if test_mode else 'alchemy'
     assert result == 0
     assert {name: c.endpoint.kind for name, c in seen.items()} == {
-        'step1': 'alchemy', 'step2': 'public', 'step3': 'public', 'step4': 'alchemy',
+        'step1': state, 'step2': 'public', 'step3': 'public', 'step4': state,
     }
     assert {name: c.budget.endpoint_kind for name, c in seen.items()} == {
-        'step1': 'alchemy', 'step2': 'public', 'step3': 'public', 'step4': 'alchemy',
+        'step1': state, 'step2': 'public', 'step3': 'public', 'step4': state,
     }
     # Two clients, one per endpoint -- not one per step. A fresh `EvmClient`
     # restarts its budget's rolling window at zero, so a per-step client would

@@ -141,6 +141,54 @@ def get_build_deadline_hours() -> float:
     )
 
 
+# The job's own monthly ceiling on the metered account, in compute units, the
+# second guard behind the operator's $1 provider cap (`kb/decisions.md`
+# 2026-09-10). The three numbers below are one derivation and `config_test.py`
+# re-runs it: the default must stay under the job's share of the cap, leaving
+# the rest of the $1 to the NETNET monitor, whose spend on the same key is not
+# recorded anywhere the job can read. A steady month is ~200k CU; the backfill
+# is a few hundred calls. Configuration, not code: the cost gate freezes it per phase.
+ALCHEMY_USD_PER_MILLION_CU = 0.45  # Pay-As-You-Go list price, vendor docs 2026-09-09
+ALCHEMY_JOB_SHARE_OF_CAP_USD = 0.70  # of the operator's $1 provider cap
+DEFAULT_ALCHEMY_MONTHLY_CU_CEILING = 1_500_000  # about $0.68
+
+LOG_ENDPOINT_PUBLIC = 'public'
+LOG_ENDPOINT_ARCHIVE = 'archive'
+LOG_ENDPOINTS = frozenset({LOG_ENDPOINT_PUBLIC, LOG_ENDPOINT_ARCHIVE})
+
+
+def get_alchemy_monthly_cu_ceiling() -> int:
+    """Compute units the job may bill this month; a positive integer.
+
+    Rejected at read time rather than at the first call: a bad value would
+    otherwise fail the run as a bare `ValueError` with no name, and `0` would
+    refuse every call while looking like a configured ceiling.
+    """
+    value = os.getenv('ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING', '').strip()
+    if not value:
+        return DEFAULT_ALCHEMY_MONTHLY_CU_CEILING
+    if not value.isdecimal() or int(value) <= 0:
+        raise ValueError(
+            f'ONCHAIN_ALCHEMY_MONTHLY_CU_CEILING must be a positive integer, not {value!r}'
+        )
+    return int(value)
+
+
+def get_log_endpoint() -> str:
+    """Which endpoint serves log windows: `public` (default) or `archive`.
+
+    Rejected rather than defaulted on a typo: `ONCHAIN_LOG_ENDPOINT=archvie`
+    silently running the backfill on the public node is the exact failure the
+    setting exists to avoid.
+    """
+    value = os.getenv('ONCHAIN_LOG_ENDPOINT', LOG_ENDPOINT_PUBLIC).strip().lower()
+    if value not in LOG_ENDPOINTS:
+        raise ValueError(
+            f'ONCHAIN_LOG_ENDPOINT must be one of {sorted(LOG_ENDPOINTS)}, not {value!r}'
+        )
+    return value
+
+
 def get_dexscreener_slug(chain_id: int) -> str:
     if chain_id not in DEXSCREENER_CHAIN_SLUG:
         raise KeyError(f'no dexscreener slug for chain id {chain_id}')
@@ -172,22 +220,30 @@ __all__ = [
     'ARCHETYPES_WITHOUT_TREASURY',
     'ARCHETYPE_LAUNCHPAD_FIXED_SUPPLY',
     'CHAIN_CONSTANTS',
+    'DEFAULT_ALCHEMY_MONTHLY_CU_CEILING',
     'DEFAULT_BUILD_DEADLINE_HOURS',
     'DEFAULT_LOG_DIR',
     'DEFAULT_REGISTRY_PATH',
     'KNOWN_ARCHETYPES',
+    'LOG_ENDPOINTS',
+    'LOG_ENDPOINT_ARCHIVE',
+    'LOG_ENDPOINT_PUBLIC',
     'LOG_RETENTION_DAYS',
     'ONCHAIN_SCHEMA',
     'ROBINHOOD_CHAIN_ID',
     'SOURCE_CLASSES',
     'VERIFIED_UNISWAP_ADDRESSES',
     'ChainConstants',
+    'ALCHEMY_JOB_SHARE_OF_CAP_USD',
+    'ALCHEMY_USD_PER_MILLION_CU',
+    'get_alchemy_monthly_cu_ceiling',
     'get_archive_endpoint',
     'get_blockscout_api_key',
     'get_build_deadline_hours',
     'get_chain_constants',
     'get_dexscreener_slug',
     'get_log_dir',
+    'get_log_endpoint',
     'get_onchain_database_url',
     'get_project_monitor_database_url',
     'get_public_endpoint',

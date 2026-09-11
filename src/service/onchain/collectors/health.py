@@ -61,7 +61,6 @@ async def collect(context: BuildContext) -> SectionResult:
         creation_block=creation_block,
         to_block=context.block,
     )
-    context.charge_logs(outcome.windows)
 
     holders = transfers.holder_summary(context.repository, token_entity_id)
     ok, mismatches = await transfers.check_derivation(
@@ -69,14 +68,6 @@ async def collect(context: BuildContext) -> SectionResult:
         token_address=token_address,
         block=context.block,
         holders=holders['top_holders'],
-    )
-    # One `balanceOf` per top holder, batched into few requests but billed per
-    # member. `check_derivation` takes a client rather than the context, so the
-    # charge is raised here from the count the caller already knows.
-    context.charge(
-        context.state_client.endpoint.kind,
-        len(holders['top_holders']),
-        methods=['eth_call'] * len(holders['top_holders']),
     )
     if not ok:
         logger.error(
@@ -214,10 +205,9 @@ async def _fetch_events(
     from src.service.project_monitor.logs import fetch_window
 
     try:
-        logs, raws = await fetch_window(
+        logs, _ = await fetch_window(
             context.log_client, query, from_block, context.block if to_block is None else to_block
         )
-        context.charge_logs(len(raws))
         return logs
     except EvmClientError as exc:
         logger.warning('%s log window failed: %s', query.name, type(exc).__name__)

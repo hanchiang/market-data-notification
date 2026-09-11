@@ -46,19 +46,25 @@ def _archive(monkeypatch):
 
 
 class TestEndpointRoles:
-    def test_logs_go_to_the_public_endpoint_by_default(self, monkeypatch):
-        """The free archive tier refuses `eth_getLogs` beyond ten blocks, two
-        orders below the narrowest window the fetcher asks for."""
+    def test_logs_go_to_the_keyed_endpoint_by_default(self, monkeypatch):
+        """The account stays on Pay-As-You-Go (`kb/decisions.md` 2026-09-10,
+        amended 2026-09-11), so an unset variable must not send the nightly to
+        the public RPC that blocked two full walks."""
         _archive(monkeypatch)
         monkeypatch.delenv('ONCHAIN_LOG_ENDPOINT', raising=False)
-        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'public'
+        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'alchemy'
 
     def test_the_setting_moves_logs_to_the_archive_endpoint(self, monkeypatch):
-        """The backfill switch (`kb/decisions.md` 2026-09-10): on for the one
-        pay-as-you-go window, off again afterwards."""
         _archive(monkeypatch)
         monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'archive')
         assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'alchemy'
+
+    def test_the_public_setting_is_the_opt_out(self, monkeypatch):
+        """For an account back on Free, whose ten-block `eth_getLogs` cap is
+        two orders below the narrowest window the fetcher asks for."""
+        _archive(monkeypatch)
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'public')
+        assert chain.log_role(LIVE, SpendLedger()).endpoint.kind == 'public'
 
     def test_the_setting_cannot_move_a_test_run_onto_the_metered_account(self, monkeypatch):
         _archive(monkeypatch)
@@ -107,8 +113,8 @@ class TestEndpointRoles:
 
     def test_the_public_meter_has_no_ceiling(self, monkeypatch):
         # `load_dotenv()` at import means a repo `.env` set for the backfill
-        # (`ONCHAIN_LOG_ENDPOINT=archive` plus a key) reaches this test.
-        monkeypatch.delenv('ONCHAIN_LOG_ENDPOINT', raising=False)
+        # reaches this test: the default is now archive, so opt out explicitly.
+        monkeypatch.setenv('ONCHAIN_LOG_ENDPOINT', 'public')
         monkeypatch.setattr(chain, 'get_archive_endpoint', lambda: None)
         role = chain.log_role(LIVE, SpendLedger())
         assert role.budget.meter.ceiling_units is None

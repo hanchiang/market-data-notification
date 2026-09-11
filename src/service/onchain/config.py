@@ -175,13 +175,15 @@ def get_alchemy_monthly_cu_ceiling() -> int:
 
 
 def get_log_endpoint() -> str:
-    """Which endpoint serves log windows: `public` (default) or `archive`.
+    """Which endpoint serves log windows: `archive` (default) or `public`.
 
     Rejected rather than defaulted on a typo: `ONCHAIN_LOG_ENDPOINT=archvie`
-    silently running the backfill on the public node is the exact failure the
-    setting exists to avoid.
+    silently running the nightly on the public node is the exact failure the
+    setting exists to avoid. Default `archive` since the operator kept the
+    account on Pay-As-You-Go (`kb/decisions.md` 2026-09-10, second amendment
+    2026-09-11); `public` is the opt-out.
     """
-    value = os.getenv('ONCHAIN_LOG_ENDPOINT', LOG_ENDPOINT_PUBLIC).strip().lower()
+    value = os.getenv('ONCHAIN_LOG_ENDPOINT', LOG_ENDPOINT_ARCHIVE).strip().lower()
     if value not in LOG_ENDPOINTS:
         raise ValueError(
             f'ONCHAIN_LOG_ENDPOINT must be one of {sorted(LOG_ENDPOINTS)}, not {value!r}'

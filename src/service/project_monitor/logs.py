@@ -1,16 +1,16 @@
 """The log plane: event specs, windowed fetch, and mint classification.
 
-Every log query in this service -- live job and one-shot backfill alike --
-goes to the PUBLIC RPC. The keyed Alchemy endpoint cannot serve one: the
-operator's key is on the free tier, which refuses `eth_getLogs` for any range
-wider than ten blocks. Measured 2026-08-31 with four probes at spans
-1,000,000 / 100,000 / 10,000 / 2,000, all anchored at block 1: every one came
-back HTTP 400, JSON-RPC -32600, "Under the Free tier plan, you can make
-eth_getLogs requests with up to a 10 block range." Ten blocks is two orders
-below `MIN_LOG_WINDOW_BLOCKS`, so a log step routed there fails on its first
-call and every call after it. The keyed endpoint's ARCHIVE DEPTH is real and
-unaffected -- `backfill.py` still reads historical state through it -- but
-depth and log service are separate capabilities on this key.
+The monitor's log queries go to the PUBLIC RPC; the dossier's go to the keyed
+Alchemy endpoint unless `ONCHAIN_LOG_ENDPOINT=public`. On the free tier the
+keyed endpoint cannot serve one: it refuses `eth_getLogs` for any
+range wider than ten blocks (measured 2026-08-31, four probes at spans
+1,000,000 / 100,000 / 10,000 / 2,000, all HTTP 400, JSON-RPC -32600, "Under
+the Free tier plan, you can make eth_getLogs requests with up to a 10 block
+range"), two orders below `MIN_LOG_WINDOW_BLOCKS`. On Pay-As-You-Go it serves
+any range returning under 10K logs, else at most 5,000 blocks (HTTP 400,
+measured 2026-09-11), which `fetch_window` narrows to. The keyed endpoint's
+ARCHIVE DEPTH is real on both tiers -- `backfill.py` reads historical state
+through it -- but depth and log service are separate capabilities on this key.
 
 The public endpoint's own refusal is NOT a block cap. It is driven by how much
 the node must scan, so the serviceable window depends on where you are in the
@@ -30,7 +30,14 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence
 
-from market_data_library.core.onchain.evm import EvmClient, EvmRpcError, LogFilter, abi
+from market_data_library.core.onchain.evm import (
+    EvmClient,
+    EvmClientError,
+    EvmRpcError,
+    EvmTransportError,
+    LogFilter,
+    abi,
+)
 
 from .config import MAX_LOG_WINDOW_BLOCKS, ProjectConfig
 
@@ -197,13 +204,24 @@ class TruncatedLogResponseError(RuntimeError):
     likely a silent cap than a real count."""
 
 
-def _is_window_too_wide(exc: EvmRpcError) -> bool:
-    """Does this JSON-RPC error mean "ask for fewer blocks"?
+def _is_window_too_wide(exc: EvmClientError) -> bool:
+    """Does this refusal mean "ask for fewer blocks"?
 
     Matched on the message because the endpoint returns the same generic
     `-32000` for a timeout as for other server-side faults, and a range problem
     is the one worth narrowing for rather than failing on.
+
+    A transport error counts only as a non-retried 4xx (the client raises any
+    other 4xx immediately, `client.py`): that is the shape Alchemy's range
+    refusal takes. A 429 ("rate limited after retries"), a 5xx, or a
+    post-retry failure such as `ServerTimeoutError` is a node or quota problem,
+    and the `timeout` marker below would otherwise read the last of those as a
+    width refusal and halve to the floor, paying the retry schedule each step.
     """
+    if isinstance(exc, EvmTransportError):
+        status = exc.status_code
+        if status is None or status == 429 or not 400 <= status < 500:
+            return False
     text = str(exc).lower()
     return any(
         marker in text
@@ -221,6 +239,13 @@ def _is_window_too_wide(exc: EvmRpcError) -> bool:
             # needed narrowing. This is the dossier design's D9; the monitor's
             # own log plane needs it for the same reason.
             'exceeds limit',
+            # Alchemy Pay-As-You-Go, measured 2026-09-11: "Log response size
+            # exceeded. You can make eth_getLogs requests with up to a 5,000
+            # block range and no limit on the response size, or you can request
+            # any block range with a cap of 10K logs in the response." It
+            # arrives as HTTP 400, so it reaches here as `EvmTransportError`,
+            # not `EvmRpcError`; `block range` above already matches the text.
+            'response size exceeded',
         )
     )
 
@@ -281,7 +306,11 @@ async def fetch_window(
                     topics=list(query.topics),
                 )
             )
-        except EvmRpcError as exc:
+        except (EvmRpcError, EvmTransportError) as exc:
+            # Both classes: the public RPC refuses a wide window inside a 200
+            # (`EvmRpcError`), Alchemy refuses it with a 400 that the client
+            # does not retry (`EvmTransportError`). Run 4 on 2026-09-11 lost
+            # three projects' health sections to the second shape propagating.
             if window > MIN_LOG_WINDOW_BLOCKS and _is_window_too_wide(exc):
                 refused_width = end - start + 1
                 window = max(MIN_LOG_WINDOW_BLOCKS, window // 2)

@@ -4,12 +4,13 @@
 Three things live here rather than in a collector, because all four collectors
 share them and a second copy would be a second answer:
 
-* **Endpoint roles.** State reads go to the keyed archive endpoint under its
-  compute-unit budget; log windows go to the public RPC under its request
-  budget, or to the archive endpoint when `ONCHAIN_LOG_ENDPOINT=archive` (the
-  one-off backfill; `kb/decisions.md` 2026-09-10). `--test_mode 1` routes
-  both to the public endpoint, so a manual run spends nothing on the metered
-  account (the monitor's rule, same reasoning). Every role's budget is wrapped
+* **Endpoint roles.** State reads and log windows both go to the keyed
+  archive endpoint under its compute-unit budget; the account is on
+  Pay-As-You-Go for good (`kb/decisions.md` 2026-09-10, amended 2026-09-11).
+  `ONCHAIN_LOG_ENDPOINT=public` moves log windows to the public RPC under its
+  request budget, and so does a missing key. `--test_mode 1` routes both to
+  the public endpoint, so a manual run spends nothing on the metered account
+  (the monitor's rule, same reasoning). Every role's budget is wrapped
   by the run's spend ledger, which counts each attempt and enforces the
   monthly ceiling (`spend.py`).
 * **One pinned block per run**, not per project. Sections of different projects
@@ -104,19 +105,20 @@ def state_role(
 def log_role(
     runtime_mode: RuntimeMode, ledger: SpendLedger, *, alchemy_spent_this_month: int = 0
 ) -> EndpointRole:
-    """Where log windows go: the public RPC by default.
+    """Where log windows go: the keyed archive endpoint by default.
 
-    The archive endpoint serves logs only when `ONCHAIN_LOG_ENDPOINT=archive`,
-    a key is configured and this is not a test run. The free archive tier
-    refuses `eth_getLogs` beyond a ten-block range, so the setting is for the
-    pay-as-you-go backfill window and is turned back off afterwards.
+    The archive endpoint serves logs when `ONCHAIN_LOG_ENDPOINT` is `archive`
+    (the default), a key is configured and this is not a test run; otherwise
+    the public RPC. Pay-As-You-Go serves any range under 10K logs, else 5,000
+    blocks, which the fetcher narrows to; the Free tier would refuse beyond
+    ten blocks, so `public` is the setting for an account back on Free.
     """
     wants_archive = get_log_endpoint() == LOG_ENDPOINT_ARCHIVE
     if wants_archive and get_archive_endpoint() is not None and not runtime_mode.is_test_mode:
-        logger.info('log windows routed to the archive endpoint by ONCHAIN_LOG_ENDPOINT')
+        logger.info('log windows routed to the archive endpoint (ONCHAIN_LOG_ENDPOINT=archive)')
         return _archive_role(ledger, alchemy_spent_this_month=alchemy_spent_this_month)
     if wants_archive:
-        logger.info('ONCHAIN_LOG_ENDPOINT=archive ignored: test mode or no archive key')
+        logger.info('log windows on the public RPC: test mode or no archive key')
     return _public_role(ledger, supports_batch=True)
 
 

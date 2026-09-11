@@ -81,7 +81,9 @@ class TestPairing:
             # print `counterpart=None` and this loop stayed green until the
             # value itself was checked.
             assert pair['counterpart_value'] is not None
-            assert f"{report._short(pair['counterpart_value'])}" in row
+            assert report.Formatting({'sections': []}, section='onchain_health').inline(
+                pair['counterpart'], pair['counterpart_value']
+            ) in row
 
     def test_the_liquidity_row_names_its_pool_type(self):
         """A4's last clause: the custody read is defined differently for v3 and
@@ -270,7 +272,9 @@ class TestPairingAgainstTheProductsOwnList:
             # suite. The counterpart's NAME appearing is not its VALUE
             # appearing; `_render_pairs` would happily print `x=None`.
             assert pair['counterpart_value'] is not None, metric
-            assert report._short(pair['counterpart_value']) in row, metric
+            assert report.Formatting({'sections': []}, section='onchain_health').inline(
+                pair['counterpart'], pair['counterpart_value']
+            ) in row, metric
 
     def test_both_liquidity_rows_name_the_pool_type(self):
         """A4's last clause applies to every row whose counterpart is a custody

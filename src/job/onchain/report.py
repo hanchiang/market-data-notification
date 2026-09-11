@@ -10,11 +10,14 @@ report is the surface an operator runs while a build is in flight, and it must
 not be able to touch what the build is writing.
 """
 import argparse
+import sys
 from typing import Optional
 
 from src.runtime.runtime_mode import RuntimeMode
 from src.service.onchain.config import get_onchain_database_url
 from src.service.onchain.report import (
+    UnknownBuildError,
+    UnknownProjectError,
     load_all,
     load_dossier,
     render_dossier,
@@ -25,6 +28,9 @@ from src.service.onchain.repository import OnchainRepository
 # A build whose outcome is not `ok` exits non-zero so a scheduled invocation
 # cannot report it only in text nobody reads. The dossier still prints in full.
 EXIT_BUILD_NOT_OK = 2
+# A typo in `--project` or a `--build` id that is another project's: one line
+# on stderr, not a traceback, and a code distinct from "built but not ok".
+EXIT_NOT_FOUND = 3
 
 
 def main(
@@ -41,7 +47,11 @@ def main(
         if all_projects or project is None:
             dossiers = load_all(repository)
         else:
-            dossiers = [load_dossier(repository, project, build_id=build)]
+            try:
+                dossiers = [load_dossier(repository, project, build_id=build)]
+            except (UnknownProjectError, UnknownBuildError) as exc:
+                print(exc.args[0], file=sys.stderr)
+                return EXIT_NOT_FOUND
 
     if as_json:
         print(render_json(dossiers if len(dossiers) != 1 else dossiers[0]))

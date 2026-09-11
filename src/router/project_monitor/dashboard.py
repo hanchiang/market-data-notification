@@ -10,9 +10,10 @@ discipline (DR12).
 """
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, List, Optional
 
 import psycopg
 from fastapi import APIRouter, Request, Response
@@ -163,10 +164,20 @@ async def onchain_dossier(
     try:
         with _onchain_repository(bool(test_mode)) as repository:
             dossier = onchain_report.load_dossier(repository, project, build_id=build)
+            projects = (
+                []
+                if format == 'json'
+                else [
+                    onchain_report.project_key(row['key'])
+                    for row in repository.get_projects()
+                ]
+            )
     except onchain_report.UnknownProjectError:
         # 404 and not 400: the project key is a path segment naming a resource,
         # and "no such project" is what the operator needs to read after a typo.
         return JSONResponse(status_code=404, content={'error': 'unknown project'})
+    except onchain_report.UnknownBuildError:
+        return JSONResponse(status_code=404, content={'error': 'unknown build'})
     except psycopg.Error as exc:
         logger.error('onchain store unavailable: %s', type(exc).__name__)
         return JSONResponse(status_code=503, content={'error': type(exc).__name__})
@@ -177,7 +188,7 @@ async def onchain_dossier(
             media_type='application/json',
         )
     return Response(
-        content=render_dossier_page(dossier),
+        content=render_dossier_page(dossier, projects=projects, test_mode=bool(test_mode)),
         media_type='text/html',
         headers={'Cache-Control': 'no-store'},
     )
@@ -189,25 +200,98 @@ def _onchain_repository(test_mode: bool) -> OnchainRepository:
     )
 
 
-def render_dossier_page(dossier: Any) -> str:
+def render_dossier_page(
+    dossier: Any, *, projects: Optional[List[str]] = None, test_mode: bool = False
+) -> str:
     """The dossier as one self-contained HTML page.
 
     No stylesheet, no script, no font: the requirement's local-first constraint
     is that opening this page sends nothing anywhere, and the cheapest way to
-    guarantee that is a page with no external reference in it at all. The text
-    body is the report module's own renderer inside a `<pre>`, so the page and
-    `report --project X` are the same words -- there is no second formatter to
-    drift.
+    guarantee that is a page with no external reference in it at all. The lines
+    are the report module's own, so the page and `report --project X` are the
+    same words -- there is no second formatter to drift. The page adds only
+    shape: what changed since the previous build first, then each section folded
+    unless it changed, then links to the other builds and projects. That shape
+    is the design's reading order (D6), and it is what a 95-line `<pre>` lost.
     """
-    body = onchain_report.render_dossier(dossier)
     title = f"{dossier.get('display_name') or dossier.get('project')} dossier"
-    return (
-        '<!doctype html><html><head><meta charset="utf-8">'
-        f'<title>{_escape(title)}</title>'
+    # Every link carries the store it was read from: a bare `?build=17` would
+    # drop `test_mode` and switch a test-store reader to production unnoticed.
+    query = '&test_mode=1' if test_mode else ''
+    project_query = '?test_mode=1' if test_mode else ''
+    parts = [
+        '<!doctype html><html><head><meta charset="utf-8">',
+        f'<title>{_escape(title)}</title>',
         '<style>body{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;'
-        'margin:2rem;max-width:100ch}pre{white-space:pre-wrap}</style>'
-        f'</head><body><h1>{_escape(title)}</h1><pre>{_escape(body)}</pre></body></html>'
-    )
+        'margin:2rem;max-width:120ch}pre{white-space:pre-wrap;margin:0.25rem 0 1rem}'
+        'details{margin:0.5rem 0}summary{cursor:pointer;font-weight:bold}'
+        'nav{margin-bottom:1rem}nav a{margin-right:1ch}'
+        '.lead{border-left:3px solid #999;padding-left:1ch}</style>',
+        f'</head><body><h1>{_escape(title)}</h1>',
+    ]
+    if projects:
+        parts.append('<nav>projects: ' + ' '.join(
+            f'<a href="{key}{project_query}">{key}</a>' if key != dossier.get('project')
+            else f'<strong>{key}</strong>'
+            for key in projects if _is_link_safe(key)
+        ) + '</nav>')
+    build = dossier.get('build')
+    if build is None:
+        parts.append('<pre>no build yet</pre></body></html>')
+        return ''.join(parts)
+
+    formatting = onchain_report.Formatting(dossier)
+    parts.append('<pre>' + _escape('\n'.join(
+        onchain_report.header_lines(dossier, formatting)
+    )) + '</pre>')
+    parts.append(_render_build_nav(dossier, formatting, query))
+
+    blocks = onchain_report.render_blocks(dossier)
+    changed = [block for block in blocks if block.has_changes]
+    parts.append('<h2>Changes since the previous build</h2>')
+    if changed:
+        lead = []
+        for block in changed:
+            lead.extend([block.title, *block.flag_lines, *block.change_lines])
+        parts.append(f'<pre class="lead">{_escape(chr(10).join(lead))}</pre>')
+    else:
+        parts.append('<pre class="lead">no change in any section</pre>')
+
+    parts.append('<h2>Sections</h2>')
+    for block in blocks:
+        state = ' open' if block.has_changes else ''
+        parts.append(
+            f'<details{state}><summary>{_escape(block.title)}</summary>'
+            f'<pre>{_escape(chr(10).join(block.lines()[1:]))}</pre></details>'
+        )
+    parts.append('</body></html>')
+    return ''.join(parts)
+
+
+def _is_link_safe(key: Any) -> bool:
+    """A registry key is `[A-Za-z0-9._-]+`; anything else never becomes an
+    href, where `_escape` would not stop a `javascript:` scheme."""
+    return bool(re.fullmatch(r'[A-Za-z0-9._-]+', str(key)))
+
+
+def _render_build_nav(dossier: Any, formatting: Any, query: str = '') -> str:
+    """Links to the project's recent builds; `?build=N` is the existing query
+    parameter, so stepping back through diffs needs no new route."""
+    builds = dossier.get('builds') or []
+    if len(builds) < 2:
+        return ''
+    current = dossier['build']['id']
+    links = []
+    for build in builds:
+        when = build.get('block_timestamp')
+        label = f"{build['id']}"
+        if when:
+            label += f" ({formatting.scalar('block_timestamp', when)[:10]})"
+        if build['id'] == current:
+            links.append(f'<strong>{_escape(label)}</strong>')
+        else:
+            links.append(f'<a href="?build={int(build["id"])}{query}">{_escape(label)}</a>')
+    return '<nav>builds: ' + ' '.join(links) + '</nav>'
 
 
 def _escape(text: str) -> str:

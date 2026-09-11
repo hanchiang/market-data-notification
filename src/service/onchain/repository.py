@@ -995,9 +995,18 @@ class OnchainRepository:
             (project_id, limit),
         )
 
-    def get_build(self, build_id: int) -> Optional[Dict[str, Any]]:
+    def get_build(
+        self, build_id: int, *, project_id: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """With `project_id`, only that project's build: a caller naming both
+        must not be handed a row it would attribute to the wrong project."""
+        if project_id is None:
+            return self.fetch_one(
+                f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE id = %s', (build_id,)
+            )
         return self.fetch_one(
-            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE id = %s', (build_id,)
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE id = %s AND project_id = %s',
+            (build_id, project_id),
         )
 
     def get_projects(self) -> List[Dict[str, Any]]:

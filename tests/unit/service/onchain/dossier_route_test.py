@@ -88,14 +88,24 @@ class TestDossierRoute:
     ):
         """One loader, so the page and `report --project touch-grass` cannot
         disagree about a figure."""
-        from src.service.onchain.report import load_dossier, render_dossier
+        from src.router.project_monitor.dashboard import _escape
+        from src.service.onchain.report import load_dossier, render_blocks
 
-        expected = render_dossier(load_dossier(onchain_repository, 'touch-grass'))
+        dossier = load_dossier(onchain_repository, 'touch-grass')
         response = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1')
         assert response.status_code == 200
         assert 'GRASS' in response.text
-        # The renderer's own output, escaped, is inside the page.
-        assert expected.splitlines()[0] in response.text
+        # Every section line the report job prints is in the page, escaped: the
+        # page adds shape around the renderer's lines and never its own words.
+        lines = [line for block in render_blocks(dossier) for line in block.lines()]
+        assert lines
+        for line in lines:
+            assert _escape(line) in response.text, line
+
+    def test_the_page_is_never_cached(self, client, seeded):
+        """A cached dossier is last night's dossier under today's date."""
+        response = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1')
+        assert response.headers['cache-control'] == 'no-store'
 
     def test_json_format_returns_the_loader_payload(self, client, seeded):
         response = client.get(
@@ -133,6 +143,28 @@ class TestDossierRoute:
         body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
         assert '<script>alert(1)</script>' not in body
         assert '&lt;script&gt;' in body
+
+    def test_another_projects_build_is_a_404_not_a_mislabelled_page(
+        self, client, seeded, onchain_repository
+    ):
+        """`?build=N` is a clicked surface now; an unscoped id would render the
+        other project's sections under this project's name."""
+        chain = onchain_repository.get_entity_by_key('project:touch-grass')['parent_id']
+        other = onchain_repository.upsert_entity(
+            level='project', key='project:other', display_name='Other', parent_id=chain
+        )
+        run_id = onchain_repository.start_run(builder.JOB_BUILD)
+        foreign = onchain_repository.start_build(
+            run_id=run_id, project_id=other, block=950, block_timestamp=3
+        )
+        onchain_repository.finish_build(foreign, outcome='ok')
+        onchain_repository.commit()
+
+        response = client.get(
+            f'/project-monitor/onchain/dossier/touch-grass?build={foreign}&test_mode=1'
+        )
+        assert response.status_code == 404
+        assert response.json() == {'error': 'unknown build'}
 
     def test_an_unknown_project_is_a_404(self, client, seeded):
         assert client.get(

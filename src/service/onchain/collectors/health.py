@@ -78,6 +78,12 @@ async def collect(context: BuildContext) -> SectionResult:
         raise HolderDerivationMismatchError(
             f'{len(mismatches)} derived balances disagree with balanceOf'
         )
+    # Token economics reads this before it sums the same rows. Not committed
+    # here: the builder commits the section as one unit, so a health failure
+    # after this point takes the mark back with it.
+    context.repository.set_fetch_cursor(
+        token_entity_id, transfers.STREAM_DERIVATION_VERIFIED, context.block
+    )
 
     provider = await _provider_snapshot(context)
     window_start = context.pinned.window_start_block

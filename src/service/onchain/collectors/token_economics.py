@@ -11,6 +11,11 @@ so the share is a `balanceOf`; a v4 pool has no address, and the singleton pool
 manager's balance is every v4 pool on the chain at once. So for v4 the amount is
 computed from the open positions by tick math, and that derivation is validated
 by running it on a v3 pool where `balanceOf` can check it (design, Testing).
+
+Three failure markers, each on the fields it actually covers: the transfer
+cursor short of the pin marks the five transfer sums; the derivation left
+unverified by this build's health section marks the same five; the position
+cursor short of the pin marks only a v4 `pool_held_share`.
 """
 import logging
 from typing import Any, Dict, Optional
@@ -52,8 +57,13 @@ async def collect(context: BuildContext) -> SectionResult:
     # fetch leaves short of the pinned block. Derived from nothing they come out
     # as 0, [] and `fixed` -- answers, not gaps. `burned: 0` beside a supply that
     # fell reads as an unexplained loss, and `mint_path: fixed` is the field the
-    # threshold table watches, so a mintable token would read as fixed.
-    stale = _transfer_store_lag(context, token_entity_id)
+    # threshold table watches, so a mintable token would read as fixed. A full
+    # store nobody has checked against `balanceOf` at this height is marked too:
+    # the health collector proves the derivation every build, and this section
+    # must not report a holder table the same build failed to verify.
+    stale = _transfer_store_lag(context, token_entity_id) or _derivation_unverified(
+        context, token_entity_id
+    )
 
     fields: Dict[str, Any] = {
         'total_supply': str(total_supply),
@@ -65,8 +75,10 @@ async def collect(context: BuildContext) -> SectionResult:
             else UNAVAILABLE
         ),
     }
+    error_class: Optional[str] = None
 
     if stale is not None:
+        error_class = stale
         marker = failed_field(stale)
         fields.update(
             burned=marker,
@@ -74,36 +86,51 @@ async def collect(context: BuildContext) -> SectionResult:
             mint_path=marker,
             top_holders=marker,
             top_ten_share=marker,
-            pool_held_share=marker,
         )
-        return SectionResult(
-            name=SECTION_TOKEN_ECONOMICS,
-            # `partial`, matching what identity and contract safety do when the
-            # explorer drops out: the section built, some fields did not.
-            status=STATUS_PARTIAL,
-            fields=fields,
-            error_class=stale,
-            evidence_ids=list(context.evidence_ids),
+    else:
+        burned = context.repository.burned_amount(
+            token_entity_id,
+            list(transfers.burn_addresses()),
+            mint_source=transfers.ZERO_ADDRESS,
+        )
+        holders = transfers.holder_summary(context.repository, token_entity_id)
+        fields.update(
+            burned=str(burned),
+            burned_share=None if not total_supply else round(burned / total_supply, 6),
+            mint_path=await _mint_path(context, token_entity_id),
+            top_holders=holders['top_holders'],
+            top_ten_share=holders['top_ten_share'],
         )
 
-    burned = context.repository.burned_amount(
-        token_entity_id,
-        list(transfers.burn_addresses()),
-        mint_source=transfers.ZERO_ADDRESS,
-    )
-    holders = transfers.holder_summary(context.repository, token_entity_id)
-    fields.update(
-        burned=str(burned),
-        burned_share=None if not total_supply else round(burned / total_supply, 6),
-        mint_path=await _mint_path(context, token_entity_id),
-        top_holders=holders['top_holders'],
-        top_ten_share=holders['top_ten_share'],
-        pool_held_share=await _pool_held_share(context, total_supply),
-    )
+    # `pool_held_share` is not a transfer sum. Its v3 path is a `balanceOf` state
+    # read and needs no cursor at all; its v4 path sums the POSITION stream, so
+    # only that path is gated, and on the position cursor rather than the
+    # transfer one. Marking it with the transfer classes (the shape before
+    # 2026-09-11) hid a computable figure on every night the transfer walk lagged.
+    # The gate mirrors the read exactly: with no supply, or the v4 pool key
+    # unresolved, the field is `None` or `unavailable` and no position row is
+    # read, so a cursor that health never wrote must not turn into a marker.
+    position_lag = None
+    pool_entity_id = None
+    if total_supply and _v4_inputs_resolved(context):
+        pool_entity_id = context.pool_entity_id()
+        position_lag = _position_store_lag(context, pool_entity_id)
+    if position_lag is not None:
+        error_class = error_class or position_lag
+        fields['pool_held_share'] = failed_field(position_lag)
+    else:
+        fields['pool_held_share'] = await _pool_held_share(
+            context, total_supply, pool_entity_id=pool_entity_id
+        )
+
     return SectionResult(
         name=SECTION_TOKEN_ECONOMICS,
-        status=STATUS_OK,
+        # `partial` on any marker, matching what identity and contract safety do
+        # when the explorer drops out: the section built, some fields did not.
+        # The class named is the first marker's; a second is on its own field.
+        status=STATUS_OK if error_class is None else STATUS_PARTIAL,
         fields=fields,
+        error_class=error_class,
         evidence_ids=list(context.evidence_ids),
     )
 
@@ -123,6 +150,27 @@ def _transfer_store_lag(context: BuildContext, token_entity_id: int) -> Optional
         return 'TransferStoreEmpty'
     if cursor < context.block:
         return 'TransferStoreBehind'
+    return None
+
+
+def _derivation_unverified(context: BuildContext, token_entity_id: int) -> Optional[str]:
+    """`DerivationUnverified` unless health proved the holder derivation at or
+    past this run's pinned block (`STREAM_DERIVATION_VERIFIED`)."""
+    verified = context.repository.get_fetch_cursor(
+        token_entity_id, transfers.STREAM_DERIVATION_VERIFIED
+    )
+    if verified is None or verified < context.block:
+        return 'DerivationUnverified'
+    return None
+
+
+def _position_store_lag(context: BuildContext, pool_entity_id: int) -> Optional[str]:
+    """The v4 counterpart of `_transfer_store_lag`, over the position stream."""
+    cursor = context.repository.get_fetch_cursor(pool_entity_id, transfers.STREAM_POSITION)
+    if cursor is None:
+        return 'PositionStoreEmpty'
+    if cursor < context.block:
+        return 'PositionStoreBehind'
     return None
 
 
@@ -168,13 +216,15 @@ def _lockers(context: BuildContext) -> Any:
     return sorted(str(address).lower() for address in context.chain.lockers)
 
 
-async def _pool_held_share(context: BuildContext, total_supply: int) -> Any:
+async def _pool_held_share(
+    context: BuildContext, total_supply: int, *, pool_entity_id: Optional[int] = None
+) -> Any:
     if not total_supply:
         return None
     version = context.identity.get('version')
     token_address = context.identity.get('token_address')
     if version == 'v4':
-        return await _v4_pool_held_share(context, total_supply)
+        return await _v4_pool_held_share(context, total_supply, pool_entity_id=pool_entity_id)
 
     pool = context.identity.get('pool_address')
     if not pool or not token_address:
@@ -191,21 +241,38 @@ async def _pool_held_share(context: BuildContext, total_supply: int) -> Any:
     }
 
 
-async def _v4_pool_held_share(context: BuildContext, total_supply: int) -> Any:
+def _v4_inputs_resolved(context: BuildContext) -> bool:
+    """Can the v4 tick-math path run at all: a v4 identity whose `Initialize`
+    log was served (`tick`, `currency0`) for a resolved token."""
+    if context.identity.get('version') != 'v4':
+        return False
+    tick = context.identity.get('tick')
+    currency0 = context.identity.get('currency0')
+    token_address = str(context.identity.get('token_address') or '').lower()
+    return (
+        isinstance(tick, int)
+        and isinstance(currency0, str)
+        and currency0.startswith('0x')
+        and bool(token_address)
+    )
+
+
+async def _v4_pool_held_share(
+    context: BuildContext, total_supply: int, *, pool_entity_id: Optional[int] = None
+) -> Any:
     """The token amount of the pool's open positions, by tick math.
 
     `currency0`/`currency1` decide which of the two amounts is this token. When
     the key is `unavailable` -- the `Initialize` log was not served -- so is this
     field, because there is nothing to say which side of the pair the token is.
     """
-    pool_entity_id = context.pool_entity_id()
-    tick = context.identity.get('tick')
-    currency0 = context.identity.get('currency0')
-    token_address = str(context.identity.get('token_address') or '').lower()
-    if not isinstance(tick, int) or not isinstance(currency0, str) or not token_address:
+    if not _v4_inputs_resolved(context):
         return UNAVAILABLE
-    if not currency0.startswith('0x'):
-        return UNAVAILABLE
+    if pool_entity_id is None:
+        pool_entity_id = context.pool_entity_id()
+    tick = context.identity['tick']
+    currency0 = context.identity['currency0']
+    token_address = str(context.identity['token_address']).lower()
 
     stored = context.repository.get_position_events(pool_entity_id)
     rows = uniswap.rows_from_store(stored)

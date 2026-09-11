@@ -275,6 +275,7 @@ class _Repo:
     def __init__(self, cursor=None):
         self.cursor = cursor
         self.set_cursors = []
+        self.set_cursor_entities = []
         self.stored = []
 
     def get_fetch_cursor(self, entity_id, stream):
@@ -282,6 +283,7 @@ class _Repo:
 
     def set_fetch_cursor(self, entity_id, stream, block):
         self.set_cursors.append((stream, block))
+        self.set_cursor_entities.append((entity_id, stream, block))
 
     def insert_position_events(self, pool_id, rows):
         self.stored.extend(rows)
@@ -484,3 +486,97 @@ class TestCustodyConservation:
         assert custody['position_liquidity_total'] == custody['pool_liquidity']
         assert custody['largest_owner'] == ALICE.lower()
         assert custody['largest_owner_share'] == 1.0
+
+
+class _VerifiedContext:
+    """Everything `collect()` touches after the derivation check, stubbed; the
+    repository records cursor writes so the verified mark can be asserted."""
+
+    block = 57_000_000
+
+    def __init__(self):
+        self.identity = {'token_address': '0x' + 'aa' * 20, 'creation_block': 1}
+        self.repository = _Repo()
+        self.repository.active_addresses = lambda *a: []
+        self.repository.pool_counterparties = lambda *a: []
+        self.repository.new_versus_returning = lambda *a: {}
+        self.repository.transfer_row_count = lambda *a: 0
+        self.pinned = type('P', (), {
+            'window_start_block': self.block - 100, 'window_start_timestamp': 0,
+            'timestamp': 0,
+        })()
+        self.project = type('Pr', (), {'key': 'touch-grass'})()
+        self.state_client = object()
+        self.log_client = object()
+        self.evidence_ids = []
+
+    def token_entity_id(self):
+        return 11
+
+    def pool_entity_id(self):
+        return 22
+
+
+class TestTheVerifiedDerivationMark:
+    """Token economics refuses to sum rows this build did not prove against
+    `balanceOf` (`STREAM_DERIVATION_VERIFIED`). The mark must follow the check,
+    never precede it."""
+
+    @pytest.fixture
+    def stubbed(self, monkeypatch):
+        from src.service.onchain.collectors import transfers
+
+        async def advance(*a, **k):
+            return transfers.FetchOutcome(1, 2, 0, 0, 0, False)
+
+        async def snapshot(context):
+            return {}
+
+        async def custody(*a, **k):
+            return {}
+
+        monkeypatch.setattr(transfers, 'advance_transfers', advance)
+        monkeypatch.setattr(
+            transfers, 'holder_summary',
+            lambda *a, **k: {'top_holders': [{'address': ALICE, 'balance': '1'}]},
+        )
+        monkeypatch.setattr(health, '_provider_snapshot', snapshot)
+        monkeypatch.setattr(health, '_pool_touching_addresses', lambda c: [])
+        monkeypatch.setattr(health, '_custody', custody)
+        monkeypatch.setattr(health, '_pairs', lambda **k: {})
+        return transfers
+
+    @pytest.mark.asyncio
+    async def test_a_passing_check_marks_the_derivation_verified_at_the_pin(
+        self, stubbed, monkeypatch
+    ):
+        async def passes(*a, **k):
+            return True, []
+
+        monkeypatch.setattr(stubbed, 'check_derivation', passes)
+        context = _VerifiedContext()
+
+        section = await health.collect(context)
+
+        assert section.status == 'ok'
+        # Keyed by the TOKEN entity: token economics reads it there. A mark on
+        # the pool entity would leave every dossier `DerivationUnverified`.
+        assert (11, stubbed.STREAM_DERIVATION_VERIFIED, context.block) in (
+            context.repository.set_cursor_entities
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_failing_check_raises_before_any_mark(self, stubbed, monkeypatch):
+        async def fails(*a, **k):
+            return False, [{'address': ALICE, 'derived': '1', 'on_chain': '2'}]
+
+        monkeypatch.setattr(stubbed, 'check_derivation', fails)
+        context = _VerifiedContext()
+
+        with pytest.raises(health.HolderDerivationMismatchError):
+            await health.collect(context)
+
+        assert all(
+            stream != stubbed.STREAM_DERIVATION_VERIFIED
+            for stream, _ in context.repository.set_cursors
+        )

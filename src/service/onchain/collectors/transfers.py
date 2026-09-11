@@ -45,6 +45,13 @@ STREAM_TRANSFER = 'transfer'
 # `insert_position_events` repairs them in place. A cursor left at head would
 # fetch nothing and repair nothing.
 STREAM_POSITION = 'position:v2'
+# Not a fetch stream: the block at which the health collector last proved the
+# holder derivation against `balanceOf`. Written only after `check_derivation`
+# passes, so a token-economics build can refuse to sum transfer rows nobody has
+# verified at this height, and rolled back with the section if health then
+# fails. A cursor row rather than a new table because the "did this reach the
+# pinned block" test is the same one the fetch cursors already answer.
+STREAM_DERIVATION_VERIFIED = 'derivation_verified'
 
 # How much of the history is banked at a time. Two million blocks is about two
 # days on this chain (~9.9 blocks a second), so a first build banks progress

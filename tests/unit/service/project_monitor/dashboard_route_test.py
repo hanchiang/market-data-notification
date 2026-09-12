@@ -1089,6 +1089,11 @@ def test_the_dashboard_app_carries_only_the_read_routes_and_no_startup_hook():
         # assertions below still pin.
         '/project-monitor/onchain/runs',
         '/project-monitor/onchain/dossier/{project}',
+        # The market overview (slice B): the page the operator lands on, read-only
+        # like the two above, registered at both spellings so the dossier page's
+        # trailing-slash back link and a bare path both serve it.
+        '/project-monitor/onchain',
+        '/project-monitor/onchain/',
     }
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []

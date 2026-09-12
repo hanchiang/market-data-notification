@@ -8,6 +8,7 @@ import pytest
 from src.service.onchain import builder
 from src.service.onchain.registry import parse_registry, upsert_registry
 from src.service.onchain.report import SOURCE_BADGE_ORDER, load_overview, metric_values
+from tests.unit.conftest import FAKE_RPC_HOST
 
 ROBINHOOD = 4663
 
@@ -195,5 +196,4 @@ class TestLoadOverview:
 
     def test_the_rpc_row_is_a_host_and_never_a_keyed_url(self, onchain_repository, three_projects):
         rows = load_overview(onchain_repository)['coverage']['alpha']['chain_rpc']
-        handle = rows[0]['url_or_handle']
-        assert '://' not in handle and '?' not in handle and '/' not in handle
+        assert [r['url_or_handle'] for r in rows] == [FAKE_RPC_HOST]

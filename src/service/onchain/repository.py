@@ -460,6 +460,38 @@ class OnchainRepository:
             )
             return int(cursor.fetchone()['id'])
 
+    def retire_superseded_sources(
+        self,
+        *,
+        entity_id: int,
+        source_class: str,
+        current_source_id: int,
+        evidence: Dict[str, Any],
+    ) -> int:
+        """Set every OTHER source of `source_class` linked to `entity_id` to
+        `retired`, attributed to the registry; return how many rows changed.
+
+        The one place the registry LOWERS an admission. `upsert_source` never
+        does, so when a configured handle changes (the RPC host moved), the old
+        handle's row would stay `admitted` forever and the coverage grid would
+        count an endpoint nothing reads. Deliberately narrow -- one class, one
+        entity, everything but the current row -- rather than a general
+        admission setter: the operator's own statuses are protected by
+        `upsert_source`, and this method only fires for rows the registry
+        itself derived. A row already `retired` is left alone so its evidence
+        keeps the time it was first replaced.
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                f'UPDATE {ONCHAIN_SCHEMA}.source s '
+                "SET admission = 'retired', admitted_by = %s, evidence_json = %s "
+                f'FROM {ONCHAIN_SCHEMA}.source_entity se '
+                'WHERE se.source_id = s.id AND se.entity_id = %s AND s.class = %s '
+                "  AND s.id <> %s AND s.admission <> 'retired'",
+                ('registry', json.dumps(evidence), entity_id, source_class, current_source_id),
+            )
+            return int(cursor.rowcount)
+
     def link_source_to_entity(self, source_id: int, entity_id: int) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(

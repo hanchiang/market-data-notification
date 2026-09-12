@@ -243,9 +243,50 @@ class TestUpsert:
         monkeypatch.setenv('ROBINHOOD_CHAIN_PUBLIC_RPC_URL', 'https://rpc.robinhood.example/')
         assert registry_module.rpc_source_handle() == 'rpc.robinhood.example'
 
-    def test_an_endpoint_with_no_readable_host_is_labelled_configured(self, monkeypatch):
-        monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', 'not a url')
+    @pytest.mark.parametrize('url', [
+        'not a url',
+        # An unclosed IPv6 literal: `urlsplit` raises rather than returning
+        # an empty host, and the label must still be the answer.
+        'https://[::1/v2/k',
+    ])
+    def test_an_endpoint_with_no_readable_host_is_labelled_configured(self, monkeypatch, url):
+        monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', url)
         assert registry_module.rpc_source_handle() == 'configured (alchemy)'
+
+    def test_a_changed_rpc_host_retires_the_previous_row(self, onchain_repository, monkeypatch):
+        """The RPC row is keyed by host, so a moved endpoint adds a row rather
+        than rewriting one; the old host must not stay admitted. The registry
+        is the only writer that lowers an admission, and only for this case."""
+        registry = load_registry(DEFAULT_REGISTRY_PATH)
+        monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', 'https://host-a.example/v2/FAKEKEY')
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+        monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', 'https://host-b.example/v2/FAKEKEY')
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+
+        chain = onchain_repository.get_entity_by_key(f'chain:{ROBINHOOD_CHAIN_ID}')
+        rpc = {
+            s['url_or_handle']: s
+            for s in onchain_repository.get_sources_for_entity(chain['id']) if s['class'] == 'chain_rpc'
+        }
+        assert set(rpc) == {'host-a.example', 'host-b.example'}
+        assert rpc['host-b.example']['admission'] == 'admitted'
+        retired = rpc['host-a.example']
+        assert retired['admission'] == 'retired' and retired['admitted_by'] == 'registry'
+        assert retired['evidence_json']['replaced_by'] == 'host-b.example'
+        assert retired['evidence_json']['recorded_at']
+        first_evidence = dict(retired['evidence_json'])
+
+        # A third load with the same host changes nothing: the retired row
+        # keeps the evidence of when it was first replaced, and the other two
+        # chain classes are untouched.
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+        rows = onchain_repository.get_sources_for_entity(chain['id'])
+        assert len(rows) == 4
+        assert {s['admission'] for s in rows if s['class'] != 'chain_rpc'} == {'admitted'}
+        assert next(s for s in rows if s['url_or_handle'] == 'host-a.example')['evidence_json'] == first_evidence
 
     def test_a_second_upsert_changes_nothing(self, onchain_repository):
         """The build re-upserts every night; that must be a no-op, including for

@@ -81,6 +81,24 @@ def _isolate_onchain_log_dir(tmp_path_factory):
         else:
             os.environ['ONCHAIN_LOG_DIR'] = previous
 
+# The archive RPC every test sees. `src/config/config.py` runs `load_dotenv()`
+# at import, so without this every `upsert_registry` call would derive the
+# `chain_rpc` row from the developer's REAL endpoint -- a test then passes or
+# fails on what is in `.env`, and a stray assertion could print the host. The
+# key-shaped segments are deliberately low-entropy so the secret scan on
+# commit does not read them as one.
+FAKE_RPC_URL = 'https://fake-rpc.example/v2/FAKEKEY?token=FAKE'
+FAKE_RPC_HOST = 'fake-rpc.example'
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_rpc_env(monkeypatch):
+    """Function-scoped so a test that sets or deletes the variable itself
+    (`registry_test`, `evidence_test`) still wins: its own monkeypatch is
+    applied after this one and undone before it."""
+    monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', FAKE_RPC_URL)
+
+
 DEFAULT_TEST_DATABASE_URL = (
     'postgresql://postgres:devpass@127.0.0.1:55432/project_monitor_test'
 )

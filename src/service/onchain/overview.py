@@ -49,30 +49,53 @@ COLUMNS: Tuple[Tuple[str, str], ...] = (
     ('FDV', 'fdv_usd'),
 )
 
-GLYPH_ADMITTED, GLYPH_CANDIDATE, GLYPH_NONE, GLYPH_OUT = '●', '◐', '○', '✕'
-INHERITED_MARK = 'ᶜ'
+# The cell states, in the order `_cell` resolves them. Each is drawn as a tiny
+# CSS shape rather than a Unicode glyph: `◐` (half circle) falls back to a
+# symbol font Chrome renders as a triangle on the operator's machine, and a
+# page whose legend depends on font coverage is not local-first. The `×` for
+# suspended/retired is U+00D7, in every Latin font.
+STATE_ADMITTED, STATE_CANDIDATE, STATE_NONE, STATE_OUT = 'admitted', 'candidate', 'none', 'out'
+INHERITED_MARK = '<sup>c</sup>'
 OUT_ADMISSIONS = frozenset({'suspended', 'retired'})
+
+
+def glyph(state: str) -> str:
+    """The HTML for one cell state. Tests compare against this by state name,
+    so the drawing can change without the semantics moving."""
+    if state == STATE_OUT:
+        return '<i class="g g-out">×</i>'
+    return f'<i class="g g-{state}"></i>'
+
+
 LEGEND = (
-    f'{GLYPH_ADMITTED} admitted (n) · {GLYPH_CANDIDATE} candidate (n) · {GLYPH_NONE} none · '
-    f'{GLYPH_OUT} suspended/retired · {INHERITED_MARK} inherited from the chain · '
-    'click a cell for its sources'
+    f'{glyph(STATE_ADMITTED)} admitted (n) · {glyph(STATE_CANDIDATE)} candidate (n) · '
+    f'{glyph(STATE_NONE)} none · {glyph(STATE_OUT)} suspended/retired · '
+    f'{INHERITED_MARK} inherited from the chain · click a cell for its sources'
 )
 
 CSS_EXTRA = (
-    '.cov td.c{text-align:center;cursor:pointer;font-size:17px;white-space:nowrap}'
-    '.cov td.c sup{font-size:11px;color:var(--mute)}.cov td.c:hover{background:var(--line)}'
-    '.cov td.c .n0{color:var(--mute)}'
+    '.cov td.c{text-align:center;cursor:pointer;white-space:nowrap}'
+    '.cov td.c sup,.legend sup{font-size:11px;color:var(--mute)}.cov td.c:hover{background:var(--line)}'
+    '.g{display:inline-block;width:11px;height:11px;border-radius:50%;box-sizing:border-box;'
+    'vertical-align:-1px;margin-right:2px;font-style:normal}'
+    '.g-admitted{background:var(--fg)}'
+    '.g-candidate{border:1.5px solid var(--fg);background:linear-gradient(90deg,var(--fg) 50%,transparent 50%)}'
+    '.g-none{border:1.5px solid var(--mute)}'
+    '.g-out{width:auto;height:auto;border-radius:0;color:var(--mute);font-size:16px;line-height:1}'
     '.srcs{margin-top:10px}.srcs details{margin:2px 0}.srcs ul{margin:4px 0 8px 18px;padding:0}'
     '.srcs li{color:var(--mute)}.srcs li a{color:var(--acc)}'
     'td .d{font-size:12px}'
 )
 
-# Unfolds the source list a grid cell names. Without JS the lists are still on
-# the page, folded, under the grid.
+# With JS: every source list starts hidden, and clicking a cell shows and
+# opens that cell's list alone. Without JS the lists are all on the page,
+# folded, under the grid -- `hidden` is set by script, never in the markup,
+# so a no-script reader still reaches them.
 JS = (
+    "var L=document.querySelectorAll('.srcs details');L.forEach(function(d){d.hidden=true});"
     "document.querySelectorAll('td[data-target]').forEach(function(c){c.addEventListener("
-    "'click',function(){var d=document.getElementById(c.dataset.target);"
-    "if(d){d.open=true;d.scrollIntoView({block:'nearest'})}})})"
+    "'click',function(){var d=document.getElementById(c.dataset.target);if(!d)return;"
+    "L.forEach(function(o){o.hidden=o!==d});d.open=true;d.scrollIntoView({block:'nearest'})})})"
 )
 
 
@@ -187,15 +210,17 @@ def _coverage_grid(
         cells = []
         for source_class in classes:
             sources = [s for s in by_class.get(source_class) or [] if isinstance(s, dict)]
-            glyph, shown = _cell(sources)
-            target = _target(key, index, source_class)
+            mark, shown = _cell(sources)
             title = f'{source_class}: ' + _summary(sources)
             if shown:
                 title += '\n' + '\n'.join(_source_text(s) for s in shown)
-            cells.append(
-                f'<td class="c" data-target="{target}" title="{escape(title)}">{glyph}</td>'
-            )
-            details.append(_details(target, name, source_class, sources))
+            # A cell with no source rows has no list to open: no `data-target`,
+            # no `<details>`, so the page carries only the lists that say
+            # something (24 empty folds under the grid was the alternative).
+            target = f' data-target="{_target(key, index, source_class)}"' if sources else ''
+            cells.append(f'<td class="c"{target} title="{escape(title)}">{mark}</td>')
+            if sources:
+                details.append(_details(_target(key, index, source_class), name, source_class, sources))
         rows.append(f'<tr data-project="{escape(key)}"><td>{name}</td>{"".join(cells)}</tr>')
     body = ''.join(rows) or (
         f'<tr><td colspan="{len(classes) + 1}" class="foot">no projects in the registry</td></tr>'
@@ -204,7 +229,7 @@ def _coverage_grid(
         f'<section class="panel wide" id="coverage"><h2>Source coverage{_tag("coverage")}</h2>'
         f'{_glossary_block(tuple(classes) + ("inherited", "candidate"))}'
         f'<table class="cov"><tr><th>project</th>{head}</tr>{body}</table>'
-        f'<div class="legend">{escape(LEGEND)}</div>'
+        f'<div class="legend">{LEGEND}</div>'
         f'<div class="srcs">{"".join(details)}</div></section>'
     )
 
@@ -221,16 +246,16 @@ def _cell(sources: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
     candidates = [s for s in sources if s.get('admission') == 'candidate']
     out = [s for s in sources if s.get('admission') in OUT_ADMISSIONS]
     if admitted:
-        glyph, shown = f'{GLYPH_ADMITTED}{len(admitted)}', admitted
+        mark, shown = f'{glyph(STATE_ADMITTED)}{len(admitted)}', admitted
     elif candidates:
-        glyph, shown = f'{GLYPH_CANDIDATE}{len(candidates)}', candidates
+        mark, shown = f'{glyph(STATE_CANDIDATE)}{len(candidates)}', candidates
     elif out:
-        glyph, shown = GLYPH_OUT, out
+        mark, shown = glyph(STATE_OUT), out
     else:
-        return f'<span class="n0">{GLYPH_NONE}</span>', []
+        return glyph(STATE_NONE), []
     if all(s.get('inherited') for s in shown):
-        glyph += f'<sup>{INHERITED_MARK}</sup>'
-    return glyph, shown
+        mark += INHERITED_MARK
+    return mark, shown
 
 
 def _summary(sources: List[Dict[str, Any]]) -> str:
@@ -262,13 +287,14 @@ def _handle_text(handle: Any) -> str:
 
 
 def _details(target: str, name: str, source_class: str, sources: List[Dict[str, Any]]) -> str:
-    """The folded source list one grid cell opens. A source is linked only
-    when its handle is a web URL: the RPC row is a bare host, and a candidate
-    handle comes from the provider's published links, so a scheme other than
-    http(s) never becomes an href."""
+    """The folded source list one grid cell opens; rendered only for a cell
+    with at least one row. A source is linked only when its handle is a web
+    URL: the RPC row is a bare host, and a candidate handle comes from the
+    provider's published links, so a scheme other than http(s) never becomes
+    an href."""
     items = ''.join(
         f'<li>{_source_link(s)} · {escape(_source_text(s).split(" · ", 1)[1])}</li>' for s in sources
-    ) or '<li>no source row reaches this project in this class</li>'
+    )
     return (
         f'<details id="{target}"><summary>{name} · {escape(source_class)} ({len(sources)})</summary>'
         f'<ul>{items}</ul></details>'

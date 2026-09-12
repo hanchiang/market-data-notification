@@ -344,6 +344,20 @@ def upsert_registry(
                 evidence=_registry_evidence(),
             )
             repository.link_source_to_entity(source_id, chain_entity_id)
+            if source_class == 'chain_rpc':
+                # The RPC host is configuration, not a registry entry, so when
+                # it changes the previous host's row is not overwritten (the
+                # row is keyed by handle) -- it would stay admitted and the
+                # grid would count an endpoint nothing reads. Retire it here.
+                # Known gap: a host that later flips BACK to a retired handle
+                # stays retired, because `upsert_source` raises only
+                # `candidate`; lifting that needs the operator admission path.
+                repository.retire_superseded_sources(
+                    entity_id=chain_entity_id,
+                    source_class=source_class,
+                    current_source_id=source_id,
+                    evidence={**_registry_evidence(), 'replaced_by': handle},
+                )
 
     project_ids: Dict[str, int] = {}
     for project in registry.projects.values():
@@ -384,11 +398,19 @@ def rpc_source_handle() -> str:
     before it is written: no scheme, no path, no query. When no archive
     endpoint is configured the public endpoint's host is written instead,
     which is then the RPC the collectors actually read. A URL with no
-    readable host falls back to `configured (<kind>)` rather than to any part
-    of the URL.
+    readable host -- including one `urlsplit` refuses, such as an unclosed
+    IPv6 literal -- falls back to `configured (<kind>)` rather than to any
+    part of the URL.
+
+    The reduction assumes the key never appears in the HOSTNAME. That holds
+    for Alchemy (`<app>.g.alchemy.com/v2/<key>`); a provider that puts the key
+    in a subdomain would need a different rule, not this one.
     """
     endpoint = get_archive_endpoint() or get_public_endpoint()
-    host = urlsplit(str(endpoint.url)).hostname or ''
+    try:
+        host = urlsplit(str(endpoint.url)).hostname or ''
+    except ValueError:
+        host = ''
     if not host:
         return f'{RPC_CONFIGURED_LABEL} ({endpoint.kind})'
     return host

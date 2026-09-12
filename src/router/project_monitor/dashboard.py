@@ -19,6 +19,7 @@ from fastapi import APIRouter, Request, Response
 from starlette.responses import FileResponse, JSONResponse
 
 from src.runtime.runtime_mode import RuntimeMode
+from src.service.onchain import overview as onchain_overview
 from src.service.onchain import page as onchain_page
 from src.service.onchain import report as onchain_report
 from src.service.onchain.builder import JOB_BUILD
@@ -147,6 +148,31 @@ async def onchain_runs(job: str = JOB_BUILD, limit: int = 30, test_mode: int = 0
     return Response(
         content=json.dumps(payload, sort_keys=True, default=str),
         media_type='application/json',
+    )
+
+
+@router.get('/onchain')
+@router.get('/onchain/')
+async def onchain_market_overview(test_mode: int = 0, format: str = 'html') -> Response:
+    """The market overview (UX brief, slice B): the project table and the
+    source-coverage grid. HTML by default, the loader's payload on
+    `?format=json`; one `load_overview` call behind both, so the page and the
+    JSON cannot disagree about a figure."""
+    try:
+        with _onchain_repository(bool(test_mode)) as repository:
+            overview = onchain_report.load_overview(repository)
+    except psycopg.Error as exc:
+        logger.error('onchain store unavailable: %s', type(exc).__name__)
+        return JSONResponse(status_code=503, content={'error': type(exc).__name__})
+    if format == 'json':
+        return Response(
+            content=json.dumps(overview, sort_keys=True, default=str),
+            media_type='application/json',
+        )
+    return Response(
+        content=onchain_overview.render_overview_page(overview, test_mode=bool(test_mode)),
+        media_type='text/html',
+        headers={'Cache-Control': 'no-store'},
     )
 
 

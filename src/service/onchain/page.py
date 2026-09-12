@@ -29,6 +29,7 @@ from src.service.onchain.report import (
     DASH,
     GLOSSARY,
     LIST_KEYS,
+    SOURCE_BADGE_ORDER,
     Formatting,
     Links,
     abbrev_count,
@@ -47,18 +48,21 @@ CHART_SCRIPT = '/project-monitor/static/chart.umd.js'
 SPARKLINE_MIN_POINTS = 7
 CHART_RANGES = ('7', '30', 'all')
 
-# The badge order: chain-level classes first, then the project's own. A class
-# added to `config.SOURCE_CLASSES` and not named here lands at the end.
-SOURCE_BADGE_ORDER = ('chain_rpc', 'chain_explorer', 'dex_provider', 'web', 'x', 'telegram')
-# Until slice B writes their rows, these two classes are configuration: the RPC
-# endpoints come from the chain config and the DEX provider appears only as a
-# `source` string inside the health pairs. Their badges say so.
+# The overview route, linked from every dossier page's nav.
+OVERVIEW_PATH = '/project-monitor/onchain/'
+# Slice B's registry load writes these two as chain-level rows; a store last
+# loaded before it has none, and there the classes are still configuration
+# (the RPC from the chain config, the DEX provider as a `source` string inside
+# the health pairs). Their badges say so instead of reading `none`.
 CONFIGURED_CLASSES = frozenset({'chain_rpc', 'dex_provider'})
 
 # Element id -> the decision it informs and its edge class (P15 / A14). The
 # text after the colon is the hover title; the text before the ` · ` is the
 # visible label. A test asserts every rendered panel and tile has an entry.
 DECISION_TAGS: Dict[str, str] = {
+    # The overview page (slice B), rendered by `overview.py`.
+    'projects': 'enter / add / reduce / exit · slow: where to spend attention across projects',
+    'coverage': 'admit / drop a source · slow: which classes are missing per project',
     'sources': 'admit / drop a source · slow: which capture arms this project has',
     'tile-liquidity': 'exit · slow: liquidity that can be pulled',
     'tile-volume': 'ignore / watch · slow: volume is washable; read with its pair',
@@ -220,7 +224,7 @@ def render_dossier_page(
         f'<title>{escape(title)}</title><style>{CSS}</style></head><body>',
     ]
     if projects:
-        parts.append('<nav>' + ' '.join(
+        parts.append(f'<nav><a href="{OVERVIEW_PATH}{project_query}">overview</a> ' + ' '.join(
             f'<a href="{key}{project_query}">{key}</a>' if key != dossier.get('project')
             else f'<strong>{key}</strong>'
             for key in projects if is_link_safe(key)
@@ -455,32 +459,7 @@ class _Page:
         }
 
     def _previous_values(self) -> Dict[str, Optional[float]]:
-        """Each KPI's value in the previous build, read from the section diff:
-        the `old` side of a changed field, None when the field was added or the
-        section has no diff (first build), the current value when unchanged."""
-        previous: Dict[str, Optional[float]] = {}
-        for metric, (section_name, path) in report.HISTORY_METRICS.items():
-            section = self.by_name.get(section_name)
-            changes = (section or {}).get('changes') or {}
-            current = self.current.get(metric)
-            if section is None or not changes or current is None:
-                previous[metric] = None
-                continue
-            field = path[0]
-            entry = next(
-                (e for e in changes.get('changed') or [] if e.get('field') == field), None
-            )
-            if entry is None:
-                previous[metric] = None if field in (changes.get('added') or {}) else current
-                continue
-            old = entry.get('old')
-            if field == 'pairs':
-                old = next(
-                    (p.get('value') for p in old or [] if isinstance(p, dict) and p.get('metric') == path[1]),
-                    None,
-                )
-            previous[metric] = old if isinstance(old, (int, float)) and not isinstance(old, bool) else None
-        return previous
+        return report.previous_metric_values(self.sections, self.current)
 
     # -- charts ---------------------------------------------------------
 

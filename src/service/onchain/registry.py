@@ -22,12 +22,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+from urllib.parse import urlsplit
 
 from src.service.onchain.config import (
     DEXSCREENER_CHAIN_SLUG,
     KNOWN_ARCHETYPES,
     SOURCE_CLASSES,
     VERIFIED_UNISWAP_ADDRESSES,
+    get_archive_endpoint,
+    get_public_endpoint,
     get_registry_path,
 )
 from src.service.onchain.repository import OnchainRepository
@@ -39,6 +42,9 @@ _ADDRESS = re.compile(r'^0x[0-9a-fA-F]{40}$')
 _POOL_ID = re.compile(r'^0x[0-9a-fA-F]{64}$')
 
 REGISTRY_ADMITTED_BY = 'registry'
+# The RPC source row when the endpoint's host cannot be read from its URL.
+RPC_CONFIGURED_LABEL = 'configured'
+DEXSCREENER_WEB = 'https://dexscreener.com/'
 
 UNISWAP_ADDRESS_KEYS = (
     'v3_factory',
@@ -294,10 +300,11 @@ def upsert_registry(
 
     Idempotent: every write is keyed by the entity `key` or the (class, url)
     pair, so the nightly re-upsert is a no-op when the file has not changed.
-    The chain's RPC and explorer are admitted here as `chain_rpc` and
-    `chain_explorer` sources -- the design's DG-3 gap: they are sources the
-    collectors read, and the requirement's admission path (P6) is phase 1b, so
-    the registry admits them.
+    The chain's RPC, explorer and DEX provider are admitted here as
+    `chain_rpc`, `chain_explorer` and `dex_provider` sources -- the design's
+    DG-3 gap: they are sources the collectors read, and the requirement's
+    admission path (P6) is phase 1b, so the registry admits them. The RPC row
+    is the endpoint's HOST, never its URL: see `rpc_source_handle`.
     """
     market_id = repository.upsert_entity(
         level='market', key=MARKET_ENTITY_KEY, display_name='Market'
@@ -321,14 +328,22 @@ def upsert_registry(
         )
         chain_ids[chain.chain_id] = chain_entity_id
 
-        explorer_source = repository.upsert_source(
-            source_class='chain_explorer',
-            url_or_handle=chain.explorer_api,
-            admission='admitted',
-            admitted_by=REGISTRY_ADMITTED_BY,
-            evidence=_registry_evidence(),
+        # Three chain-level rows, so the coverage grid reads one table for
+        # every class (UX brief, slice B) instead of two classes from config.
+        chain_sources = (
+            ('chain_rpc', rpc_source_handle()),
+            ('chain_explorer', chain.explorer_api),
+            ('dex_provider', f'{DEXSCREENER_WEB}{chain.dexscreener_slug}'),
         )
-        repository.link_source_to_entity(explorer_source, chain_entity_id)
+        for source_class, handle in chain_sources:
+            source_id = repository.upsert_source(
+                source_class=source_class,
+                url_or_handle=handle,
+                admission='admitted',
+                admitted_by=REGISTRY_ADMITTED_BY,
+                evidence=_registry_evidence(),
+            )
+            repository.link_source_to_entity(source_id, chain_entity_id)
 
     project_ids: Dict[str, int] = {}
     for project in registry.projects.values():
@@ -357,6 +372,26 @@ def upsert_registry(
             repository.link_source_to_entity(source_id, project_entity_id)
 
     return project_ids
+
+
+def rpc_source_handle() -> str:
+    """The `chain_rpc` row's handle: the host of the endpoint the collectors
+    read, and nothing else of its URL.
+
+    The keyed archive endpoint carries its key in the URL path (Alchemy's
+    `/v2/<key>`), and `url_or_handle` is a stored column that reaches the
+    dossier JSON and the overview page. So the URL is reduced to its hostname
+    before it is written: no scheme, no path, no query. When no archive
+    endpoint is configured the public endpoint's host is written instead,
+    which is then the RPC the collectors actually read. A URL with no
+    readable host falls back to `configured (<kind>)` rather than to any part
+    of the URL.
+    """
+    endpoint = get_archive_endpoint() or get_public_endpoint()
+    host = urlsplit(str(endpoint.url)).hostname or ''
+    if not host:
+        return f'{RPC_CONFIGURED_LABEL} ({endpoint.kind})'
+    return host
 
 
 def _registry_evidence() -> Dict[str, Any]:

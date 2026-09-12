@@ -36,10 +36,10 @@ def load_dossier(
     # The header's source badges: one row per source reaching this project,
     # directly or through its chain (the explorer hangs off the chain entity).
     sources = [
-        {'class': row['class'], 'admission': row['admission'], 'scope': 'project'}
+        _source_row(row, 'project')
         for row in repository.get_sources_for_entity(int(entity['id']))
     ] + [
-        {'class': row['class'], 'admission': row['admission'], 'scope': 'chain'}
+        _source_row(row, 'chain')
         for row in (repository.get_sources_for_entity(int(chain['id'])) if chain else [])
     ]
 
@@ -57,6 +57,7 @@ def load_dossier(
             'display_name': entity.get('display_name'),
             'archetype': (entity.get('attrs_json') or {}).get('archetype'),
             'chain': chain.get('display_name') if chain else None,
+            'chain_key': _chain_key(chain),
             **_chain_links(chain),
             'sources': sources,
             'builds': [],
@@ -100,6 +101,7 @@ def load_dossier(
         'display_name': entity.get('display_name'),
         'archetype': (entity.get('attrs_json') or {}).get('archetype'),
         'chain': chain.get('display_name') if chain else None,
+        'chain_key': _chain_key(chain),
         **_chain_links(chain),
         'sources': sources,
         'builds': recent,
@@ -116,6 +118,24 @@ def load_dossier(
         },
         'sections': sections,
     }
+
+
+def _source_row(row: Dict[str, Any], scope: str) -> Dict[str, Any]:
+    """One source as the dossier and the overview carry it. `url_or_handle`
+    is whatever the store holds -- for the RPC row that is a bare host, by
+    construction in `registry.rpc_source_handle`, never a keyed URL."""
+    return {
+        'class': row['class'],
+        'admission': row['admission'],
+        'admitted_by': row.get('admitted_by'),
+        'url_or_handle': row.get('url_or_handle'),
+        'evidence': row.get('evidence_json') or {},
+        'scope': scope,
+    }
+
+
+def _chain_key(chain: Optional[Dict[str, Any]]) -> Optional[str]:
+    return ((chain or {}).get('attrs_json') or {}).get('key')
 
 
 def _chain_links(chain: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -344,6 +364,44 @@ GLOSSARY: Dict[str, str] = {
         'both when the source is not verified and when a verified ABI has none of the four, '
         'and the field cannot tell the two apart. From the explorer.'
     ),
+    'flag_count': (
+        "Fields the latest build's diff flagged against the threshold version, summed "
+        'over its sections; a flag is a move past a threshold, not a verdict. From the '
+        'stored section diffs.'
+    ),
+    'inherited': (
+        'A source linked to the chain entity rather than to the project, so every project '
+        'on that chain reaches it (the RPC, the explorer, the DEX provider). From the '
+        'registry load.'
+    ),
+    'candidate': (
+        "A source the build found published (a Dexscreener profile link) that no one has "
+        'admitted yet; read by nothing until phase 1b raises it. From the DEX provider.'
+    ),
+    'chain_rpc': (
+        'The JSON-RPC endpoint the collectors read chain state and logs from; stored as '
+        'its host only, since the archive URL carries a key. From the registry load.'
+    ),
+    'chain_explorer': (
+        'The block explorer API (Blockscout) that supplies verification, ABI and the '
+        'canonical-source links. From the registry load.'
+    ),
+    'dex_provider': (
+        'The DEX aggregator (Dexscreener) that supplies liquidity, volume, trades, price '
+        'and the pool list. From the registry load.'
+    ),
+    'web': (
+        'A project website, docs page or app. From the registry when the operator '
+        "supplied it, or from the DEX provider's published links as a candidate."
+    ),
+    'x': (
+        'An X (Twitter) account for the project. From the registry when the operator '
+        "supplied it, or from the DEX provider's published links as a candidate."
+    ),
+    'telegram': (
+        'A Telegram channel or group for the project; no capture reads one yet. From the '
+        "registry or the DEX provider's published links."
+    ),
 }
 
 
@@ -449,6 +507,96 @@ def load_history(
             'values': metric_values(sections),
         })
     return {'project': project_key, 'metrics': list(HISTORY_METRICS), 'points': points}
+
+
+# The order the page shows source classes in: chain-level classes first, then
+# the project's own. A class in `config.SOURCE_CLASSES` and not named here lands
+# at the end. Owned here because the overview loader and the pages share it.
+SOURCE_BADGE_ORDER: Tuple[str, ...] = (
+    'chain_rpc', 'chain_explorer', 'dex_provider', 'web', 'x', 'telegram'
+)
+
+
+def previous_metric_values(
+    sections: List[Dict[str, Any]], current: Dict[str, Optional[float]]
+) -> Dict[str, Optional[float]]:
+    """Each KPI's value in the build this one was diffed against, read from
+    the section diff: the `old` side of a changed field, None when the field
+    was added or the section has no diff (first build), the current value
+    when unchanged. The dossier tiles and the overview table share this, so a
+    delta on either page is the same number."""
+    by_name = {str(s.get('name')): s for s in sections}
+    previous: Dict[str, Optional[float]] = {}
+    for metric, (section_name, path) in HISTORY_METRICS.items():
+        section = by_name.get(section_name)
+        changes = (section or {}).get('changes') or {}
+        value = current.get(metric)
+        if section is None or not changes or value is None:
+            previous[metric] = None
+            continue
+        field = path[0]
+        entry = next(
+            (e for e in changes.get('changed') or [] if e.get('field') == field), None
+        )
+        if entry is None:
+            previous[metric] = None if field in (changes.get('added') or {}) else value
+            continue
+        old = entry.get('old')
+        if field == 'pairs':
+            old = next(
+                (p.get('value') for p in old or [] if isinstance(p, dict) and p.get('metric') == path[1]),
+                None,
+            )
+        previous[metric] = old if isinstance(old, (int, float)) and not isinstance(old, bool) else None
+    return previous
+
+
+def load_overview(repository: OnchainRepository) -> Dict[str, Any]:
+    """The market overview (UX brief, slice B): one entry per project with its
+    latest build, the eight KPI values and their previous values, and the
+    source coverage per class.
+
+    Built on `load_dossier` per project, so a figure on the overview is the
+    figure on that project's dossier page and in `report --all`. Sorted by
+    primary-pool liquidity descending, a project with no liquidity figure
+    (no build, or a failed health section) last.
+
+    `coverage[project][class]` lists every source row reaching the project in
+    that class; a row linked to the chain entity is `inherited: true`.
+    """
+    projects = []
+    coverage: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    for row in repository.get_projects():
+        dossier = load_dossier(repository, project_key(row['key']))
+        key = dossier['project']
+        sections = dossier.get('sections') or []
+        values = metric_values(sections)
+        projects.append({
+            'key': key,
+            'display_name': dossier.get('display_name'),
+            'chain': dossier.get('chain'),
+            'chain_key': dossier.get('chain_key'),
+            'build': dossier.get('build') and {
+                k: dossier['build'].get(k) for k in ('id', 'run_id', 'block_timestamp', 'outcome')
+            },
+            'flag_count': sum(len(s.get('flagged') or []) for s in sections),
+            'values': values,
+            'previous': previous_metric_values(sections, values),
+        })
+        by_class: Dict[str, List[Dict[str, Any]]] = {c: [] for c in SOURCE_BADGE_ORDER}
+        for source in dossier.get('sources') or []:
+            by_class.setdefault(str(source.get('class')), []).append({
+                'url_or_handle': source.get('url_or_handle'),
+                'admission': source.get('admission'),
+                'admitted_by': source.get('admitted_by'),
+                'evidence': source.get('evidence') or {},
+                'inherited': source.get('scope') == 'chain',
+            })
+        coverage[key] = by_class
+    projects.sort(key=lambda p: (
+        p['values'].get('liquidity_usd') is None, -(p['values'].get('liquidity_usd') or 0), p['key']
+    ))
+    return {'projects': projects, 'coverage': coverage, 'classes': list(SOURCE_BADGE_ORDER)}
 
 
 # --- Formatting -------------------------------------------------------------

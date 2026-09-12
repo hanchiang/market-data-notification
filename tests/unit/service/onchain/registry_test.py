@@ -182,18 +182,70 @@ class TestUpsert:
         assert {s['admitted_by'] for s in sources} == {'registry'}
         assert all(s['admitted_at'] is not None for s in sources)
 
-    def test_the_chain_explorer_is_admitted_as_a_source(self, onchain_repository):
-        """Design DG-3: the explorer and the RPC are sources the collectors read,
-        and source admission is phase 1b, so the registry admits them."""
+    def test_the_chain_explorer_rpc_and_dex_provider_are_admitted_as_chain_sources(
+        self, onchain_repository
+    ):
+        """Design DG-3: the explorer, the RPC and the DEX provider are sources
+        the collectors read, and source admission is phase 1b, so the registry
+        admits them -- three chain-level rows, so the coverage grid (UX brief,
+        slice B) reads every class from one table."""
         registry = load_registry(DEFAULT_REGISTRY_PATH)
         upsert_registry(onchain_repository, registry)
         onchain_repository.commit()
 
         chain = onchain_repository.get_entity_by_key(f'chain:{ROBINHOOD_CHAIN_ID}')
-        classes = {
-            s['class'] for s in onchain_repository.get_sources_for_entity(chain['id'])
-        }
-        assert 'chain_explorer' in classes
+        rows = onchain_repository.get_sources_for_entity(chain['id'])
+        by_class = {s['class']: s for s in rows}
+        assert len(rows) == 3
+        assert set(by_class) == {'chain_rpc', 'chain_explorer', 'dex_provider'}
+        assert by_class['chain_explorer']['url_or_handle'] == 'https://robinhoodchain.blockscout.com/api/v2/'
+        assert by_class['dex_provider']['url_or_handle'] == 'https://dexscreener.com/robinhood'
+        for row in rows:
+            assert row['admission'] == 'admitted' and row['admitted_by'] == 'registry'
+            assert row['evidence_json']['path'] == 'src/service/onchain/registry/projects.json'
+
+        # Idempotent: the nightly re-upsert adds no fourth row.
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+        assert len(onchain_repository.get_sources_for_entity(chain['id'])) == 3
+
+    def test_the_rpc_row_is_the_host_and_never_carries_the_key(
+        self, onchain_repository, monkeypatch
+    ):
+        """The archive URL carries its key in the path, and `url_or_handle` is
+        a stored column that reaches the dossier JSON and the overview page.
+        A fake key made of characters the host does not contain, in both the
+        path and a query string: none of it may reach the row."""
+        # Built at runtime from a low-entropy seed: a key-shaped literal in a
+        # test file trips the secret scan on commit, and rightly so.
+        fake_key = ''.join(c * 3 for c in 'ZQXJWVUP') + '0123456789'
+        monkeypatch.setenv(
+            'ROBINHOOD_CHAIN_RPC_URL',
+            f'https://robinhood-mainnet.g.alchemy.com/v2/{fake_key}?apikey={fake_key}',
+        )
+        registry = load_registry(DEFAULT_REGISTRY_PATH)
+        upsert_registry(onchain_repository, registry)
+        onchain_repository.commit()
+
+        chain = onchain_repository.get_entity_by_key(f'chain:{ROBINHOOD_CHAIN_ID}')
+        rpc = [s for s in onchain_repository.get_sources_for_entity(chain['id']) if s['class'] == 'chain_rpc']
+        assert len(rpc) == 1
+        handle = rpc[0]['url_or_handle']
+        assert handle == 'robinhood-mainnet.g.alchemy.com'
+        assert '?' not in handle and 'key' not in handle.lower() and fake_key not in handle
+        assert set(handle).isdisjoint(set(fake_key))
+        assert fake_key not in str(rpc[0]['evidence_json'])
+
+    def test_without_an_archive_key_the_rpc_row_is_the_public_host(
+        self, onchain_repository, monkeypatch
+    ):
+        monkeypatch.delenv('ROBINHOOD_CHAIN_RPC_URL', raising=False)
+        monkeypatch.setenv('ROBINHOOD_CHAIN_PUBLIC_RPC_URL', 'https://rpc.robinhood.example/')
+        assert registry_module.rpc_source_handle() == 'rpc.robinhood.example'
+
+    def test_an_endpoint_with_no_readable_host_is_labelled_configured(self, monkeypatch):
+        monkeypatch.setenv('ROBINHOOD_CHAIN_RPC_URL', 'not a url')
+        assert registry_module.rpc_source_handle() == 'configured (alchemy)'
 
     def test_a_second_upsert_changes_nothing(self, onchain_repository):
         """The build re-upserts every night; that must be a no-op, including for

@@ -88,8 +88,6 @@ def evaluate(
 
 async def main(test_mode: bool = False) -> int:
     runtime_mode = RuntimeMode.from_test_mode(test_mode)
-    configure_job_logging(JOB_NAME)
-    deadline = get_build_deadline_hours()
 
     repository: Optional[OnchainRepository] = None
     run_id: Optional[int] = None
@@ -97,6 +95,10 @@ async def main(test_mode: bool = False) -> int:
     failed_units: List[Dict[str, str]] = []
     notes: List[str] = []
     try:
+        # Inside the try: an unwritable log dir or a bad deadline setting is a
+        # watcher failure to report, not a traceback in place of the report.
+        configure_job_logging(JOB_NAME)
+        deadline = get_build_deadline_hours()
         repository = OnchainRepository(get_onchain_database_url(runtime_mode))
         run_id = repository.start_run(JOB_NAME)
         with run_context(run_id, JOB_NAME):

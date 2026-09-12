@@ -171,7 +171,7 @@ class TestConsecutiveRuns:
         assert len(sender.calls) == 2
 
 
-def test_the_alert_has_exactly_two_call_sites_in_the_product():
+def test_the_alert_has_exactly_three_call_sites_in_the_product():
     """The cardinality tests above stub `run_build`, so they see only the send at
     `main()`'s end. A second `send_run_alert` added inside the build loop -- per
     project, or per failed section -- would be invisible to every one of them
@@ -180,6 +180,13 @@ def test_the_alert_has_exactly_two_call_sites_in_the_product():
     Enumerating the call sites is the check that does not depend on which code
     path a test happens to drive. If a third site is ever legitimate, this list
     is where the decision gets recorded.
+
+    Third site, 2026-09-12: `cron_alert.py`, a separate entrypoint the cron
+    WRAPPER runs once when the build never ran (lock held, timeout kill, exit
+    non-zero). It is one message per wrapper failure, outside the build loop, on
+    the operator's ruling that errors go to the admin chat and this host has no
+    mail transport. It cannot multiply a build's messages: the wrapper calls it
+    only on the paths where `build.py` did not reach its own send.
     """
     import collections
     import pathlib
@@ -197,6 +204,7 @@ def test_the_alert_has_exactly_two_call_sites_in_the_product():
     # it -- the opposite of what a tripwire is for.
     assert dict(sites) == {
         'job/onchain/build.py': 1,
+        'job/onchain/cron_alert.py': 1,
         'job/onchain/watch.py': 1,
     }, dict(sites)
 

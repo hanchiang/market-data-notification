@@ -150,6 +150,8 @@ CSS = (
     'font-weight:600;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}'
     'td{padding:5px 6px;border-bottom:1px solid #1d222b;vertical-align:top}'
     'td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    # An address cell wraps at 1440px in the 3-up grid; a broken `0x1234…abcd` reads as two values.
+    'td.a{white-space:nowrap}'
     '.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:60px}'
     '.bar i{display:block;height:100%;background:var(--acc)}'
     '.stack{display:flex;height:16px;border-radius:5px;overflow:hidden;margin:6px 0;'
@@ -312,18 +314,17 @@ class _Page:
         source, so a figure on the page can be checked where it came from."""
         deployer = self.identity.get('deployer')
         deployer = deployer if isinstance(deployer, dict) else {}
-        pool_address = self.identity.get('pool_address')
-        pool_id = self.identity.get('pool_id') or self.identity.get('pool_ref')
+        pool = self.identity.get('pool_address') or self.identity.get('pool_id') or self.identity.get('pool_ref')
+        token, creator, tx = self.identity.get('token_address'), deployer.get('creator'), self.identity.get('creation_tx')
         items = [
-            ('token', self.identity.get('token_address'), self.links.token(self.identity.get('token_address'))),
-            ('pool', pool_address or pool_id,
-             self.links.address(pool_address) if pool_address else self.links.pool(pool_id)),
-            ('deployer', deployer.get('creator'), self.links.address(deployer.get('creator'))),
-            ('creation tx', self.identity.get('creation_tx'), self.links.tx(self.identity.get('creation_tx'))),
+            ('token', token, lambda: _link(self.links.token(token), short_address(token), title=str(token))),
+            ('pool', pool, lambda: self._pool_link(pool, title=str(pool))),
+            ('deployer', creator, lambda: _link(self.links.address(creator), short_address(creator), title=str(creator))),
+            ('creation tx', tx, lambda: _link(self.links.tx(tx), short_address(tx), title=str(tx))),
         ]
         shown = [
-            f'<span>{escape(label)} {_link(url, short_address(value), title=str(value))}</span>'
-            for label, value, url in items if value and str(value).startswith('0x')
+            f'<span>{escape(label)} {render()}</span>'
+            for label, value, render in items if value and str(value).startswith('0x')
         ]
         return f'<div class="ident" id="identity">{"".join(shown)}</div>' if shown else ''
 
@@ -534,15 +535,26 @@ class _Page:
         )
 
     def _linked_label(self, row: '_Row') -> str:
-        """The row label with its shortened address linked to the canonical
-        source: a 32-byte reference is a v4 pool id (DEX provider page), a
-        20-byte one an address (explorer)."""
+        """The row label with its shortened reference linked to its canonical
+        source: a pool row (identity `pool 0x…`) to the DEX provider page, with
+        the explorer second; a wallet, token or deployer to the explorer."""
         text = escape(row.label)
+        is_pool = row.identity.startswith('pool ')
         for full in re.findall(r'0x[0-9a-fA-F]{64}|0x[0-9a-fA-F]{40}', row.identity):
-            url = self.links.pool(full) if len(full) == 66 else self.links.address(full)
-            if url:
-                text = text.replace(escape(short_address(full)), _link(url, short_address(full)), 1)
+            linked = self._pool_link(full) if is_pool else _link(self.links.address(full), short_address(full))
+            text = text.replace(escape(short_address(full)), linked, 1)
         return text
+
+    def _pool_link(self, reference: Any, *, title: Optional[str] = None) -> str:
+        """One rule for every pool reference on the page: DexScreener is the
+        primary link, the explorer a secondary `#` when the reference is a
+        contract address (v3; a v4 pool id is not an address). Wallets, tokens
+        and deployers use `Links.address` directly."""
+        primary = _link(self.links.pool(reference), short_address(reference), title=title)
+        explorer = self.links.address(reference)
+        if not explorer:
+            return primary
+        return primary + ' ' + _link(explorer, '#', title='pool contract on the explorer', cls='m')
 
     def _moved_rows(self) -> Tuple[List['_Row'], set]:
         rows: List[_Row] = []
@@ -563,12 +575,8 @@ class _Page:
         total = sum(p.get('liquidity_usd') or 0 for p in pools)
         primary = str(self.identity.get('pool_ref') or '').lower()
         rows = ''.join(
-            f'<tr><td title="{escape(p.get("reference"))}">'
-            f'{_link(self.links.pool(p.get("reference")), short_address(p.get("reference")))}'
+            f'<tr><td class="a" title="{escape(p.get("reference"))}">{self._pool_link(p.get("reference"))}'
             + (' <span class="tag">primary</span>' if primary and str(p.get('reference')).lower() == primary else '')
-            + (f' <a class="m" href="{self.links.address(p.get("reference"))}" target="_blank" '
-               f'rel="noopener noreferrer" title="pool contract on the explorer">explorer</a>'
-               if p.get('version') == 'v3' and self.links.address(p.get('reference')) else '')
             + f'</td><td>{escape(p.get("dex"))} {escape(p.get("version") or "")}</td>'
             f'<td class="n" title="{escape(self.formatting.exact("liquidity_usd", p.get("liquidity_usd")))}">'
             f'{escape(abbrev_money(p.get("liquidity_usd")))}</td>'
@@ -592,7 +600,7 @@ class _Page:
         formatting = self.formatting.for_section('token_economics')
         top = max((float(h.get('share') or 0) for h in holders), default=0) or 1e-9
         rows = ''.join(
-            f'<tr><td>{i + 1}</td><td title="{escape(h.get("address"))}">'
+            f'<tr><td>{i + 1}</td><td class="a" title="{escape(h.get("address"))}">'
             f'{_link(self.links.address(h.get("address")), short_address(h.get("address")))}</td>'
             f'<td class="n" title="{escape(formatting.amount(h.get("balance")))}">{escape(formatting.amount_brief(h.get("balance")))}</td>'
             f'<td class="n" title="{escape(formatting.exact("share", h.get("share")))}">{escape(abbrev_pct(h.get("share")))}</td>'
@@ -899,14 +907,18 @@ def _build_label(build: Dict[str, Any], formatting: Formatting) -> str:
     return label
 
 
-def _link(url: Optional[str], text: Any, *, title: Optional[str] = None) -> str:
+def _link(url: Optional[str], text: Any, *, title: Optional[str] = None, cls: Optional[str] = None) -> str:
     """A canonical-source link, or the plain text when there is no URL. New
     tab, `noopener noreferrer`: the page never loads from these hosts, the
-    operator only navigates to them."""
+    operator only navigates to them. The href is escaped like any other
+    attribute: the explorer host comes from the chain record, and a quote in
+    it must not close the attribute."""
     if not url:
         return escape(text)
     attr = f' title="{escape(title)}"' if title else ''
-    return f'<a href="{escape(url)}" target="_blank" rel="noopener noreferrer"{attr}>{escape(text)}</a>'
+    classes = f' class="{escape(cls)}"' if cls else ''
+    return (f'<a{classes} href="{escape(url)}" target="_blank" rel="noopener noreferrer"{attr}>'
+            f'{escape(text)}</a>')
 
 
 def _glossary_block(fields: Tuple[str, ...], *, extra_class: str = '') -> str:

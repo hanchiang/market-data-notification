@@ -138,6 +138,10 @@ class Links:
     record lacks the base or the value is not a hex identifier, so a caller
     renders plain text rather than a broken link. These are navigation links
     the operator clicks, never a resource the page loads.
+
+    The two-host property (explorer host plus dexscreener.com) is enforced by
+    the registry contents, not by runtime validation: whatever `explorer_api`
+    the chain record carries becomes the explorer host.
     """
 
     DEXSCREENER = 'https://dexscreener.com/'
@@ -212,12 +216,13 @@ GLOSSARY: Dict[str, str] = {
     ),
     'holder_count': (
         'Addresses holding a non-zero balance, burn sinks and the zero address excluded; '
-        'rises when one balance is split across wallets. From the replayed transfer log, '
-        'checked against balanceOf.'
+        'rises when one balance is split across wallets. From the replayed transfer log; '
+        'only the top ten balances are checked against balanceOf.'
     ),
     'top_ten_share': (
-        'Share of circulating supply held by the ten largest non-pool, non-burn addresses; '
-        'rises when supply concentrates. From the replayed transfer log.'
+        'Share of circulating supply held by the ten largest non-burn addresses; the pool '
+        'contract itself or the v4 PoolManager can be among the ten. Rises when supply '
+        'concentrates. From the replayed transfer log.'
     ),
     'pool_count': (
         'Pools the provider lists for this token across DEXes and versions; grows when '
@@ -258,7 +263,8 @@ GLOSSARY: Dict[str, str] = {
         'out; a transfer from 0x0 is a mint, not an un-burn. From the replayed transfer log.'
     ),
     'total_supply': (
-        'totalSupply() at the pinned block, in base units scaled by decimals. From chain state.'
+        'totalSupply() at the pinned block, stored raw in base units; the page divides by '
+        'decimals for display. From chain state.'
     ),
     'sqrt_price_x96': (
         "Uniswap's pool price as the square root of token1/token0 in Q64.96 fixed point; "
@@ -324,7 +330,8 @@ GLOSSARY: Dict[str, str] = {
     ),
     'role_holders': (
         'Addresses holding DEFAULT_ADMIN_ROLE among the deployer, the owner and the '
-        'associated contracts, checked with hasRole. From chain state.'
+        'associated contracts, checked with hasRole; unavailable when hasRole is not among '
+        'the scanned selectors, so nothing was checked. From chain state.'
     ),
     'privileged_selectors': (
         "Privileged function selectors from the collector's fixed list found as PUSH4 "
@@ -334,7 +341,8 @@ GLOSSARY: Dict[str, str] = {
     ),
     'exit_path': (
         'Which of redeem, refund, withdraw and exit the verified ABI exposes; unavailable '
-        'when the source is not verified. From the explorer.'
+        'both when the source is not verified and when a verified ABI has none of the four, '
+        'and the field cannot tell the two apart. From the explorer.'
     ),
 }
 

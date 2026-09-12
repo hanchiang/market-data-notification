@@ -730,7 +730,7 @@ class TestWhatMovedTable:
                 '<td class="n" title="$169,900.00">$169.9k</td>'
                 '<td class="n" title="$173,738.69">$173.7k</td><td class="n up">+2.3%</td>') in moved
         assert f'<td title="holder {HOLDERS[0]["address"]} share">holder 0x0000…0001 share</td>' in moved
-        assert f'<td title="{POOL_A}">' in _element(render_dossier_page(dossier, history=history), 'pools')
+        assert f'<td class="a" title="{POOL_A}">' in _element(render_dossier_page(dossier, history=history), 'pools')
 
     def test_a_flag_on_a_keyed_list_field_does_not_add_a_second_row(self):
         """Round 1: the flag check keyed on the label's first word, so a
@@ -929,15 +929,51 @@ class TestLinks:
         assert f'pool <a href="https://dexscreener.com/robinhood/{POOL_A}" {ANCHOR}>0x64c5…8c77</a> liquidity_usd' in moved
         assert f'holder <a href="{holder}" {ANCHOR}>0x0000…0001</a> share' in moved
 
-    def test_a_v3_pool_address_gets_a_second_explorer_link(self):
+    def test_a_pool_reference_links_the_same_way_everywhere(self):
+        """One rule for a pool reference wherever it appears (identity line,
+        What moved, Pools panel): DexScreener primary, the explorer as a
+        secondary `#` when the reference is a contract address. A wallet in
+        the same What-moved table links to the explorer only."""
         dossier, history = _linked_dossier()
+        v3 = '0x' + 'dd' * 20
+        fields = dossier['sections'][0]['fields']
+        fields['pools'].append({'reference': v3, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 10.0})
+        fields['pool_address'], fields['pool_id'] = v3, None
+        dossier['sections'][0]['changes']['changed'].append({
+            'field': 'pools',
+            'old': [{'reference': v3, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 5.0}],
+            'new': [{'reference': v3, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 10.0}],
+        })
+        html = render_dossier_page(dossier, history=history)
+        primary = f'<a href="https://dexscreener.com/robinhood/{v3}" {ANCHOR}'
+        secondary = (f'<a class="m" href="https://robinhoodchain.blockscout.com/address/{v3}" {ANCHOR} '
+                     'title="pool contract on the explorer">#</a>')
+        pair = f'{primary}>0xdddd…dddd</a> {secondary}'
+        assert pair in _element(html, 'pools')
+        assert f'pool {pair} liquidity_usd' in _element(html, 'what-moved')
+        assert f'pool {primary} title="{v3}">0xdddd…dddd</a> {secondary}' in _element(html, 'identity')
+        # A v4 pool id is not an address: DexScreener only, no `#`.
+        assert f'<a href="https://dexscreener.com/robinhood/{POOL_B}" {ANCHOR}>0x1111…1111</a></td>' in _element(html, 'pools')
+        # Nothing on the page links a pool reference to the explorer as its primary.
+        assert f'<a href="https://robinhoodchain.blockscout.com/address/{v3}"' not in html
+        holder = 'https://robinhoodchain.blockscout.com/address/' + HOLDERS[0]['address']
+        assert f'holder <a href="{holder}" {ANCHOR}>0x0000…0001</a> share' in _element(html, 'what-moved')
+
+    def test_a_quote_in_the_chain_record_cannot_leave_the_href_attribute(self):
+        """The explorer host is registry content, not validated at runtime; a
+        double quote in it must be escaped on every path that renders it,
+        including the secondary `#` pool link."""
+        dossier, history = _linked_dossier()
+        dossier['explorer_api'] = 'https://evil.example/" onmouseover="alert(1)/api/v2/'
         v3 = '0x' + 'dd' * 20
         dossier['sections'][0]['fields']['pools'].append(
             {'reference': v3, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 10.0}
         )
-        pools = _element(render_dossier_page(dossier, history=history), 'pools')
-        assert f'<a href="https://dexscreener.com/robinhood/{v3}" {ANCHOR}>0xdddd…dddd</a>' in pools
-        assert f'<a class="m" href="https://robinhoodchain.blockscout.com/address/{v3}" {ANCHOR} title="pool contract on the explorer">explorer</a>' in pools
+        html = render_dossier_page(dossier, history=history)
+        assert 'onmouseover="' not in html
+        assert '&quot; onmouseover=&quot;alert(1)' in html
+        for href in re.findall(r'<a[^>]* href="([^"]*)"', html):
+            assert '"' not in href
 
     def test_every_external_reference_is_a_navigation_link_to_an_allowed_host(self):
         dossier, history = _linked_dossier()
@@ -953,7 +989,7 @@ class TestLinks:
         dossier, history = _mission_control_dossier()
         html = render_dossier_page(dossier, history=history)
         assert 'https://' not in html
-        assert '<td title="' + HOLDERS[0]['address'] + '">0x0000…0001</td>' in _element(html, 'holders')
+        assert '<td class="a" title="' + HOLDERS[0]['address'] + '">0x0000…0001</td>' in _element(html, 'holders')
 
 
 class TestGlossary:

@@ -128,10 +128,14 @@ class TestDossierRoute:
         assert client.get('/project-monitor/static/chart.umd.js').status_code == 200
         assert not re.search(r'<(?:script|link|img|iframe)[^>]*(?:src|href)="(?:https?:)?//', body)
         assert '<link' not in body and 'fetch(' not in body and 'url(' not in body
+        # The whitelist is hardcoded to the seeded chain record's host (tests/unit/conftest.py).
         hosts = {m.group(1) for m in re.finditer(r'https?://([^/"\s]+)', body)}
         assert hosts <= {'robinhoodchain.blockscout.com', 'dexscreener.com'}
-        for anchor in re.findall(r'<a href="https?://[^"]*"[^>]*>', body):
-            assert 'target="_blank" rel="noopener noreferrer"' in anchor, anchor
+        # Strip every well-formed navigation anchor; what remains must carry no URL at
+        # all, so an external reference in any other element or attribute fails here.
+        anchor = r'<a(?: class="[^"]*")? href="https://[^"]*" target="_blank" rel="noopener noreferrer"[^>]*>'
+        assert re.findall(anchor, body)
+        assert 'http' not in re.sub(anchor, '', body)
 
     def test_holders_link_to_the_explorer_and_pools_to_dexscreener(
         self, client, seeded, onchain_repository

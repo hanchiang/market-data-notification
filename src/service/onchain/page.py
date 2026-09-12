@@ -27,8 +27,10 @@ from src.service.onchain.report import (
     AMOUNT_FIELDS,
     BOOKKEEPING_FIELDS,
     DASH,
+    GLOSSARY,
     LIST_KEYS,
     Formatting,
+    Links,
     abbrev_count,
     abbrev_liquidity,
     abbrev_money,
@@ -88,6 +90,16 @@ TILES: Tuple[Tuple[str, str, str], ...] = (
 )
 
 PANEL_IDS = ('what-moved', 'pools', 'holders', 'custody', 'pairs', 'raw-diff')
+# The fields each panel's folded glossary explains (KPI tiles derive theirs
+# from `report.HISTORY_METRICS`; What moved and pairs from the rows shown).
+PANEL_GLOSSARY: Dict[str, Tuple[str, ...]] = {
+    'pools': ('pool_count', 'liquidity_usd', 'primary_pool_share_of_provider_liquidity'),
+    'holders': ('holder_count', 'top_ten_share', 'pool_held_share', 'burned_share', 'total_supply'),
+    'custody': ('share_by_class', 'liquidity_by_class', 'largest_owner_share', 'owner_count',
+                'open_positions', 'pool_liquidity', 'primary_pool_share_of_provider_liquidity'),
+}
+# The h2 hover for the three panels whose name is not itself a field.
+PANEL_TITLES = {'pools': 'pool_count', 'holders': 'top_ten_share', 'custody': 'share_by_class'}
 # The What-moved label for one item of a keyed list; a pair row is named by
 # its metric alone, since that is the name the state block prints it under.
 LIST_NOUNS = {'pools': 'pool', 'top_holders': 'holder', 'pairs': ''}
@@ -95,12 +107,16 @@ LIST_NOUNS = {'pools': 'pool', 'top_holders': 'holder', 'pairs': ''}
 CUSTODY_COLOURS = {'project': '#7aa2ff', 'locker': '#3ecf8e', 'eoa': '#5a6475', 'contract': '#e8c04a'}
 
 CSS = (
-    ':root{--bg:#0f1217;--panel:#171b22;--line:#262c36;--fg:#e6e9ee;--mute:#8a93a3;'
+    # Readability (operator, 2026-09-12): 15px base, 14px table minimum, body
+    # text #e6e9ee on #0f1217 (contrast 15:1), muted text #9aa3b2 (7.5:1), header
+    # rows in body colour, tags at 12px in body colour.
+    ':root{--bg:#0f1217;--panel:#171b22;--line:#262c36;--fg:#e6e9ee;--mute:#9aa3b2;'
     '--up:#3ecf8e;--down:#ff6b6b;--acc:#7aa2ff}'
     '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);'
-    'font:14px/1.45 -apple-system,Segoe UI,Inter,Roboto,sans-serif;padding:20px 24px}'
-    'a{color:var(--acc);text-decoration:none}h1{font-size:20px;margin:0}'
-    'h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);'
+    'font:15px/1.45 -apple-system,Segoe UI,Inter,Roboto,sans-serif;padding:20px 24px}'
+    'a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}'
+    'h1{font-size:22px;margin:0}'
+    'h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg);'
     'margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}'
     'nav{display:flex;gap:14px;margin-bottom:18px;border-bottom:1px solid var(--line);'
     'padding-bottom:10px;flex-wrap:wrap}nav a{padding:4px 8px;border-radius:6px}'
@@ -108,7 +124,8 @@ CSS = (
     '.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}'
     '.head .m{color:var(--mute)}select{background:var(--panel);color:var(--fg);'
     'border:1px solid var(--line);border-radius:6px;padding:3px 6px;font:inherit}'
-    '.badges{display:flex;gap:10px;margin:6px 0 16px;color:var(--mute);font-size:12px;'
+    '.ident{color:var(--mute);font-size:14px;margin:2px 0 4px;display:flex;gap:14px;flex-wrap:wrap}'
+    '.badges{display:flex;gap:10px;margin:6px 0 16px;color:var(--mute);font-size:14px;'
     'flex-wrap:wrap;align-items:center}.b{display:inline-flex;align-items:center;gap:5px}'
     '.dot{width:9px;height:9px;border-radius:50%;background:var(--line);display:inline-block}'
     '.dot.ok{background:var(--up)}.dot.cand{background:#e8c04a}'
@@ -116,41 +133,47 @@ CSS = (
     '.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;'
     'margin-bottom:12px}.kpi{background:var(--panel);border:1px solid var(--line);'
     'border-radius:10px;padding:12px 14px;min-width:0}'
-    '.kpi .l{color:var(--mute);font-size:12px;display:flex;justify-content:space-between;'
-    'gap:6px;flex-wrap:wrap}.kpi .v{font-size:22px;font-weight:600;margin:2px 0;'
-    'font-variant-numeric:tabular-nums}.kpi .d{font-size:12px}'
+    '.kpi .l{color:var(--mute);font-size:13px;display:flex;justify-content:space-between;'
+    'gap:6px;flex-wrap:wrap}.kpi .v{font-size:1.6em;font-weight:600;margin:2px 0;'
+    'font-variant-numeric:tabular-nums}.kpi .d{font-size:13px}'
     '.up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--mute)}'
     # A responsive Chart.js canvas takes its size from a positioned parent
     # with a fixed height; without one it grows to fill the page.
-    '.spark{height:26px;margin-top:8px;border-radius:4px;color:var(--mute);font-size:10px;'
+    '.spark{height:26px;margin-top:8px;border-radius:4px;color:var(--mute);font-size:11px;'
     'display:flex;align-items:center;justify-content:center;position:relative;'
     'background:repeating-linear-gradient(90deg,var(--line) 0 2px,transparent 2px 8px)}'
     '.spark canvas{position:absolute;inset:0;width:100%!important;height:100%!important}'
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;'
     'margin-bottom:12px}.panel{background:var(--panel);border:1px solid var(--line);'
     'border-radius:10px;padding:12px 14px;min-width:0;overflow-x:auto}.wide{grid-column:1/-1}'
-    'table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mute);'
-    'font-weight:500;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}'
+    'table{width:100%;border-collapse:collapse;font-size:14px}th{color:var(--fg);'
+    'font-weight:600;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}'
     'td{padding:5px 6px;border-bottom:1px solid #1d222b;vertical-align:top}'
     'td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
     '.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:60px}'
     '.bar i{display:block;height:100%;background:var(--acc)}'
     '.stack{display:flex;height:16px;border-radius:5px;overflow:hidden;margin:6px 0;'
     'background:var(--line)}.stack i{display:block;height:100%}'
-    '.legend{color:var(--mute);font-size:12px}'
-    '.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--line);'
-    'color:var(--mute);text-transform:none;letter-spacing:0;font-weight:400;cursor:help}'
+    '.legend{color:var(--mute);font-size:14px}'
+    '.tag{font-size:12px;padding:1px 6px;border-radius:4px;background:var(--line);'
+    'color:var(--fg);text-transform:none;letter-spacing:0;font-weight:400;cursor:help}'
     '.tag.p{background:#243a2e;color:var(--up)}.tag.bad{background:#3a2424;color:var(--down)}'
-    '.foot{color:var(--mute);font-size:12px;margin-top:8px}'
+    '.foot{color:var(--mute);font-size:14px;margin-top:8px}'
     'details summary{cursor:pointer;color:var(--mute)}'
-    'pre{font-size:12px;color:var(--mute);white-space:pre-wrap;margin:8px 0 0}'
+    'pre{font-size:13px;color:var(--fg);white-space:pre-wrap;margin:8px 0 0}'
     '.flagn{color:#e8c04a}.chips{display:flex;gap:6px;margin:8px 0}'
-    '.chip{background:var(--line);color:var(--mute);border:0;border-radius:6px;'
-    'padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}'
+    '.chip{background:var(--line);color:var(--fg);border:0;border-radius:6px;'
+    'padding:3px 10px;font:inherit;font-size:13px;cursor:pointer}'
+    '.gloss{margin:0 0 8px;font-size:14px}.gloss summary{display:inline-block;width:1.4em;'
+    'height:1.4em;line-height:1.4em;text-align:center;border-radius:50%;background:var(--line);'
+    'color:var(--fg);font-size:12px;list-style:none}.gloss summary::-webkit-details-marker{display:none}'
+    '.gloss dl{margin:6px 0 0;padding:8px 10px;background:var(--bg);border-radius:6px}'
+    '.gloss dt{font-weight:600;margin-top:6px}.gloss dd{margin:0;color:var(--mute)}'
+    '.gloss.strip{margin:-4px 0 12px}'
     '.chip.on{background:var(--acc);color:#0f1217}'
     '.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}'
     '.chart{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}'
-    '.chart .l{color:var(--mute);font-size:12px;margin-bottom:4px}'
+    '.chart .l{color:var(--mute);font-size:13px;margin-bottom:4px}'
     '.chart .box{position:relative;height:160px}'
     '.chart canvas{position:absolute;inset:0;width:100%!important;height:100%!important}'
 )
@@ -208,8 +231,10 @@ def render_dossier_page(
     page = _Page(dossier, history or {'points': []}, query)
     parts.extend([
         page.header(),
+        page.identity_line(),
         page.source_badges(),
         page.kpi_strip(),
+        _glossary_block(tuple(path[-1] for _, path in report.HISTORY_METRICS.values()), extra_class=' strip'),
         page.charts(),
         '<div class="grid">',
         page.what_moved(),
@@ -237,6 +262,7 @@ class _Page:
         self.sections: List[Dict[str, Any]] = list(dossier.get('sections') or [])
         self.by_name = {str(s.get('name')): s for s in self.sections}
         self.formatting = Formatting(dossier)
+        self.links = Links.from_dossier(dossier)
         self.history = history
         self.current = report.metric_values(self.sections)
         self.previous = self._previous_values()
@@ -280,6 +306,26 @@ class _Page:
                 f"{unit.get('unit')} ({unit.get('error_class')})" for unit in failed
             )) + '</div>')
         return ''.join(parts)
+
+    def identity_line(self) -> str:
+        """Token, pool, deployer and creation tx, each a link to its canonical
+        source, so a figure on the page can be checked where it came from."""
+        deployer = self.identity.get('deployer')
+        deployer = deployer if isinstance(deployer, dict) else {}
+        pool_address = self.identity.get('pool_address')
+        pool_id = self.identity.get('pool_id') or self.identity.get('pool_ref')
+        items = [
+            ('token', self.identity.get('token_address'), self.links.token(self.identity.get('token_address'))),
+            ('pool', pool_address or pool_id,
+             self.links.address(pool_address) if pool_address else self.links.pool(pool_id)),
+            ('deployer', deployer.get('creator'), self.links.address(deployer.get('creator'))),
+            ('creation tx', self.identity.get('creation_tx'), self.links.tx(self.identity.get('creation_tx'))),
+        ]
+        shown = [
+            f'<span>{escape(label)} {_link(url, short_address(value), title=str(value))}</span>'
+            for label, value, url in items if value and str(value).startswith('0x')
+        ]
+        return f'<div class="ident" id="identity">{"".join(shown)}</div>' if shown else ''
 
     def _build_picker(self) -> str:
         """Build ids with the run in parentheses: the ledger numbers runs and
@@ -388,8 +434,10 @@ class _Page:
                 if isinstance(split, dict) and 'new' in split:
                     extra = (f'<div class="d flat">new {abbrev_count(split.get("new"))} · '
                              f'returning {abbrev_count(split.get("returning"))}</div>')
+            field = report.HISTORY_METRICS[metric][1][-1]
             tiles.append(
-                f'<div class="kpi" id="{tile_id}"><div class="l"><span>{escape(label)}</span>'
+                f'<div class="kpi" id="{tile_id}"><div class="l">'
+                f'<span title="{escape(GLOSSARY.get(field, ""))}">{escape(label)}</span>'
                 f'{_tag(tile_id)}</div>'
                 f'<div class="v" title="{escape(self.formatting.exact(metric, value))}">{escape(brief(metric, value))}</div>'
                 f'<div class="d {direction}" title="previous build: {escape(exact_previous)}">'
@@ -463,7 +511,7 @@ class _Page:
         rows, bookkeeping = self._moved_rows()
         body = ''.join(
             f'<tr><td><span class="tag">{escape(r.section)}</span></td>'
-            f'<td title="{escape(r.identity)}">{escape(r.label)}</td>'
+            f'<td title="{escape(_glossary_title(r.identity, r.name))}">{self._linked_label(r)}</td>'
             f'<td class="n" title="{escape(r.before_exact)}">{escape(r.before)}</td>'
             f'<td class="n" title="{escape(r.after_exact)}">{escape(r.after)}</td>'
             f'<td class="n {r.direction}">{escape(r.delta)}</td>'
@@ -478,10 +526,23 @@ class _Page:
         )
         return (
             f'<section class="panel wide" id="what-moved"><h2>What moved since previous build '
-            f'({len(rows)}){_tag("what-moved")}</h2><table><tr><th>section</th><th>field</th>'
+            f'({len(rows)}){_tag("what-moved")}</h2>'
+            f'{_glossary_block(tuple(dict.fromkeys(r.name for r in rows if r.name in GLOSSARY)))}'
+            '<table><tr><th>section</th><th>field</th>'
             '<th class="n">before</th><th class="n">after</th><th class="n">Δ</th><th>flag</th></tr>'
             f'{body}</table>{foot}</section>'
         )
+
+    def _linked_label(self, row: '_Row') -> str:
+        """The row label with its shortened address linked to the canonical
+        source: a 32-byte reference is a v4 pool id (DEX provider page), a
+        20-byte one an address (explorer)."""
+        text = escape(row.label)
+        for full in re.findall(r'0x[0-9a-fA-F]{64}|0x[0-9a-fA-F]{40}', row.identity):
+            url = self.links.pool(full) if len(full) == 66 else self.links.address(full)
+            if url:
+                text = text.replace(escape(short_address(full)), _link(url, short_address(full)), 1)
+        return text
 
     def _moved_rows(self) -> Tuple[List['_Row'], set]:
         rows: List[_Row] = []
@@ -502,8 +563,12 @@ class _Page:
         total = sum(p.get('liquidity_usd') or 0 for p in pools)
         primary = str(self.identity.get('pool_ref') or '').lower()
         rows = ''.join(
-            f'<tr><td title="{escape(p.get("reference"))}">{escape(short_address(p.get("reference")))}'
+            f'<tr><td title="{escape(p.get("reference"))}">'
+            f'{_link(self.links.pool(p.get("reference")), short_address(p.get("reference")))}'
             + (' <span class="tag">primary</span>' if primary and str(p.get('reference')).lower() == primary else '')
+            + (f' <a class="m" href="{self.links.address(p.get("reference"))}" target="_blank" '
+               f'rel="noopener noreferrer" title="pool contract on the explorer">explorer</a>'
+               if p.get('version') == 'v3' and self.links.address(p.get('reference')) else '')
             + f'</td><td>{escape(p.get("dex"))} {escape(p.get("version") or "")}</td>'
             f'<td class="n" title="{escape(self.formatting.exact("liquidity_usd", p.get("liquidity_usd")))}">'
             f'{escape(abbrev_money(p.get("liquidity_usd")))}</td>'
@@ -511,8 +576,10 @@ class _Page:
             for p in pools
         ) or '<tr><td colspan="4" class="foot">no pools read</td></tr>'
         return (
-            f'<section class="panel" id="pools"><h2>Pools · sum {escape(abbrev_money(total) if pools else DASH)}'
-            f'{_tag("pools")}</h2><table><tr><th>pool</th><th>dex</th><th class="n">liquidity</th>'
+            f'<section class="panel" id="pools"><h2 title="{escape(GLOSSARY[PANEL_TITLES["pools"]])}">'
+            f'Pools · sum {escape(abbrev_money(total) if pools else DASH)}'
+            f'{_tag("pools")}</h2>{_glossary_block(PANEL_GLOSSARY["pools"])}'
+            '<table><tr><th>pool</th><th>dex</th><th class="n">liquidity</th>'
             f'<th class="n">share</th></tr>{rows}</table></section>'
         )
 
@@ -525,7 +592,8 @@ class _Page:
         formatting = self.formatting.for_section('token_economics')
         top = max((float(h.get('share') or 0) for h in holders), default=0) or 1e-9
         rows = ''.join(
-            f'<tr><td>{i + 1}</td><td title="{escape(h.get("address"))}">{escape(short_address(h.get("address")))}</td>'
+            f'<tr><td>{i + 1}</td><td title="{escape(h.get("address"))}">'
+            f'{_link(self.links.address(h.get("address")), short_address(h.get("address")))}</td>'
             f'<td class="n" title="{escape(formatting.amount(h.get("balance")))}">{escape(formatting.amount_brief(h.get("balance")))}</td>'
             f'<td class="n" title="{escape(formatting.exact("share", h.get("share")))}">{escape(abbrev_pct(h.get("share")))}</td>'
             f'<td><div class="bar"><i style="width:{min(100.0, float(h.get("share") or 0) * 100 / top):.0f}%"></i></div></td></tr>'
@@ -546,7 +614,8 @@ class _Page:
             f' · burned {escape(_brief_or_failed("burned_share", self.economics.get("burned_share")))}'
         )
         return (
-            f'<section class="panel" id="holders"><h2>Top holders{_tag("holders")}</h2>'
+            f'<section class="panel" id="holders"><h2 title="{escape(GLOSSARY[PANEL_TITLES["holders"]])}">'
+            f'Top holders{_tag("holders")}</h2>{_glossary_block(PANEL_GLOSSARY["holders"])}'
             '<table><tr><th>#</th><th>address</th><th class="n">balance</th><th class="n">share</th><th></th></tr>'
             f'{rows}</table><div class="foot">{foot}</div></section>'
         )
@@ -569,8 +638,9 @@ class _Page:
             f'{escape(k)}{"*" if k == "eoa" else ""} {escape(abbrev_pct(v))}' for k, v in by_class.items()
         ) or 'no positions read'
         primary_share = (self.pair_rows.get('primary_pool_share_of_provider_liquidity') or {}).get('value')
+        largest = record.get('largest_owner')
         foot = (
-            f'largest owner {escape(short_address(record.get("largest_owner") or DASH))} holds '
+            f'largest owner {_link(self.links.address(largest), short_address(largest or DASH), title=str(largest or DASH))} holds '
             f'{escape(abbrev_pct(record.get("largest_owner_share")))} · '
             f'{escape(record.get("open_positions", DASH))} open positions · '
             f'{escape(record.get("owner_count", DASH))} owners · pool type {escape(record.get("pool_type", DASH))}<br>'
@@ -578,7 +648,8 @@ class _Page:
             '* eoa = not identified as project or locker; the collector does not check code at the address'
         )
         return (
-            f'<section class="panel" id="custody"><h2>Primary pool liquidity by owner{_tag("custody")}</h2>'
+            f'<section class="panel" id="custody"><h2 title="{escape(GLOSSARY[PANEL_TITLES["custody"]])}">'
+            f'Primary pool liquidity by owner{_tag("custody")}</h2>{_glossary_block(PANEL_GLOSSARY["custody"])}'
             f'<div class="stack">{stack}</div><div class="legend">{legend}</div>'
             f'<div class="foot">{foot}</div></section>'
         )
@@ -589,10 +660,10 @@ class _Page:
         pairs = [p for p in (self.health.get('pairs') or []) if isinstance(p, dict)]
         formatting = self.formatting.for_section('onchain_health')
         rows = ''.join(
-            f'<tr><td>{escape(p.get("metric"))}</td>'
+            f'<tr><td title="{escape(GLOSSARY.get(str(p.get("metric")), ""))}">{escape(p.get("metric"))}</td>'
             f'<td class="n" title="{escape(formatting.exact(str(p.get("metric")), p.get("value")))}">'
             f'{escape(brief(str(p.get("metric")), p.get("value")))}</td>'
-            f'<td>{escape(p.get("counterpart"))}</td>'
+            f'<td title="{escape(_counterpart_gloss(p))}">{escape(p.get("counterpart"))}</td>'
             f'<td class="n" title="{escape(formatting.exact(str(p.get("counterpart")), p.get("counterpart_value")))}">'
             f'{escape(_counterpart(p))}</td>'
             f'<td class="flat">{escape(p.get("guards_against"))}'
@@ -602,7 +673,8 @@ class _Page:
         ) or '<tr><td colspan="5" class="foot">no pairs: the health section did not build</td></tr>'
         return (
             f'<section class="panel wide" id="pairs"><h2>Metric pairs (A4): each number beside the '
-            f'one that would expose it{_tag("pairs")}</h2><table><tr><th>metric</th><th class="n">value</th>'
+            f'one that would expose it{_tag("pairs")}</h2>{_glossary_block(_pair_fields(pairs))}'
+            '<table><tr><th>metric</th><th class="n">value</th>'
             f'<th>counterpart</th><th class="n">value</th><th>guards against</th></tr>{rows}</table></section>'
         )
 
@@ -616,6 +688,7 @@ class _Page:
         return (
             f'<details class="panel wide" id="raw-diff"><summary>Raw diff and every field '
             f'(the text report, what `report --project` prints) {_tag("raw-diff")}</summary>'
+            f'{_glossary_block(tuple(sorted(GLOSSARY)))}'
             f'<pre>{escape(chr(10).join(lines))}</pre></details>'
         )
 
@@ -624,12 +697,13 @@ class _Row:
     """One What-moved row. `identity` is the full key behind a shortened
     label (the pool reference, the holder address), for hover and copy."""
 
-    __slots__ = ('section', 'label', 'identity', 'before', 'before_exact', 'after', 'after_exact',
-                 'delta', 'direction', 'flag')
+    __slots__ = ('section', 'label', 'identity', 'name', 'before', 'before_exact', 'after',
+                 'after_exact', 'delta', 'direction', 'flag')
 
     def __init__(self, section, label, before, before_exact, after, after_exact, delta, direction,
-                 flag, identity=None):
+                 flag, identity=None, name=None):
         self.section, self.label, self.identity = section, label, identity or label
+        self.name = name or label
         self.before, self.before_exact = before, before_exact
         self.after, self.after_exact = after, after_exact
         self.delta, self.direction, self.flag = delta, direction, flag
@@ -693,8 +767,8 @@ def _section_rows(section: Dict[str, Any], formatting: Formatting) -> Tuple[List
 def _edge_row(section, field, value, formatting: Formatting, flag, *, added: bool) -> '_Row':
     shown, exact = _brief_for(field, value, formatting), formatting.exact(field, value)
     if added:
-        return _Row(section, field, DASH, DASH, shown, exact, 'added', 'up', flag)
-    return _Row(section, field, shown, exact, DASH, DASH, 'removed', 'down', flag)
+        return _Row(section, field, DASH, DASH, shown, exact, 'added', 'up', flag, name=field)
+    return _Row(section, field, shown, exact, DASH, DASH, 'removed', 'down', flag, name=field)
 
 
 def _is_first_build(section: Dict[str, Any], changes: Dict[str, Any]) -> bool:
@@ -770,7 +844,7 @@ def _leaf_row(section, label, identity, name, old, new, formatting: Formatting, 
         section, label,
         _brief_for(name, old, formatting), formatting.exact(name, old),
         _brief_for(name, new, formatting), formatting.exact(name, new),
-        delta, direction, flag, identity=identity,
+        delta, direction, flag, identity=identity, name=name,
     )
 
 
@@ -823,6 +897,59 @@ def _build_label(build: Dict[str, Any], formatting: Formatting) -> str:
     if build.get('outcome') and build.get('outcome') != 'ok':
         label += f" · {build['outcome']}"
     return label
+
+
+def _link(url: Optional[str], text: Any, *, title: Optional[str] = None) -> str:
+    """A canonical-source link, or the plain text when there is no URL. New
+    tab, `noopener noreferrer`: the page never loads from these hosts, the
+    operator only navigates to them."""
+    if not url:
+        return escape(text)
+    attr = f' title="{escape(title)}"' if title else ''
+    return f'<a href="{escape(url)}" target="_blank" rel="noopener noreferrer"{attr}>{escape(text)}</a>'
+
+
+def _glossary_block(fields: Tuple[str, ...], *, extra_class: str = '') -> str:
+    """The `?` affordance: a folded list of the panel's fields with their
+    glossary sentences, for reading without hovering."""
+    entries = [(f, GLOSSARY[f]) for f in fields if f in GLOSSARY]
+    if not entries:
+        return ''
+    items = ''.join(f'<dt>{escape(f)}</dt><dd>{escape(text)}</dd>' for f, text in entries)
+    return (
+        f'<details class="gloss{extra_class}"><summary title="what these fields mean">?</summary>'
+        f'<dl>{items}</dl></details>'
+    )
+
+
+def _glossary_title(identity: str, name: str) -> str:
+    sentence = GLOSSARY.get(name)
+    if not sentence:
+        return identity
+    return sentence if identity == name else f'{identity} — {sentence}'
+
+
+def _counterpart_gloss(pair: Dict[str, Any]) -> str:
+    counterpart = str(pair.get('counterpart'))
+    if counterpart in GLOSSARY:
+        return GLOSSARY[counterpart]
+    value = pair.get('counterpart_value')
+    if isinstance(value, dict):
+        # A record counterpart (custody, the new/returning split) explains
+        # itself by its members.
+        return ' '.join(f'{k}: {GLOSSARY[k]}' for k in value if k in GLOSSARY)
+    return ''
+
+
+def _pair_fields(pairs: List[Dict[str, Any]]) -> Tuple[str, ...]:
+    names: List[str] = []
+    for pair in pairs:
+        names.append(str(pair.get('metric')))
+        names.append(str(pair.get('counterpart')))
+        value = pair.get('counterpart_value')
+        if isinstance(value, dict):
+            names.extend(str(k) for k in value)
+    return tuple(dict.fromkeys(names))
 
 
 def _tag(element_id: str) -> str:

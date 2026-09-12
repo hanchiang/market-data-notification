@@ -116,15 +116,35 @@ class TestDossierRoute:
         assert payload['project'] == 'touch-grass'
         assert payload['sections'][0]['name'] == 'identity'
 
-    def test_the_page_references_nothing_outside_itself(self, client, seeded):
+    def test_the_page_loads_nothing_from_outside_itself(self, client, seeded, onchain_repository):
         """Local-first: opening this page must send nothing anywhere. The one
-        script is the vendored Chart.js on this same origin; any `http://` or
-        `https://` reference still fails."""
+        script is the vendored Chart.js on this same origin. The only external
+        references allowed are navigation links (`<a href>`) the operator
+        clicks, to the chain's explorer host and dexscreener.com; nothing the
+        page LOADS may point off this origin."""
+        _seed_linkable_build(onchain_repository=onchain_repository, seeded=seeded, client=client)
         body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
-        assert 'http://' not in body and 'https://' not in body
         assert re.findall(r'<script src="([^"]*)"', body) == ['/project-monitor/static/chart.umd.js']
         assert client.get('/project-monitor/static/chart.umd.js').status_code == 200
-        assert '<link' not in body
+        assert not re.search(r'<(?:script|link|img|iframe)[^>]*(?:src|href)="(?:https?:)?//', body)
+        assert '<link' not in body and 'fetch(' not in body and 'url(' not in body
+        hosts = {m.group(1) for m in re.finditer(r'https?://([^/"\s]+)', body)}
+        assert hosts <= {'robinhoodchain.blockscout.com', 'dexscreener.com'}
+        for anchor in re.findall(r'<a href="https?://[^"]*"[^>]*>', body):
+            assert 'target="_blank" rel="noopener noreferrer"' in anchor, anchor
+
+    def test_holders_link_to_the_explorer_and_pools_to_dexscreener(
+        self, client, seeded, onchain_repository
+    ):
+        holder, pool = _seed_linkable_build(onchain_repository=onchain_repository, seeded=seeded, client=client)
+        body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
+        assert (f'<a href="https://robinhoodchain.blockscout.com/address/{holder}" '
+                f'target="_blank" rel="noopener noreferrer">{holder[:6]}…{holder[-4:]}</a>') in body
+        assert (f'<a href="https://dexscreener.com/robinhood/{pool}" '
+                f'target="_blank" rel="noopener noreferrer">{pool[:6]}…{pool[-4:]}</a>') in body
+        payload = client.get('/project-monitor/onchain/dossier/touch-grass?format=json&test_mode=1').json()
+        assert payload['explorer_api'] == 'https://robinhoodchain.blockscout.com/api/v2/'
+        assert payload['dexscreener_slug'] == 'robinhood'
 
     def test_chain_supplied_text_is_escaped(
         self, client, onchain_repository, seeded, onchain_database_url
@@ -174,6 +194,30 @@ class TestDossierRoute:
         assert client.get(
             '/project-monitor/onchain/dossier/nope?test_mode=1'
         ).status_code == 404
+
+
+def _seed_linkable_build(*, onchain_repository, seeded, client):
+    """A build with one pool and one top holder, so the page has links to render."""
+    holder = '0x' + '12' * 20
+    pool = '0x' + 'ab' * 32
+    repository = onchain_repository
+    run_id = repository.start_run(builder.JOB_BUILD)
+    build_id = repository.start_build(
+        run_id=run_id, project_id=seeded['touch-grass'], block=5000, block_timestamp=1_789_005_000
+    )
+    repository.insert_section(
+        build_id=build_id, name='identity', status='ok',
+        fields={'token_symbol': 'GRASS', 'decimals': 18, 'pool_count': 1, 'pool_ref': pool,
+                'pools': [{'reference': pool, 'dex': 'uniswap', 'version': 'v4', 'liquidity_usd': 1000.0}]},
+    )
+    repository.insert_section(
+        build_id=build_id, name='token_economics', status='ok',
+        fields={'top_holders': [{'address': holder, 'balance': '1000', 'share': 0.5}], 'top_ten_share': 0.5},
+    )
+    repository.finish_build(build_id, outcome='ok', threshold_version='2026-09-06.1')
+    repository.finish_run(run_id, outcome='ok', failed_units=[], spend={})
+    repository.commit()
+    return holder, pool
 
 
 def _pairs(liquidity, holders):

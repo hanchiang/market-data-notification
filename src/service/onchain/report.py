@@ -12,6 +12,7 @@ a diff document with a state appendix, not a state document with a diff footnote
 import copy
 import json
 import logging
+import re
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -56,6 +57,7 @@ def load_dossier(
             'display_name': entity.get('display_name'),
             'archetype': (entity.get('attrs_json') or {}).get('archetype'),
             'chain': chain.get('display_name') if chain else None,
+            **_chain_links(chain),
             'sources': sources,
             'builds': [],
             'build': None,
@@ -98,6 +100,7 @@ def load_dossier(
         'display_name': entity.get('display_name'),
         'archetype': (entity.get('attrs_json') or {}).get('archetype'),
         'chain': chain.get('display_name') if chain else None,
+        **_chain_links(chain),
         'sources': sources,
         'builds': recent,
         'build': {
@@ -113,6 +116,227 @@ def load_dossier(
         },
         'sections': sections,
     }
+
+
+def _chain_links(chain: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The two chain attributes the page builds canonical-source links from."""
+    attrs = (chain or {}).get('attrs_json') or {}
+    return {
+        'explorer_api': attrs.get('explorer_api'),
+        'dexscreener_slug': attrs.get('dexscreener_slug'),
+    }
+
+
+class Links:
+    """Canonical-source URLs for what the page shows (operator ask,
+    2026-09-12: "see the canonical data source").
+
+    Built in one place from the chain record: the explorer's web root is its
+    API base with the `/api/v2/` suffix removed, and the DEX provider's pool
+    page is keyed by the chain slug and the pool reference as stored (the v4
+    pool id or the v3 pool address). Every method returns None when the chain
+    record lacks the base or the value is not a hex identifier, so a caller
+    renders plain text rather than a broken link. These are navigation links
+    the operator clicks, never a resource the page loads.
+    """
+
+    DEXSCREENER = 'https://dexscreener.com/'
+
+    def __init__(self, explorer_api: Optional[str], dexscreener_slug: Optional[str]) -> None:
+        self.explorer_base = _explorer_web_base(explorer_api)
+        self.dexscreener_slug = dexscreener_slug or None
+
+    @classmethod
+    def from_dossier(cls, dossier: Dict[str, Any]) -> 'Links':
+        return cls(dossier.get('explorer_api'), dossier.get('dexscreener_slug'))
+
+    def hosts(self) -> Set[str]:
+        """The hosts a page built from these links may point at."""
+        hosts = {'dexscreener.com'}
+        if self.explorer_base:
+            hosts.add(self.explorer_base.split('/')[2])
+        return hosts
+
+    def address(self, value: Any) -> Optional[str]:
+        return self._explorer('address', value, 40)
+
+    def tx(self, value: Any) -> Optional[str]:
+        return self._explorer('tx', value, 64)
+
+    def token(self, value: Any) -> Optional[str]:
+        return self._explorer('token', value, 40)
+
+    def pool(self, reference: Any) -> Optional[str]:
+        if not self.dexscreener_slug or not _is_hex(reference, (40, 64)):
+            return None
+        return f'{self.DEXSCREENER}{self.dexscreener_slug}/{str(reference).lower()}'
+
+    def _explorer(self, kind: str, value: Any, digits: int) -> Optional[str]:
+        if not self.explorer_base or not _is_hex(value, (digits,)):
+            return None
+        return f'{self.explorer_base}{kind}/{str(value).lower()}'
+
+
+def _explorer_web_base(explorer_api: Optional[str]) -> Optional[str]:
+    """`https://host.blockscout.com/api/v2/` -> `https://host.blockscout.com/`."""
+    if not explorer_api or not str(explorer_api).startswith('https://'):
+        return None
+    base = re.sub(r'/api(/v\d+)?/?$', '/', str(explorer_api).strip())
+    return base if base.endswith('/') else base + '/'
+
+
+def _is_hex(value: Any, lengths: Tuple[int, ...]) -> bool:
+    text = str(value or '')
+    return text.startswith('0x') and len(text) - 2 in lengths and all(
+        c in '0123456789abcdefABCDEF' for c in text[2:]
+    )
+
+
+# What each field is, what moves it, and where it is read from -- for a senior
+# engineer new to onchain analytics (operator, 2026-09-12: "I am not
+# understanding all the data points"). One plain sentence each; the page puts
+# it in the field name's `title` and in each panel's folded glossary. A field
+# with no confident sentence is left out rather than guessed.
+GLOSSARY: Dict[str, str] = {
+    'liquidity_usd': (
+        'US-dollar value of both tokens deposited in the primary pool; falls when '
+        'liquidity providers withdraw. From the DEX provider.'
+    ),
+    'dex_volume_h24_usd': (
+        "US-dollar value traded against the token in the provider's trailing 24 hours; "
+        'washable, so it is read beside active_addresses_24h. From the DEX provider.'
+    ),
+    'dex_trades_h24': (
+        "Buys plus sells in the provider's trailing 24 hours; churnable by bots, so it is "
+        'read beside pool_counterparties_24h. From the DEX provider.'
+    ),
+    'holder_count': (
+        'Addresses holding a non-zero balance, burn sinks and the zero address excluded; '
+        'rises when one balance is split across wallets. From the replayed transfer log, '
+        'checked against balanceOf.'
+    ),
+    'top_ten_share': (
+        'Share of circulating supply held by the ten largest non-pool, non-burn addresses; '
+        'rises when supply concentrates. From the replayed transfer log.'
+    ),
+    'pool_count': (
+        'Pools the provider lists for this token across DEXes and versions; grows when '
+        'third-party pools appear around a launch. From the DEX provider.'
+    ),
+    'price_usd': (
+        "The provider's US-dollar quote for one token on the primary pool. From the DEX provider."
+    ),
+    'fdv_usd': (
+        'Fully diluted valuation: price times total supply, ignoring locks and burns. '
+        'From the DEX provider.'
+    ),
+    'active_addresses_24h': (
+        "Distinct addresses on either side of a transfer in the build's 24-hour block "
+        'window; volume without new counterparties is what wash trading looks like. '
+        'From the replayed transfer log.'
+    ),
+    'pool_counterparties_24h': (
+        'Distinct addresses that traded against the primary pool in the window (for v4, '
+        'through the pool manager and its hook). From the replayed transfer log.'
+    ),
+    'new': (
+        'Addresses that received the token in the window and had never held it before; '
+        'twenty new addresses in one day is the shape wallet-splitting has. '
+        'From the replayed transfer log.'
+    ),
+    'returning': (
+        'Addresses that received the token in the window and had held it before. '
+        'From the replayed transfer log.'
+    ),
+    'pool_held_share': (
+        'Share of total supply sitting in the primary pool: a balanceOf of a v3 pool, or '
+        'the sum over open positions by tick math for a v4 pool. From chain state and '
+        'position events.'
+    ),
+    'burned_share': (
+        'Share of total supply sent to a burn sink (0x0, 0x…dEaD) and never spent back '
+        'out; a transfer from 0x0 is a mint, not an un-burn. From the replayed transfer log.'
+    ),
+    'total_supply': (
+        'totalSupply() at the pinned block, in base units scaled by decimals. From chain state.'
+    ),
+    'sqrt_price_x96': (
+        "Uniswap's pool price as the square root of token1/token0 in Q64.96 fixed point; "
+        'a coordinate, not a dollar figure. From chain state.'
+    ),
+    'tick': (
+        'Log base 1.0001 of the pool price, the integer coordinate Uniswap positions are '
+        'ranged over; moves with every swap. From chain state.'
+    ),
+    'primary_pool_share_of_provider_liquidity': (
+        "The primary pool's liquidity as a share of the sum over every pool the provider "
+        'lists; falls when liquidity fragments into small pools. From the DEX provider.'
+    ),
+    'primary_pool_onchain_liquidity': (
+        'Uniswap liquidity L of the primary pool read on chain, a uint128 that is neither '
+        "dollars nor tokens; the figure the provider's liquidity is checked against. "
+        'From chain state.'
+    ),
+    'pool_liquidity': (
+        'Uniswap liquidity L of the primary pool read on chain (a uint128, neither dollars '
+        'nor tokens). From chain state.'
+    ),
+    'share_by_class': (
+        "How the primary pool's open liquidity splits by owner class: project, locker, or "
+        'eoa, meaning not identified as either (code at the address is not checked). '
+        'From position events and ownerOf.'
+    ),
+    'liquidity_by_class': (
+        'The same split as share_by_class, in raw liquidity units L. From position events.'
+    ),
+    'largest_owner_share': (
+        "Share of the primary pool's open liquidity held by its single largest position "
+        'owner: what one address could pull. From position events and ownerOf.'
+    ),
+    'owner_count': (
+        "Distinct owners of the primary pool's open positions. From position events and ownerOf."
+    ),
+    'open_positions': (
+        'Liquidity positions in the primary pool that still hold liquidity. From position events.'
+    ),
+    'transfer_fetch': (
+        'Bookkeeping: the block range, windows and rows the transfer-log fetch walked this '
+        'build; moves every night by construction. From the fetch itself.'
+    ),
+    'transfer_rows': (
+        "Bookkeeping: transfer rows stored for the token after this build's fetch. From the store."
+    ),
+    'window': (
+        'The trailing-24-hour block interval, pinned at the build block, that the 24h '
+        'counterparts are counted over. From the pinned block.'
+    ),
+    'verified': (
+        "Whether the token's source is verified on the explorer, so its ABI and code can "
+        'be read. From the explorer.'
+    ),
+    'proxy': (
+        'Proxy pattern read from the EIP-1967 and EIP-1167 storage slots (none, eip1967, '
+        "eip1967-beacon, eip1167); an upgradeable token's rules can change. From chain state."
+    ),
+    'owner': (
+        'The address owner() returns; absent when the selector is missing, reverted when '
+        'the call fails, the zero address when renounced. From chain state.'
+    ),
+    'role_holders': (
+        'Addresses holding DEFAULT_ADMIN_ROLE among the deployer, the owner and the '
+        'associated contracts, checked with hasRole. From chain state.'
+    ),
+    'privileged_selectors': (
+        "Privileged function selectors from the collector's fixed list found as PUSH4 "
+        'constants in the deployed bytecode (the implementation, for a proxy); a power '
+        'that exists whether or not it was used. From chain state, cross-checked against '
+        'the explorer ABI when available.'
+    ),
+    'exit_path': (
+        'Which of redeem, refund, withdraw and exit the verified ABI exposes; unavailable '
+        'when the source is not verified. From the explorer.'
+    ),
+}
 
 
 class UnknownProjectError(KeyError):

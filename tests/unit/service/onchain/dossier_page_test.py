@@ -720,10 +720,13 @@ class TestWhatMovedTable:
     def test_cells_are_brief_with_the_exact_value_on_hover_and_a_pp_delta_for_shares(self):
         dossier, history = _mission_control_dossier()
         moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
-        # Hover is the exact form (stored precision, cents), never the visible text again.
-        assert ('<td title="top_ten_share">top_ten_share</td><td class="n" title="26.8672%">26.87%</td>'
+        # Hover is the exact form (stored precision, cents), never the visible text again;
+        # the field cell's hover is its glossary sentence, after the full identity.
+        assert (f'<td title="{report.GLOSSARY["top_ten_share"]}">top_ten_share</td>'
+                '<td class="n" title="26.8672%">26.87%</td>'
                 '<td class="n" title="26.6329%">26.63%</td><td class="n down">-0.23 pp</td>') in moved
-        assert (f'<td title="pool {POOL_A} liquidity_usd">pool 0x64c5…8c77 liquidity_usd</td>'
+        assert (f'<td title="pool {POOL_A} liquidity_usd — {report.GLOSSARY["liquidity_usd"]}">'
+                'pool 0x64c5…8c77 liquidity_usd</td>'
                 '<td class="n" title="$169,900.00">$169.9k</td>'
                 '<td class="n" title="$173,738.69">$173.7k</td><td class="n up">+2.3%</td>') in moved
         assert f'<td title="holder {HOLDERS[0]["address"]} share">holder 0x0000…0001 share</td>' in moved
@@ -758,8 +761,9 @@ class TestWhatMovedTable:
             {'field': 'pairs', 'old': old_pairs, 'new': new_pairs},
         ]}
         moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
-        for label in ('liquidity_usd counterpart.pool_liquidity', 'liquidity_usd counterpart.liquidity_by_class.eoa'):
-            assert (f'<td title="{label}">{label}</td>'
+        for label, name in (('liquidity_usd counterpart.pool_liquidity', 'pool_liquidity'),
+                            ('liquidity_usd counterpart.liquidity_by_class.eoa', 'liquidity_by_class')):
+            assert (f'<td title="{label} — {report.GLOSSARY[name]}">{label}</td>'
                     '<td class="n" title="28277002188455995842192 L">2.83e22 L</td>'
                     '<td class="n" title="29277002188455995842192 L">2.93e22 L</td>'
                     '<td class="n up">+3.5%</td>') in moved, label
@@ -803,8 +807,10 @@ class TestPanels:
     def test_metric_pairs_put_the_guard_text_in_its_own_column(self):
         dossier, history = _mission_control_dossier()
         pairs = _element(render_dossier_page(dossier, history=history), 'pairs')
-        assert ('<tr><td>dex_volume_h24_usd</td><td class="n" title="$418,800.00">$418.8k</td>'
-                '<td>active_addresses_24h</td><td class="n" title="2,724">2,724</td>'
+        assert (f'<tr><td title="{report.GLOSSARY["dex_volume_h24_usd"]}">dex_volume_h24_usd</td>'
+                '<td class="n" title="$418,800.00">$418.8k</td>'
+                f'<td title="{report.GLOSSARY["active_addresses_24h"]}">active_addresses_24h</td>'
+                '<td class="n" title="2,724">2,724</td>'
                 '<td class="flat">wash_trading: volume without new counterparties</td></tr>') in pairs
         assert 'new 12 / returning 40 / top-10 26.63%' in pairs
         assert ('<td class="n" title="29277002188455995842192 L">2.93e22 L</td>') in pairs
@@ -859,3 +865,136 @@ class TestBriefForms:
         assert formatting.exact('holders', 6598) == '6,598'
         assert formatting.exact('holders', None) == '—'
         assert formatting.for_section('token_economics').exact('balance', str(24_800_000 * WAD)) == '24,800,000 GRASS'
+
+
+# -- Canonical-source links and the field glossary (operator read, 2026-09-12) --
+
+EXPLORER_API = 'https://robinhoodchain.blockscout.com/api/v2/'
+TOKEN = '0x' + 'aa' * 20
+DEPLOYER = '0x' + 'bb' * 20
+CREATION_TX = '0x' + 'cc' * 32
+
+
+def _linked_dossier():
+    dossier, history = _mission_control_dossier()
+    dossier['explorer_api'] = EXPLORER_API
+    dossier['dexscreener_slug'] = 'robinhood'
+    dossier['sections'][0]['fields'].update({
+        'token_address': TOKEN, 'pool_id': POOL_A, 'pool_address': None,
+        'deployer': {'creator': DEPLOYER}, 'creation_tx': CREATION_TX,
+    })
+    return dossier, history
+
+
+ANCHOR = 'target="_blank" rel="noopener noreferrer"'
+
+
+class TestLinks:
+    def test_urls_are_built_from_the_chain_record(self):
+        links = report.Links(EXPLORER_API, 'robinhood')
+        assert links.address(HOLDERS[0]['address']) == (
+            'https://robinhoodchain.blockscout.com/address/' + HOLDERS[0]['address']
+        )
+        assert links.tx(CREATION_TX) == 'https://robinhoodchain.blockscout.com/tx/' + CREATION_TX
+        assert links.token(TOKEN) == 'https://robinhoodchain.blockscout.com/token/' + TOKEN
+        assert links.pool(POOL_A) == 'https://dexscreener.com/robinhood/' + POOL_A
+        assert links.pool('0x' + 'ab' * 20) == 'https://dexscreener.com/robinhood/0x' + 'ab' * 20
+        assert links.hosts() == {'robinhoodchain.blockscout.com', 'dexscreener.com'}
+
+    def test_no_base_or_a_non_hex_value_gives_no_link(self):
+        assert report.Links(None, None).address(TOKEN) is None
+        assert report.Links(None, None).pool(POOL_A) is None
+        assert report.Links(EXPLORER_API, 'robinhood').address('javascript:alert(1)') is None
+        assert report.Links(EXPLORER_API, 'robinhood').tx(TOKEN) is None  # a tx hash is 32 bytes
+        assert report.Links('http://insecure/api/v2/', 'x').address(TOKEN) is None
+        assert report.Links.from_dossier(_mission_control_dossier()[0]).hosts() == {'dexscreener.com'}
+
+    def test_the_page_links_holders_pools_custody_identity_and_what_moved(self):
+        dossier, history = _linked_dossier()
+        html = render_dossier_page(dossier, history=history)
+        holder = 'https://robinhoodchain.blockscout.com/address/' + HOLDERS[0]['address']
+        assert f'<a href="{holder}" {ANCHOR}>0x0000…0001</a>' in _element(html, 'holders')
+        pools = _element(html, 'pools')
+        assert f'<a href="https://dexscreener.com/robinhood/{POOL_A}" {ANCHOR}>0x64c5…8c77</a>' in pools
+        assert f'<a href="https://dexscreener.com/robinhood/{POOL_B}" {ANCHOR}>0x1111…1111</a>' in pools
+        # POOL_B is 32 bytes, so no v3 explorer link; a 20-byte v3 address would get one.
+        assert 'explorer</a>' not in pools
+        assert f'<a href="https://robinhoodchain.blockscout.com/address/0x{"ab" * 20}" {ANCHOR} title="0x{"ab" * 20}">0xabab…abab</a>' in _element(html, 'custody')
+        identity = _element(html, 'identity')
+        assert f'token <a href="https://robinhoodchain.blockscout.com/token/{TOKEN}"' in identity
+        assert f'pool <a href="https://dexscreener.com/robinhood/{POOL_A}"' in identity
+        assert f'deployer <a href="https://robinhoodchain.blockscout.com/address/{DEPLOYER}"' in identity
+        assert f'creation tx <a href="https://robinhoodchain.blockscout.com/tx/{CREATION_TX}"' in identity
+        moved = _element(html, 'what-moved')
+        assert f'pool <a href="https://dexscreener.com/robinhood/{POOL_A}" {ANCHOR}>0x64c5…8c77</a> liquidity_usd' in moved
+        assert f'holder <a href="{holder}" {ANCHOR}>0x0000…0001</a> share' in moved
+
+    def test_a_v3_pool_address_gets_a_second_explorer_link(self):
+        dossier, history = _linked_dossier()
+        v3 = '0x' + 'dd' * 20
+        dossier['sections'][0]['fields']['pools'].append(
+            {'reference': v3, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 10.0}
+        )
+        pools = _element(render_dossier_page(dossier, history=history), 'pools')
+        assert f'<a href="https://dexscreener.com/robinhood/{v3}" {ANCHOR}>0xdddd…dddd</a>' in pools
+        assert f'<a class="m" href="https://robinhoodchain.blockscout.com/address/{v3}" {ANCHOR} title="pool contract on the explorer">explorer</a>' in pools
+
+    def test_every_external_reference_is_a_navigation_link_to_an_allowed_host(self):
+        dossier, history = _linked_dossier()
+        html = render_dossier_page(dossier, history=history)
+        hosts = {m.group(1) for m in re.finditer(r'https?://([^/"\s]+)', html)}
+        assert hosts == {'robinhoodchain.blockscout.com', 'dexscreener.com'}
+        assert not re.search(r'<(?:script|link|img|iframe)[^>]*(?:src|href)="(?:https?:)?//', html)
+        assert 'fetch(' not in html and 'url(' not in html
+        for anchor in re.findall(r'<a href="https?://[^"]*"[^>]*>', html):
+            assert ANCHOR in anchor, anchor
+
+    def test_without_a_chain_record_the_page_shows_plain_text(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        assert 'https://' not in html
+        assert '<td title="' + HOLDERS[0]['address'] + '">0x0000…0001</td>' in _element(html, 'holders')
+
+
+class TestGlossary:
+    def test_every_kpi_label_and_pair_name_has_a_non_empty_glossary_title(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        for tile_id, label, metric in page.TILES:
+            field = report.HISTORY_METRICS[metric][1][-1]
+            assert report.GLOSSARY[field]
+            assert f'<span title="{report.GLOSSARY[field]}">{label}</span>' in _element(html, tile_id), label
+        pairs = _element(html, 'pairs')
+        for pair in dossier['sections'][1]['fields']['pairs']:
+            for name in (pair['metric'], pair['counterpart']):
+                cell = re.search(rf'<td title="([^"]*)">{re.escape(name)}</td>', pairs)
+                assert cell and cell.group(1), name
+
+    def test_the_required_fields_are_covered_with_a_source_suffix(self):
+        required = {
+            'liquidity_usd', 'dex_volume_h24_usd', 'dex_trades_h24', 'holder_count', 'top_ten_share',
+            'pool_count', 'price_usd', 'fdv_usd', 'active_addresses_24h', 'pool_counterparties_24h',
+            'new', 'returning', 'pool_held_share', 'burned_share', 'total_supply', 'sqrt_price_x96',
+            'tick', 'primary_pool_share_of_provider_liquidity', 'primary_pool_onchain_liquidity',
+            'share_by_class', 'liquidity_by_class', 'largest_owner_share', 'open_positions',
+            'transfer_fetch', 'transfer_rows', 'window', 'verified', 'proxy', 'owner', 'role_holders',
+            'privileged_selectors', 'exit_path',
+        }
+        assert required <= set(report.GLOSSARY)
+        for name, sentence in report.GLOSSARY.items():
+            assert 'From ' in sentence and sentence.endswith('.'), name
+
+    def test_each_panel_has_a_folded_glossary_listing_its_fields(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        for panel, fields in page.PANEL_GLOSSARY.items():
+            block = _element(html, panel)
+            assert '<details class="gloss"><summary title="what these fields mean">?</summary>' in block
+            for field in fields:
+                assert f'<dt>{field}</dt><dd>{report.GLOSSARY[field]}</dd>' in block, (panel, field)
+        strip = html[html.index('id="kpis"'):html.index('id="charts"')]
+        assert '<details class="gloss strip">' in strip and '<dt>fdv_usd</dt>' in strip
+        moved = _element(html, 'what-moved')
+        assert '<dt>top_ten_share</dt>' in moved and '<dt>share</dt>' not in moved
+        assert f'<h2 title="{report.GLOSSARY["top_ten_share"]}">Top holders' in html
+        assert html[html.index('id="raw-diff"'):].count('<dt>') == len(report.GLOSSARY)

@@ -230,8 +230,13 @@ class TestHistoryAndSparklines:
         ]
         ids = [point['build_id'] for point in payload['points']]
         assert ids == sorted(ids)
-        assert skipped not in ids  # a failed build is no point at all
-        assert gap not in ids  # `partial` is not `ok` either
+        # Every build is a point (review round 1): a `partial` night keeps its
+        # good sections and its failed section is a null, so the line breaks
+        # there instead of interpolating across the night.
+        assert gap in ids and skipped in ids
+        partial = next(p for p in payload['points'] if p['build_id'] == gap)
+        assert partial['values']['pool_count'] == 3
+        assert partial['values']['liquidity_usd'] is None and partial['values']['holders'] is None
         # The seeded fixture build has identity only: its health metrics are gaps.
         first = payload['points'][0]
         assert first['values']['pool_count'] is None and first['values']['liquidity_usd'] is None
@@ -277,6 +282,44 @@ class TestHistoryAndSparklines:
         ).group(1))
         assert len(inline['points']) == 8
         assert '<option value="?build=' in body and '(run ' in body
+
+    def test_the_header_names_the_previous_build_per_section_after_a_partial_night(
+        self, client, seeded, onchain_repository
+    ):
+        """The builder baselines each section on its latest ok/partial
+        predecessor whatever the build outcome, so after a partial night the
+        identity diff is against the partial build and the health diff against
+        the one before it. The header says so rather than naming one build."""
+        from src.service.onchain.report import load_dossier
+
+        project_id = seeded['touch-grass']
+        first = _add_build(onchain_repository, project_id, block=1)
+        partial = _add_build(onchain_repository, project_id, block=2, health='failed', outcome='partial')
+        latest = _add_build(onchain_repository, project_id, block=3)
+        by_build = {
+            (row['build_id'], row['name']): int(row['id'])
+            for row in onchain_repository.fetch_all(
+                'SELECT id, build_id, name FROM onchain.section WHERE build_id IN (%s, %s, %s)',
+                (first, partial, latest),
+            )
+        }
+        empty = {'added': {}, 'removed': {}, 'changed': []}
+        onchain_repository.insert_section_diff(
+            section_id=by_build[(latest, 'identity')],
+            previous_section_id=by_build[(partial, 'identity')], changes=empty,
+        )
+        onchain_repository.insert_section_diff(
+            section_id=by_build[(latest, 'onchain_health')],
+            previous_section_id=by_build[(first, 'onchain_health')], changes=empty,
+        )
+        onchain_repository.commit()
+
+        dossier = load_dossier(onchain_repository, 'touch-grass')
+        assert {s['name']: s['previous_build_id'] for s in dossier['sections']} == {
+            'identity': partial, 'onchain_health': first,
+        }
+        body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
+        assert f'href="?build={partial}&test_mode=1">prev build {partial} · onchain_health vs {first}</a>' in body
 
     def test_history_for_an_unknown_project_is_a_404(self, client, seeded):
         assert client.get(

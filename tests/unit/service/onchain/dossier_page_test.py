@@ -390,7 +390,7 @@ class TestPageShape:
         assert html.index('id="what-moved"') < html.index('id="raw-diff"')
         moved = html[html.index('id="what-moved"'):html.index('id="pools"')]
         assert 'What moved since previous build (1)' in moved
-        assert '<td>burned</td>' in moved and '0 GRASS' in moved and '1 GRASS' in moved
+        assert '<td title="burned">burned</td>' in moved and '0 GRASS' in moved and '1 GRASS' in moved
         assert 'contract_safety' not in moved
 
     def test_the_raw_diff_is_folded_and_holds_every_report_line(self):
@@ -443,7 +443,7 @@ class TestPageShape:
         html = render_dossier_page(_dossier([IDENTITY, failed]))
         moved = html[html.index('id="what-moved"'):html.index('id="pools"')]
         assert 'What moved since previous build (1)' in moved
-        assert '<td>section</td>' in moved and 'failed (EvmTransportError)' in moved
+        assert '<td title="section">section</td>' in moved and 'failed (EvmTransportError)' in moved
         assert 'section not built' in moved
         assert '-- onchain_health [failed] (EvmTransportError)' in html[html.index('id="raw-diff"'):]
 
@@ -640,6 +640,17 @@ class TestKpiStrip:
         assert 'href="?build=22">prev build 22</a>' in html
         assert 'GRASS · Robinhood Chain · launchpad-fixed-supply' in html
 
+    def test_the_header_lists_a_section_diffed_against_a_different_build(self):
+        dossier, history = _mission_control_dossier()
+        for section in dossier['sections']:
+            section['previous_build_id'] = 24
+        dossier['sections'][1]['previous_build_id'] = 22  # onchain_health failed in 24
+        html = render_dossier_page(dossier, history=history)
+        assert '<a class="m" id="prev-build" href="?build=24">prev build 24 · onchain_health vs 22</a>' in html
+        for section in dossier['sections']:
+            section['previous_build_id'] = 22
+        assert 'prev build 22</a>' in render_dossier_page(dossier, history=history)
+
     def test_source_badges_count_admitted_rows_and_mark_configured_classes(self):
         dossier, history = _mission_control_dossier()
         badges = _element(render_dossier_page(dossier, history=history), 'sources')
@@ -689,7 +700,7 @@ class TestWhatMovedTable:
     def test_counts_leaf_rows_and_puts_bookkeeping_in_the_footer(self):
         dossier, history = _mission_control_dossier()
         moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
-        rows = re.findall(r'<tr><td><span class="tag">([a-z_]+)</span></td><td>([^<]*)</td>', moved)
+        rows = re.findall(r'<tr><td><span class="tag">([a-z_]+)</span></td><td title="[^"]*">([^<]*)</td>', moved)
         assert [label for _, label in rows] == [
             'pool 0x64c5…8c77 liquidity_usd',
             'dex_trades_h24', 'dex_volume_h24_usd', 'holder_count',
@@ -703,17 +714,33 @@ class TestWhatMovedTable:
     def test_cells_are_brief_with_the_exact_value_on_hover_and_a_pp_delta_for_shares(self):
         dossier, history = _mission_control_dossier()
         moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
-        assert ('<td>top_ten_share</td><td class="n" title="26.87%">26.87%</td>'
-                '<td class="n" title="26.63%">26.63%</td><td class="n down">-0.23 pp</td>') in moved
-        assert ('<td>pool 0x64c5…8c77 liquidity_usd</td><td class="n" title="169,900.00">$169.9k</td>'
-                '<td class="n" title="173,738.69">$173.7k</td><td class="n up">+2.3%</td>') in moved
+        # Hover is the exact form (stored precision, cents), never the visible text again.
+        assert ('<td title="top_ten_share">top_ten_share</td><td class="n" title="26.8672%">26.87%</td>'
+                '<td class="n" title="26.6329%">26.63%</td><td class="n down">-0.23 pp</td>') in moved
+        assert (f'<td title="pool {POOL_A} liquidity_usd">pool 0x64c5…8c77 liquidity_usd</td>'
+                '<td class="n" title="$169,900.00">$169.9k</td>'
+                '<td class="n" title="$173,738.69">$173.7k</td><td class="n up">+2.3%</td>') in moved
+        assert f'<td title="holder {HOLDERS[0]["address"]} share">holder 0x0000…0001 share</td>' in moved
         assert f'<td title="{POOL_A}">' in _element(render_dossier_page(dossier, history=history), 'pools')
+
+    def test_a_flag_on_a_keyed_list_field_does_not_add_a_second_row(self):
+        """Round 1: the flag check keyed on the label's first word, so a
+        flagged `pools` change produced its leaf row AND a synthetic
+        `pools — — flagged` row, and the title count was one too many."""
+        dossier, history = _mission_control_dossier()
+        dossier['sections'][0]['flagged'] = [{'field': 'pools', 'reason': 'pool_removed'}]
+        moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
+        rows = re.findall(r'<tr><td><span class="tag">[a-z_]+</span></td><td title="[^"]*">([^<]*)</td>', moved)
+        assert rows.count('pools') == 0
+        assert rows[0] == 'pool 0x64c5…8c77 liquidity_usd'
+        assert moved.count('<td class="flagn">pool_removed</td>') == 1
+        assert f'What moved since previous build ({len(rows)})' in moved
 
     def test_flagged_rows_come_first(self):
         dossier, history = _mission_control_dossier()
         dossier['sections'][2]['flagged'] = [{'field': 'top_ten_share', 'reason': 'concentration_rose'}]
         moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
-        first = re.search(r'<tr><td><span class="tag">[a-z_]+</span></td><td>([^<]*)</td>', moved).group(1)
+        first = re.search(r'<tr><td><span class="tag">[a-z_]+</span></td><td title="[^"]*">([^<]*)</td>', moved).group(1)
         assert first == 'top_ten_share'
         assert '<td class="flagn">concentration_rose</td>' in moved
 
@@ -738,6 +765,7 @@ class TestPanels:
         dossier, history = _mission_control_dossier()
         custody = _element(render_dossier_page(dossier, history=history), 'custody')
         assert 'eoa* 100.00%' in custody
+        assert 'title="eoa 100.00% · 2.93e22 L (29277002188455995842192)"' in custody
         assert '* eoa = not identified as project or locker; the collector does not check code at the address' in custody
         assert 'largest owner 0xabab…abab holds 100.00% · 1 open positions · 1 owners' in custody
         assert 'primary pool is 49.87% of provider-reported liquidity' in custody
@@ -745,11 +773,12 @@ class TestPanels:
     def test_metric_pairs_put_the_guard_text_in_its_own_column(self):
         dossier, history = _mission_control_dossier()
         pairs = _element(render_dossier_page(dossier, history=history), 'pairs')
-        assert ('<tr><td>dex_volume_h24_usd</td><td class="n" title="418,800.00">$418.8k</td>'
-                '<td>active_addresses_24h</td><td class="n" title="2724">2,724</td>'
+        assert ('<tr><td>dex_volume_h24_usd</td><td class="n" title="$418,800.00">$418.8k</td>'
+                '<td>active_addresses_24h</td><td class="n" title="2,724">2,724</td>'
                 '<td class="flat">wash_trading: volume without new counterparties</td></tr>') in pairs
         assert 'new 12 / returning 40 / top-10 26.63%' in pairs
-        assert '29.28T liquidity units' in pairs or '29,277' in pairs
+        assert ('<td class="n" title="29277002188455995842192 L">2.93e22 L</td>') in pairs
+        assert '<td class="n" title="$418,800.00">$418.8k</td>' in pairs
 
     def test_a_page_with_only_an_identity_section_still_has_every_panel(self):
         html = render_dossier_page(_dossier([IDENTITY]))
@@ -784,3 +813,19 @@ class TestBriefForms:
         assert formatting.amount_brief(str(24_800_000 * WAD)) == '24.80M GRASS'
         assert formatting.amount(str(24_800_000 * WAD)) == '24,800,000 GRASS'
         assert report.short_address(POOL_A) == '0x64c5…8c77'
+        assert report.short_address('dex_trades_h24') == 'dex_trades_h24'
+
+    def test_liquidity_units_are_compact_and_never_scaled(self):
+        assert report.abbrev_liquidity('29277002188455995842192') == '2.93e22 L'
+        assert report.abbrev_liquidity(1234) == '1,234 L'
+        assert report.abbrev_liquidity(None) == '—'
+        formatting = report.Formatting(_dossier([IDENTITY]), section='onchain_health')
+        assert formatting.exact('primary_pool_onchain_liquidity', '29277002188455995842192') == '29277002188455995842192 L'
+
+    def test_exact_forms_for_titles(self):
+        formatting = report.Formatting(_dossier([IDENTITY]))
+        assert formatting.exact('top_ten_share', 0.268672) == '26.8672%'
+        assert formatting.exact('liquidity_usd', 173738.69) == '$173,738.69'
+        assert formatting.exact('holders', 6598) == '6,598'
+        assert formatting.exact('holders', None) == '—'
+        assert formatting.for_section('token_economics').exact('balance', str(24_800_000 * WAD)) == '24,800,000 GRASS'

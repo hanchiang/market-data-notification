@@ -76,6 +76,13 @@ def load_dossier(
                 'changes': section_diff.get('changes_json') or {},
                 'flagged': section_diff.get('flagged_json') or [],
                 'previous_section_id': section_diff.get('previous_section_id'),
+                # The build that section was diffed against. The builder
+                # baselines each section on its latest ok/partial predecessor
+                # whatever the build outcome, so after a partial night two
+                # sections of one build can diff against two different builds.
+                'previous_build_id': _build_of_section(
+                    repository, section_diff.get('previous_section_id')
+                ),
             }
         )
     sections.sort(key=lambda section: _section_order(section['name']))
@@ -123,6 +130,13 @@ def project_key(entity_key: Any) -> str:
     returned whole rather than raising. One parser for the CLI and the page."""
     text = str(entity_key)
     return text.partition(':')[2] or text
+
+
+def _build_of_section(repository: OnchainRepository, section_id: Any) -> Optional[int]:
+    if section_id is None:
+        return None
+    row = repository.get_section(int(section_id))
+    return int(row['build_id']) if row else None
 
 
 def _section_order(name: str) -> int:
@@ -187,18 +201,19 @@ def metric_values(sections: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
 def load_history(
     repository: OnchainRepository, project_key: str, *, limit: int = 30
 ) -> Dict[str, Any]:
-    """The last `limit` `ok` builds as one point each, oldest first.
+    """The last `limit` builds as one point each, oldest first.
 
-    Only `ok` builds are points: a failed night contributes nothing rather than
-    a zero. Within an `ok` build a section that failed still yields its metrics
-    as null, so the series keeps its x-axis and the chart shows a gap.
+    Every build is a point, whatever its outcome: the builder marks a build
+    `failed` only when every section failed, so a night with one failed section
+    is `partial`, and dropping it would let the line interpolate across the
+    good sections that night did read. A section that did not build yields its
+    metrics as null (`metric_values`), which is the gap; the non-null count is
+    what gates the sparkline.
     """
     entity = repository.get_entity_by_key(f'project:{project_key}')
     if entity is None:
         raise UnknownProjectError(f'no project entity for {project_key!r}')
-    builds = repository.get_builds_for_project(
-        int(entity['id']), limit=max(1, int(limit)), outcome='ok'
-    )
+    builds = repository.get_builds_for_project(int(entity['id']), limit=max(1, int(limit)))
     points = []
     for build in reversed(builds):
         sections = [
@@ -229,6 +244,10 @@ SHARE_FIELDS = frozenset({
     'burned_share', 'top_ten_share', 'share', 'largest_owner_share',
     'primary_pool_share_of_provider_liquidity',
 })
+# Uniswap liquidity `L` (a uint128): neither dollars nor tokens, so it is
+# printed compactly and never scaled. The pair's counterpart and the custody
+# record's per-class amounts are the two places it reaches the page.
+LIQUIDITY_UNIT_FIELDS = frozenset({'primary_pool_onchain_liquidity', 'pool_liquidity', 'liquidity_by_class'})
 # US dollars, as the provider quotes them. `price_usd` needs its significant
 # digits (a launchpad token trades at $0.003), so it is not the plain float rule.
 MONEY_FIELDS = frozenset({'price_usd', 'fdv_usd'})
@@ -334,6 +353,28 @@ class Formatting:
             return '[' + ', '.join(self.inline(name, item) for item in value) + ']'
         return self.scalar(name, value)
 
+    def exact(self, name: str, value: Any) -> str:
+        """The hover form behind a brief cell: a share at its stored precision,
+        a dollar figure to the cent, a count with separators, a token amount
+        scaled, Uniswap liquidity as the raw integer. One formatter for every
+        `title` on the page, so hover never merely repeats the visible text."""
+        if value is None:
+            return DASH
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            return self.inline(name, value)
+        if name in AMOUNT_FIELDS and self.section in self.SCALED_SECTIONS:
+            return self.amount(value)
+        if name in LIQUIDITY_UNIT_FIELDS:
+            return f'{value} L'
+        if isinstance(value, str):
+            return self.scalar(name, value)
+        if name in SHARE_FIELDS or 'share' in name:
+            return f'{float(value) * 100:.10g}%'
+        if name in MONEY_FIELDS or name.endswith('_usd'):
+            return money_exact(value)
+        if isinstance(value, float) and not float(value).is_integer():
+            return self.scalar(name, value)
+        return f'{int(value):,}'
 
     def amount_brief(self, value: Any) -> str:
         """`24.80M GRASS`: the tile and cell form of `amount`; the exact form
@@ -391,6 +432,19 @@ def abbrev_count(value: Any) -> str:
 
 def abbrev_pct(value: Any) -> str:
     return DASH if value is None else f'{float(value) * 100:.2f}%'
+
+
+def abbrev_liquidity(value: Any) -> str:
+    """`2.93e22 L`: Uniswap liquidity in a compact scientific form. The raw
+    integer belongs in the title attribute (`Formatting.exact`)."""
+    try:
+        raw = int(str(value))
+    except (TypeError, ValueError):
+        return DASH if value is None else str(value)
+    if abs(raw) < 100_000:
+        return f'{raw:,} L'
+    mantissa, exponent = f'{raw:.2e}'.split('e')
+    return f'{mantissa}e{int(exponent)} L'
 
 
 def short_address(text: Any) -> str:
@@ -719,8 +773,8 @@ def _list_delta(old: List[Dict[str, Any]], new: List[Dict[str, Any]], key: str, 
                 # as 0.5738 in the diff and 57.38% two lines below.
                 lines.append(
                     f"      {shown}  {inner_key}: "
-                    f"{formatting.inline(_value_label(before[ident], key, inner_key), was)} -> "
-                    f"{formatting.inline(_value_label(after[ident], key, inner_key), now)}"
+                    f"{formatting.inline(value_label(before[ident], key, inner_key), was)} -> "
+                    f"{formatting.inline(value_label(after[ident], key, inner_key), now)}"
                 )
     return lines or ['      (reordered only)']
 
@@ -729,12 +783,14 @@ def _record_inline(item: Dict[str, Any], key: str, formatting: Formatting) -> st
     """A whole record on one line, each value formatted under the name the
     state block would use for it (a pair's `value` under its metric)."""
     return ', '.join(
-        f'{k}={formatting.inline(_value_label(item, key, k), v)}'
+        f'{k}={formatting.inline(value_label(item, key, k), v)}'
         for k, v in sorted(_without(item, key).items())
     )
 
 
-def _value_label(item: Dict[str, Any], key: str, inner_key: str) -> str:
+def value_label(item: Dict[str, Any], key: str, inner_key: str) -> str:
+    """The name a record's inner value is formatted under: a pair's `value`
+    under its metric and its `counterpart_value` under the counterpart."""
     if key == 'metric' and inner_key == 'value':
         return str(item.get('metric'))
     if key == 'metric' and inner_key == 'counterpart_value':

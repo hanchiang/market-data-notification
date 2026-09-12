@@ -682,6 +682,11 @@ class OnchainRepository:
                 ),
             )
 
+    def get_section(self, section_id: int) -> Optional[Dict[str, Any]]:
+        return self.fetch_one(
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.section WHERE id = %s', (section_id,)
+        )
+
     def get_section_diff(self, section_id: int) -> Optional[Dict[str, Any]]:
         return self.fetch_one(
             f'SELECT * FROM {ONCHAIN_SCHEMA}.section_diff WHERE section_id = %s',

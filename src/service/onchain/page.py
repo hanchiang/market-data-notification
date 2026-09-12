@@ -30,21 +30,24 @@ from src.service.onchain.report import (
     LIST_KEYS,
     Formatting,
     abbrev_count,
+    abbrev_liquidity,
     abbrev_money,
     abbrev_pct,
     brief,
     delta_kind,
     delta_text,
-    money_exact,
     short_address,
 )
+from src.service.onchain.config import SOURCE_CLASSES
 
 CHART_SCRIPT = '/project-monitor/static/chart.umd.js'
 # A sparkline over fewer points reads as a trend that is not there.
 SPARKLINE_MIN_POINTS = 7
 CHART_RANGES = ('7', '30', 'all')
 
-SOURCE_CLASSES = ('chain_rpc', 'chain_explorer', 'dex_provider', 'web', 'x', 'telegram')
+# The badge order: chain-level classes first, then the project's own. A class
+# added to `config.SOURCE_CLASSES` and not named here lands at the end.
+SOURCE_BADGE_ORDER = ('chain_rpc', 'chain_explorer', 'dex_provider', 'web', 'x', 'telegram')
 # Until slice B writes their rows, these two classes are configuration: the RPC
 # endpoints come from the chain config and the DEX provider appears only as a
 # `source` string inside the health pairs. Their badges say so.
@@ -69,9 +72,7 @@ DECISION_TAGS: Dict[str, str] = {
     'custody': 'exit · slow: who can pull the liquidity',
     'pairs': 'ignore · slow: a metric that fails its pair is noise',
     'raw-diff': 'context: supports What moved',
-    # Not in the brief's mapping; added because the charts block is a panel
-    # and A14 puts a tag on every one. Flagged in the slice A report.
-    'charts': 'watch · slow: the trend behind each tile',
+    'charts': 'context: supports the KPI tiles',
 }
 
 # (tile id, label, metric name in `report.HISTORY_METRICS`)
@@ -119,10 +120,12 @@ CSS = (
     'gap:6px;flex-wrap:wrap}.kpi .v{font-size:22px;font-weight:600;margin:2px 0;'
     'font-variant-numeric:tabular-nums}.kpi .d{font-size:12px}'
     '.up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--mute)}'
+    # A responsive Chart.js canvas takes its size from a positioned parent
+    # with a fixed height; without one it grows to fill the page.
     '.spark{height:26px;margin-top:8px;border-radius:4px;color:var(--mute);font-size:10px;'
-    'display:flex;align-items:center;justify-content:center;'
+    'display:flex;align-items:center;justify-content:center;position:relative;'
     'background:repeating-linear-gradient(90deg,var(--line) 0 2px,transparent 2px 8px)}'
-    '.spark canvas{width:100%;height:26px}'
+    '.spark canvas{position:absolute;inset:0;width:100%!important;height:100%!important}'
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;'
     'margin-bottom:12px}.panel{background:var(--panel);border:1px solid var(--line);'
     'border-radius:10px;padding:12px 14px;min-width:0;overflow-x:auto}.wide{grid-column:1/-1}'
@@ -148,7 +151,8 @@ CSS = (
     '.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}'
     '.chart{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}'
     '.chart .l{color:var(--mute);font-size:12px;margin-bottom:4px}'
-    '.chart canvas{width:100%;height:160px}'
+    '.chart .box{position:relative;height:160px}'
+    '.chart canvas{position:absolute;inset:0;width:100%!important;height:100%!important}'
 )
 
 # Reads the inlined history once; sparklines draw when the page loads, the
@@ -299,8 +303,27 @@ class _Page:
 
     def _previous_build(self) -> str:
         """The build this one is diffed against, named rather than implied.
-        Only `ok` and `partial` sections are baselines, so the previous build
-        is the nearest earlier one that produced any."""
+
+        Each section carries the build its diff was taken against
+        (`previous_build_id`); after a partial night they differ, and the
+        header then names the common one and lists the exceptions
+        (`prev build 24 · onchain_health vs 22`). A payload without the field
+        falls back to the nearest earlier build that produced a baseline.
+        """
+        per_section = {
+            str(s.get('name')): int(s['previous_build_id'])
+            for s in self.sections if s.get('previous_build_id') is not None
+        }
+        if per_section:
+            counts: Dict[int, int] = {}
+            for build_id in per_section.values():
+                counts[build_id] = counts.get(build_id, 0) + 1
+            main = max(counts, key=lambda b: (counts[b], b))
+            exceptions = ' · '.join(
+                f'{name} vs {build_id}' for name, build_id in per_section.items()
+                if build_id != main
+            )
+            return self._previous_link(main, f' · {exceptions}' if exceptions else '')
         current = int(self.build['id'])
         previous = next(
             (b for b in sorted(self.dossier.get('builds') or [], key=lambda b: -int(b['id']))
@@ -309,9 +332,12 @@ class _Page:
         )
         if previous is None:
             return '<span class="m" id="prev-build">prev build —</span>'
+        return self._previous_link(int(previous['id']), '')
+
+    def _previous_link(self, build_id: int, suffix: str) -> str:
         return (
-            f'<a class="m" id="prev-build" href="?build={int(previous["id"])}{self.query}">'
-            f'prev build {int(previous["id"])}</a>'
+            f'<a class="m" id="prev-build" href="?build={build_id}{self.query}">'
+            f'prev build {build_id}{escape(suffix)}</a>'
         )
 
     def source_badges(self) -> str:
@@ -320,7 +346,8 @@ class _Page:
         rather than a stored row (rpc and dex, until slice B)."""
         rows = [r for r in self.dossier.get('sources') or [] if isinstance(r, dict)]
         out = []
-        for source_class in SOURCE_CLASSES:
+        order = {c: i for i, c in enumerate(SOURCE_BADGE_ORDER)}
+        for source_class in sorted(SOURCE_CLASSES, key=lambda c: (order.get(c, len(order)), c)):
             admitted = sum(1 for r in rows if r.get('class') == source_class and r.get('admission') == 'admitted')
             candidates = sum(1 for r in rows if r.get('class') == source_class and r.get('admission') == 'candidate')
             if admitted:
@@ -349,9 +376,9 @@ class _Page:
             value = self.current.get(metric)
             previous = self.previous.get(metric)
             text, direction = delta_text(previous, value, delta_kind(metric))
-            exact_previous = _exact(metric, previous) if previous is not None else DASH
+            exact_previous = self.formatting.exact(metric, previous)
             if counts[metric] >= SPARKLINE_MIN_POINTS:
-                spark = f'<canvas data-spark="{metric}" height="26"></canvas>'
+                spark = f'<canvas data-spark="{metric}"></canvas>'
             else:
                 spark = f'{counts[metric]}/{SPARKLINE_MIN_POINTS} builds'
             extra = ''
@@ -363,7 +390,7 @@ class _Page:
             tiles.append(
                 f'<div class="kpi" id="{tile_id}"><div class="l"><span>{escape(label)}</span>'
                 f'{_tag(tile_id)}</div>'
-                f'<div class="v" title="{escape(_exact(metric, value))}">{escape(brief(metric, value))}</div>'
+                f'<div class="v" title="{escape(self.formatting.exact(metric, value))}">{escape(brief(metric, value))}</div>'
                 f'<div class="d {direction}" title="previous build: {escape(exact_previous)}">'
                 f'{escape(text)} <span class="flat">vs prev build</span></div>{extra}'
                 f'<div class="spark">{spark}</div></div>'
@@ -414,7 +441,7 @@ class _Page:
         )
         canvases = ''.join(
             f'<div class="chart"><div class="l">{escape(label)}</div>'
-            f'<canvas data-chart="{metric}" height="160"></canvas></div>'
+            f'<div class="box"><canvas data-chart="{metric}"></canvas></div></div>'
             for _, label, metric in TILES
         )
         points = len(self.history.get('points') or [])
@@ -434,7 +461,8 @@ class _Page:
     def what_moved(self) -> str:
         rows, bookkeeping = self._moved_rows()
         body = ''.join(
-            f'<tr><td><span class="tag">{escape(r.section)}</span></td><td>{escape(r.label)}</td>'
+            f'<tr><td><span class="tag">{escape(r.section)}</span></td>'
+            f'<td title="{escape(r.identity)}">{escape(r.label)}</td>'
             f'<td class="n" title="{escape(r.before_exact)}">{escape(r.before)}</td>'
             f'<td class="n" title="{escape(r.after_exact)}">{escape(r.after)}</td>'
             f'<td class="n {r.direction}">{escape(r.delta)}</td>'
@@ -476,7 +504,7 @@ class _Page:
             f'<tr><td title="{escape(p.get("reference"))}">{escape(short_address(p.get("reference")))}'
             + (' <span class="tag">primary</span>' if primary and str(p.get('reference')).lower() == primary else '')
             + f'</td><td>{escape(p.get("dex"))} {escape(p.get("version") or "")}</td>'
-            f'<td class="n" title="{escape(_exact("liquidity_usd", p.get("liquidity_usd")))}">'
+            f'<td class="n" title="{escape(self.formatting.exact("liquidity_usd", p.get("liquidity_usd")))}">'
             f'{escape(abbrev_money(p.get("liquidity_usd")))}</td>'
             f'<td class="n">{escape(abbrev_pct((p.get("liquidity_usd") or 0) / total) if total else DASH)}</td></tr>'
             for p in pools
@@ -498,7 +526,7 @@ class _Page:
         rows = ''.join(
             f'<tr><td>{i + 1}</td><td title="{escape(h.get("address"))}">{escape(short_address(h.get("address")))}</td>'
             f'<td class="n" title="{escape(formatting.amount(h.get("balance")))}">{escape(formatting.amount_brief(h.get("balance")))}</td>'
-            f'<td class="n" title="{escape(_exact("share", h.get("share")))}">{escape(abbrev_pct(h.get("share")))}</td>'
+            f'<td class="n" title="{escape(formatting.exact("share", h.get("share")))}">{escape(abbrev_pct(h.get("share")))}</td>'
             f'<td><div class="bar"><i style="width:{min(100.0, float(h.get("share") or 0) * 100 / top):.0f}%"></i></div></td></tr>'
             for i, h in enumerate(holders)
         ) or '<tr><td colspan="5" class="foot">no holder table</td></tr>'
@@ -532,7 +560,8 @@ class _Page:
         amounts = record.get('liquidity_by_class') or {}
         stack = ''.join(
             f'<i style="width:{float(v or 0) * 100:.1f}%;background:{CUSTODY_COLOURS.get(k, "#888")}" '
-            f'title="{escape(k)} {escape(abbrev_pct(v))} · {escape(amounts.get(k, DASH))} liquidity units"></i>'
+            f'title="{escape(k)} {escape(abbrev_pct(v))} · {escape(abbrev_liquidity(amounts.get(k)))} '
+            f'({escape(amounts.get(k, DASH))})"></i>'
             for k, v in by_class.items()
         )
         legend = ' · '.join(
@@ -560,10 +589,10 @@ class _Page:
         formatting = self.formatting.for_section('onchain_health')
         rows = ''.join(
             f'<tr><td>{escape(p.get("metric"))}</td>'
-            f'<td class="n" title="{escape(formatting.inline(str(p.get("metric")), p.get("value")))}">'
+            f'<td class="n" title="{escape(formatting.exact(str(p.get("metric")), p.get("value")))}">'
             f'{escape(brief(str(p.get("metric")), p.get("value")))}</td>'
             f'<td>{escape(p.get("counterpart"))}</td>'
-            f'<td class="n" title="{escape(formatting.inline(str(p.get("counterpart")), p.get("counterpart_value")))}">'
+            f'<td class="n" title="{escape(formatting.exact(str(p.get("counterpart")), p.get("counterpart_value")))}">'
             f'{escape(_counterpart(p))}</td>'
             f'<td class="flat">{escape(p.get("guards_against"))}'
             + (f' <span class="tag">{escape(p.get("pool_type"))}</span>' if p.get('pool_type') else '')
@@ -591,10 +620,15 @@ class _Page:
 
 
 class _Row:
-    __slots__ = ('section', 'label', 'before', 'before_exact', 'after', 'after_exact', 'delta', 'direction', 'flag')
+    """One What-moved row. `identity` is the full key behind a shortened
+    label (the pool reference, the holder address), for hover and copy."""
 
-    def __init__(self, section, label, before, before_exact, after, after_exact, delta, direction, flag):
-        self.section, self.label = section, label
+    __slots__ = ('section', 'label', 'identity', 'before', 'before_exact', 'after', 'after_exact',
+                 'delta', 'direction', 'flag')
+
+    def __init__(self, section, label, before, before_exact, after, after_exact, delta, direction,
+                 flag, identity=None):
+        self.section, self.label, self.identity = section, label, identity or label
         self.before, self.before_exact = before, before_exact
         self.after, self.after_exact = after, after_exact
         self.delta, self.direction, self.flag = delta, direction, flag
@@ -624,25 +658,30 @@ def _section_rows(section: Dict[str, Any], formatting: Formatting) -> Tuple[List
                          DASH, DASH, DASH, DASH, 'baseline', 'flat', None))
         return rows, set()
     bookkeeping: set = set()
+    named: set = set()  # fields that produced a row, so a flag on one is not a second row
     for entry in changes.get('changed') or []:
         field = str(entry.get('field'))
         if field in skip:
             bookkeeping.add(field)
             continue
-        for label, fmt_name, old, new in _leaves(field, field, entry.get('old'), entry.get('new')):
-            rows.append(_leaf_row(name, label, fmt_name, old, new, formatting, flagged.get(field)))
+        named.add(field)
+        for label, identity, fmt_name, old, new in _leaves(
+            field, field, field, entry.get('old'), entry.get('new')
+        ):
+            rows.append(_leaf_row(name, label, identity, fmt_name, old, new, formatting, flagged.get(field)))
     for field, value in added.items():
         if field in skip:
             bookkeeping.add(field)
         else:
+            named.add(field)
             rows.append(_edge_row(name, field, value, formatting, flagged.get(field), added=True))
     for field, value in (changes.get('removed') or {}).items():
         if field in skip:
             bookkeeping.add(field)
         else:
+            named.add(field)
             rows.append(_edge_row(name, field, value, formatting, flagged.get(field), added=False))
     # A flag on a field whose diff is empty still names the field.
-    named = {r.label.split(' ')[0].split('.')[0] for r in rows}
     rows.extend(
         _Row(name, str(field), DASH, DASH, DASH, DASH, 'flagged', 'flat', reason)
         for field, reason in flagged.items() if field is not None and field not in named
@@ -651,10 +690,11 @@ def _section_rows(section: Dict[str, Any], formatting: Formatting) -> Tuple[List
 
 
 def _edge_row(section, field, value, formatting: Formatting, flag, *, added: bool) -> '_Row':
-    shown, exact = _brief_for(field, value, formatting), formatting.inline(field, value)
+    shown, exact = _brief_for(field, value, formatting), formatting.exact(field, value)
     if added:
         return _Row(section, field, DASH, DASH, shown, exact, 'added', 'up', flag)
     return _Row(section, field, shown, exact, DASH, DASH, 'removed', 'down', flag)
+
 
 def _is_first_build(section: Dict[str, Any], changes: Dict[str, Any]) -> bool:
     added = changes.get('added') or {}
@@ -665,15 +705,18 @@ def _is_first_build(section: Dict[str, Any], changes: Dict[str, Any]) -> bool:
     return bool(present) and set(added) >= present
 
 
-def _leaves(label: str, name: str, old: Any, new: Any) -> Iterator[Tuple[str, str, Any, Any]]:
+def _leaves(
+    label: str, identity: str, name: str, old: Any, new: Any
+) -> Iterator[Tuple[str, str, str, Any, Any]]:
     """Every leaf that differs between two values of one field: (row label,
-    the name to format under, old, new). Dicts recurse by key; record lists
-    with a known identity key match by that key, so a pool's liquidity or a
-    holder's share is one row and not two whole blobs."""
+    the full identity behind it, the name to format under, old, new). Dicts
+    recurse by key; record lists with a known identity key match by that key,
+    so a pool's liquidity or a holder's share is one row and not two whole
+    blobs, and the row keeps the unshortened reference for hover and copy."""
     if isinstance(old, dict) and isinstance(new, dict):
         for key in sorted(set(old) | set(new)):
             if old.get(key) != new.get(key):
-                yield from _leaves(f'{label}.{key}', key, old.get(key), new.get(key))
+                yield from _leaves(f'{label}.{key}', f'{identity}.{key}', key, old.get(key), new.get(key))
         return
     key = LIST_KEYS.get(name)
     if key and _is_record_list(old) and _is_record_list(new):
@@ -685,25 +728,28 @@ def _leaves(label: str, name: str, old: Any, new: Any) -> Iterator[Tuple[str, st
             # and a pair row under its own metric name, as the state block does.
             noun = LIST_NOUNS.get(name, name)
             shown = f'{noun} {short_address(item.get(key))}'.strip()
+            full = f'{noun} {item.get(key)}'.strip()
             if ident not in before:
-                yield (shown, name, None, 'added')
+                yield (shown, full, name, None, 'added')
             elif ident not in after:
-                yield (shown, name, 'removed', None)
+                yield (shown, full, name, 'removed', None)
             else:
                 for inner in sorted(set(before[ident]) | set(after[ident])):
                     if inner == key or before[ident].get(inner) == after[ident].get(inner):
                         continue
+                    suffix = '' if name == 'pairs' and inner == 'value' else (
+                        f' {"counterpart" if inner == "counterpart_value" else inner}'
+                    )
                     yield from _leaves(
-                        shown if name == 'pairs' and inner == 'value'
-                        else f'{shown} {"counterpart" if inner == "counterpart_value" else inner}',
-                        report._value_label(after[ident], key, inner),
+                        shown + suffix, full + suffix,
+                        report.value_label(after[ident], key, inner),
                         before[ident].get(inner), after[ident].get(inner),
                     )
         return
-    yield (label, name, old, new)
+    yield (label, identity, name, old, new)
 
 
-def _leaf_row(section, label, name, old, new, formatting: Formatting, flag) -> _Row:
+def _leaf_row(section, label, identity, name, old, new, formatting: Formatting, flag) -> _Row:
     numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (old, new))
     if numeric:
         delta, direction = delta_text(old, new, delta_kind(name))
@@ -714,9 +760,9 @@ def _leaf_row(section, label, name, old, new, formatting: Formatting, flag) -> _
         delta, direction = 'changed', 'flat'
     return _Row(
         section, label,
-        _brief_for(name, old, formatting), formatting.inline(name, old) if old is not None else DASH,
-        _brief_for(name, new, formatting), formatting.inline(name, new) if new is not None else DASH,
-        delta, direction, flag,
+        _brief_for(name, old, formatting), formatting.exact(name, old),
+        _brief_for(name, new, formatting), formatting.exact(name, new),
+        delta, direction, flag, identity=identity,
     )
 
 
@@ -748,20 +794,9 @@ def _counterpart(pair: Dict[str, Any]) -> str:
             return (f'{value.get("owner_count", DASH)} owners, largest '
                     f'{abbrev_pct(value.get("largest_owner_share"))}')
         return 'record'
-    if isinstance(value, str) and value.lstrip('-').isdigit():
-        return f'{abbrev_count(int(value))} liquidity units'
+    if str(pair.get('counterpart')) in report.LIQUIDITY_UNIT_FIELDS:
+        return abbrev_liquidity(value)
     return brief(str(pair.get('counterpart')), value)
-
-
-def _exact(metric: str, value: Any) -> str:
-    """The exact form for a title attribute, chosen the way `brief` chooses."""
-    if value is None:
-        return DASH
-    if 'share' in metric:
-        return f'{float(value) * 100:.4f}%'
-    if metric.endswith('_usd'):
-        return money_exact(value)
-    return f'{value:,}'
 
 
 def _build_label(build: Dict[str, Any], formatting: Formatting) -> str:

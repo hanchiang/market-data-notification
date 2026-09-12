@@ -13,7 +13,7 @@ import copy
 import json
 import logging
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from src.service.onchain import diff as diff_module
 from src.service.onchain.collectors.base import SECTION_ORDER
@@ -153,7 +153,14 @@ MILLISECOND_FIELDS = frozenset({'pair_created_at'})
 RAW_INT_FIELDS = frozenset({'tick', 'tick_lower', 'tick_upper', 'sqrt_price_x96', 'bits'})
 # Fields whose items carry an identity, so a change inside the list can be
 # reported per item rather than as two truncated blobs.
-LIST_KEYS = {'pools': 'reference', 'top_holders': 'address'}
+LIST_KEYS = {'pools': 'reference', 'top_holders': 'address', 'pairs': 'metric'}
+# Per-build bookkeeping that moves every night by construction (the fetch
+# window, the cursor walk, the row count). Shown in the section, but never
+# what the diff leads with and never on its own a reason to open a section:
+# on 2026-09-12 these three buried the one real change under twelve lines.
+# Keyed by section, as SCALED_SECTIONS is: `window` is a generic name, and a
+# future section's `window` may be the finding.
+BOOKKEEPING_FIELDS = {'onchain_health': frozenset({'transfer_fetch', 'transfer_rows', 'window'})}
 
 
 class Formatting:
@@ -268,7 +275,7 @@ class SectionBlock:
             f"  ! {flag.get('field')}: {flag.get('reason')}" for flag in section['flagged']
         ]
         changes = section['changes'] or {}
-        self.changed = bool(changes) and not diff_module.is_empty(changes)
+        self.changed = bool(changes) and not diff_module.is_empty(_substantive(changes, self.name))
         self.change_lines = _render_changes(section, formatting)
         self.field_lines = _render_fields(section, formatting)
 
@@ -382,7 +389,7 @@ def _render_changes(section: Dict[str, Any], formatting: Formatting) -> List[str
     if not changes:
         return ['  (no diff: section failed, or first build)']
     if diff_module.is_empty(changes):
-        return ['  no change']
+        return [] if section['flagged'] else ['  no change']
     added = changes.get('added') or {}
     if added and not changes.get('changed') and not changes.get('removed'):
         fields = section['fields'] or {}
@@ -392,18 +399,43 @@ def _render_changes(section: Dict[str, Any], formatting: Formatting) -> List[str
 
     flagged_fields = {flag.get('field') for flag in section['flagged']}
     lines: List[str] = []
+    substantive = _substantive(changes, str(section['name']))
+    # A flagged field prints above these lines; `no change` under it would
+    # contradict the flag.
+    if diff_module.is_empty(substantive) and not flagged_fields:
+        lines.append('  no change beyond bookkeeping' if _bookkeeping_names(changes, str(section['name'])) else '  no change')
     # Flagged first, then the rest -- the ordering the operator reads by.
     entries = sorted(
-        changes.get('changed') or [],
+        substantive.get('changed') or [],
         key=lambda entry: (entry.get('field') not in flagged_fields, entry.get('field')),
     )
     for entry in entries:
         lines.extend(_render_change(entry, formatting))
-    for name, value in added.items():
+    for name, value in (substantive.get('added') or {}).items():
         lines.append(f'  + {name}: {formatting.inline(name, value)}')
-    for name, value in (changes.get('removed') or {}).items():
+    for name, value in (substantive.get('removed') or {}).items():
         lines.append(f'  - {name}: {formatting.inline(name, value)}')
+    moved = sorted(_bookkeeping_names(changes, str(section['name'])))
+    if moved:
+        lines.append(f"  (bookkeeping moved: {', '.join(moved)})")
     return lines
+
+
+def _bookkeeping_names(changes: Dict[str, Any], section: str) -> Set[str]:
+    names = {str(entry.get('field')) for entry in changes.get('changed') or []}
+    names |= set(changes.get('added') or {}) | set(changes.get('removed') or {})
+    return names & BOOKKEEPING_FIELDS.get(section, frozenset())
+
+
+def _substantive(changes: Dict[str, Any], section: str) -> Dict[str, Any]:
+    """The diff without its bookkeeping fields. Presentation only: `render_json`
+    and the store keep the full diff."""
+    bookkeeping = BOOKKEEPING_FIELDS.get(section, frozenset())
+    return {
+        'changed': [e for e in changes.get('changed') or [] if e.get('field') not in bookkeeping],
+        'added': {k: v for k, v in (changes.get('added') or {}).items() if k not in bookkeeping},
+        'removed': {k: v for k, v in (changes.get('removed') or {}).items() if k not in bookkeeping},
+    }
 
 
 def _render_change(entry: Dict[str, Any], formatting: Formatting) -> List[str]:
@@ -452,20 +484,55 @@ def _list_delta(old: List[Dict[str, Any]], new: List[Dict[str, Any]], key: str, 
     for ident in sorted(set(before) | set(after)):
         if ident not in before:
             item = after[ident]
-            lines.append(f"      + {item.get(key)}  {formatting.inline(key, _without(item, key))}")
+            lines.append(f"      + {item.get(key)}  {_record_inline(item, key, formatting)}")
         elif ident not in after:
             item = before[ident]
-            lines.append(f"      - {item.get(key)}  {formatting.inline(key, _without(item, key))}")
+            lines.append(f"      - {item.get(key)}  {_record_inline(item, key, formatting)}")
         else:
             shown = after[ident].get(key)
             for inner_key, was, now in _dict_delta(
                 _without(before[ident], key), _without(after[ident], key)
             ):
+                # One level deeper: a pair's counterpart can be a record
+                # (custody: owner, share, positions), and two whole records
+                # side by side hide the one number that moved. `_dict_delta`
+                # reads absent and None alike, so two unequal records can yield
+                # no leaf: then the whole value prints, never nothing.
+                leaves = _dict_delta(was, now) if isinstance(was, dict) and isinstance(now, dict) else []
+                if leaves:
+                    for leaf, before_leaf, after_leaf in leaves:
+                        lines.append(
+                            f"      {shown}  {inner_key}.{leaf}: "
+                            f"{formatting.inline(leaf, before_leaf)} -> {formatting.inline(leaf, after_leaf)}"
+                        )
+                    continue
+                # A pair row's `value` is the metric named on the row, and its
+                # `counterpart_value` the counterpart: format them under those
+                # names, as the state block does, so one share is not printed
+                # as 0.5738 in the diff and 57.38% two lines below.
                 lines.append(
-                    f"      {shown}  {inner_key}: {formatting.inline(inner_key, was)} -> "
-                    f"{formatting.inline(inner_key, now)}"
+                    f"      {shown}  {inner_key}: "
+                    f"{formatting.inline(_value_label(before[ident], key, inner_key), was)} -> "
+                    f"{formatting.inline(_value_label(after[ident], key, inner_key), now)}"
                 )
     return lines or ['      (reordered only)']
+
+
+def _record_inline(item: Dict[str, Any], key: str, formatting: Formatting) -> str:
+    """A whole record on one line, each value formatted under the name the
+    state block would use for it (a pair's `value` under its metric)."""
+    return ', '.join(
+        f'{k}={formatting.inline(_value_label(item, key, k), v)}'
+        for k, v in sorted(_without(item, key).items())
+    )
+
+
+def _value_label(item: Dict[str, Any], key: str, inner_key: str) -> str:
+    if key == 'metric' and inner_key == 'value':
+        return str(item.get('metric'))
+    if key == 'metric' and inner_key == 'counterpart_value':
+        return str(item.get('counterpart'))
+    return inner_key
 
 
 def _without(item: Dict[str, Any], key: str) -> Dict[str, Any]:

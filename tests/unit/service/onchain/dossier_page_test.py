@@ -150,6 +150,150 @@ class TestNestedChanges:
         ]))
         assert '  ~ pools:\n      0xAAA  liquidity_usd: 185,130.81 -> 184,910.60' in text
 
+    def test_health_pairs_diff_per_metric_not_as_two_blobs(self):
+        """2026-09-12 read: `pairs` printed as two 20-line blobs. Its items are
+        keyed by `metric`, so the change names the metric and the value that moved."""
+        old = [{'metric': 'dex_volume_h24_usd', 'value': 467444.27, 'source': 'dex_provider',
+                'counterpart': 'active_addresses_24h', 'counterpart_value': 991,
+                'guards_against': 'wash_trading: volume without new counterparties'}]
+        new = [dict(old[0], value=449124.39, counterpart_value=984)]
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'pairs': new}, changes={
+                'added': {}, 'removed': {},
+                'changed': [{'field': 'pairs', 'old': old, 'new': new}],
+            }),
+        ]))
+        assert (
+            '  ~ pairs:\n'
+            '      dex_volume_h24_usd  counterpart_value: 991 -> 984\n'
+            '      dex_volume_h24_usd  value: 467,444.27 -> 449,124.39\n'
+        ) in text
+        changed_part = text.split('~ pairs:')[1].split('  pairs')[0]
+        assert 'guards_against' not in changed_part
+
+    def test_a_record_valued_counterpart_diffs_by_leaf(self):
+        old = [{'metric': 'liquidity_usd', 'value': 1.0,
+                'counterpart_value': {'largest_owner_share': 0.6244, 'open_positions': 53, 'pool_type': 'v3'}}]
+        new = [{'metric': 'liquidity_usd', 'value': 1.0,
+                'counterpart_value': {'largest_owner_share': 0.5738, 'open_positions': 17, 'pool_type': 'v3'}}]
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'pairs': new}, changes={
+                'added': {}, 'removed': {},
+                'changed': [{'field': 'pairs', 'old': old, 'new': new}],
+            }),
+        ]))
+        assert '      liquidity_usd  counterpart_value.largest_owner_share: 62.44% -> 57.38%\n' in text
+        assert '      liquidity_usd  counterpart_value.open_positions: 53 -> 17\n' in text
+        assert 'pool_type=v3 ->' not in text
+
+    def test_a_pair_share_metric_is_formatted_as_the_state_block_formats_it(self):
+        """Review 2026-09-12: the diff printed 0.5738 for a share the state
+        block below printed as 57.38%. The row's metric names the value."""
+        old = [{'metric': 'primary_pool_share_of_provider_liquidity', 'value': 0.6244,
+                'counterpart': 'largest_owner_share', 'counterpart_value': 0.5}]
+        new = [dict(old[0], value=0.5738, counterpart_value=0.25)]
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'pairs': new}, changes={
+                'added': {}, 'removed': {},
+                'changed': [{'field': 'pairs', 'old': old, 'new': new}],
+            }),
+        ]))
+        assert '      primary_pool_share_of_provider_liquidity  value: 62.44% -> 57.38%\n' in text
+        assert '      primary_pool_share_of_provider_liquidity  counterpart_value: 50.00% -> 25.00%\n' in text
+
+    def test_records_differing_only_by_none_versus_absent_still_print(self):
+        """`_dict_delta` reads None and absent alike; two unequal custody
+        records then yield no leaf, and the row must not read as reordered."""
+        old = [{'metric': 'liquidity_usd', 'value': 1.0, 'counterpart_value': {'pool_liquidity': None}}]
+        new = [{'metric': 'liquidity_usd', 'value': 1.0, 'counterpart_value': {}}]
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'pairs': new}, changes={
+                'added': {}, 'removed': {},
+                'changed': [{'field': 'pairs', 'old': old, 'new': new}],
+            }),
+        ]))
+        assert '(reordered only)' not in text
+        assert '      liquidity_usd  counterpart_value: pool_liquidity=None -> {}\n' in text
+
+    def test_bookkeeping_is_demoted_only_in_onchain_health_and_kept_in_json(self):
+        changes = {'added': {}, 'removed': {},
+                   'changed': [{'field': 'window', 'old': {'from_block': 1}, 'new': {'from_block': 2}}]}
+        elsewhere = [b for b in report.render_blocks(_dossier([
+            _section('identity', {'window': {'from_block': 2}}, changes=changes),
+        ])) if b.name == 'identity'][0]
+        assert elsewhere.has_changes
+        assert elsewhere.change_lines == ['  ~ window:', '      from_block: 1 -> 2']
+        payload = report.render_json(_dossier([
+            _section('onchain_health', {'window': {'from_block': 2}}, changes=changes),
+        ]))
+        assert '"field": "window"' in payload
+
+    def test_an_appearing_pair_row_formats_its_share_under_the_metric(self):
+        new = [{'metric': 'primary_pool_share_of_provider_liquidity', 'value': 0.5738,
+                'counterpart': 'largest_owner_share', 'counterpart_value': 0.25, 'guards_against': 'x'}]
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'pairs': new}, changes={
+                'added': {}, 'removed': {},
+                'changed': [{'field': 'pairs', 'old': [], 'new': new}],
+            }),
+        ]))
+        assert ('      + primary_pool_share_of_provider_liquidity  counterpart=largest_owner_share, '
+                'counterpart_value=25.00%, guards_against=x, value=57.38%\n') in text
+
+    def test_a_flag_with_an_empty_diff_does_not_print_no_change(self):
+        text = report.render_dossier(_dossier([
+            _section('identity', {'owner': '0x1'}, changes={'added': {}, 'removed': {}, 'changed': []},
+                     flagged=[{'field': 'owner', 'reason': 'structural_change'}]),
+        ]))
+        assert '  ! owner: structural_change\n  owner: 0x1' in text
+
+    def test_a_flagged_bookkeeping_field_does_not_read_as_no_change(self):
+        changes = {'added': {}, 'removed': {},
+                   'changed': [{'field': 'transfer_rows', 'old': 10, 'new': 2, 'delta': -8}]}
+        text = report.render_dossier(_dossier([
+            _section('onchain_health', {'transfer_rows': 2}, changes=changes,
+                     flagged=[{'field': 'transfer_rows', 'reason': 'row count fell'}]),
+        ]))
+        assert '  ! transfer_rows: row count fell\n  (bookkeeping moved: transfer_rows)' in text
+        assert '  no change' not in text.split('-- onchain_health')[1]
+
+    def test_bookkeeping_moves_do_not_lead_and_do_not_open_the_section(self):
+        """The fetch window and cursor walk move every night by construction;
+        on 2026-09-12 they buried the one real change under twelve lines."""
+        bookkeeping = {
+            'added': {}, 'removed': {},
+            'changed': [
+                {'field': 'window', 'old': {'from_block': 1}, 'new': {'from_block': 2}},
+                {'field': 'transfer_rows', 'old': 10, 'new': 12, 'delta': 2},
+                {'field': 'transfer_fetch', 'old': {'fetched': 5}, 'new': {'fetched': 2}},
+            ],
+        }
+        quiet = _section('onchain_health', {'transfer_rows': 12}, changes=bookkeeping)
+        html = render_dossier_page(_dossier([IDENTITY, quiet]))
+        lead = html[html.index('class="lead"'):html.index('<h2>Sections</h2>')]
+        assert 'onchain_health' not in lead
+        assert '<details><summary>-- onchain_health [ok]</summary>' in html
+        text = report.render_dossier(_dossier([quiet]))
+        assert '  no change beyond bookkeeping\n  (bookkeeping moved: transfer_fetch, transfer_rows, window)' in text
+        assert 'from_block' not in text.split('-- onchain_health')[1].split('  transfer_rows')[0]
+
+    def test_a_real_change_still_leads_with_bookkeeping_last(self):
+        changes = {
+            'added': {}, 'removed': {},
+            'changed': [
+                {'field': 'window', 'old': {'from_block': 1}, 'new': {'from_block': 2}},
+                {'field': 'derivation_check', 'old': 'ok', 'new': 'mismatch'},
+            ],
+        }
+        block = [b for b in report.render_blocks(_dossier([
+            _section('onchain_health', {'derivation_check': 'mismatch'}, changes=changes),
+        ])) if b.name == 'onchain_health'][0]
+        assert block.has_changes
+        assert block.change_lines == [
+            '  ~ derivation_check: ok -> mismatch',
+            '  (bookkeeping moved: window)',
+        ]
+
     def test_a_case_only_respelling_of_the_identity_is_not_a_change(self):
         old = [{'address': '0xABC', 'balance': '1', 'share': 0.5}]
         new = [{'address': '0xabc', 'balance': '1', 'share': 0.5}]

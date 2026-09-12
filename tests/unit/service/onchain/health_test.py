@@ -580,3 +580,73 @@ class TestTheVerifiedDerivationMark:
             stream != stubbed.STREAM_DERIVATION_VERIFIED
             for stream, _ in context.repository.set_cursors
         )
+
+
+class TestPriceAndFdvArePersisted:
+    """The provider returns `priceUsd` and `fdv` on every build and until the
+    UX brief (2026-09-12) both were dropped. They cannot be backfilled, so the
+    section must carry them from the fixture pair record onward."""
+
+    @pytest.fixture
+    def replaying(self, monkeypatch):
+        import json
+        from pathlib import Path
+
+        from market_data_library.core.crypto.dexscreener import DexscreenerService
+
+        from src.service.onchain.collectors import transfers
+
+        body = json.loads(
+            (Path(__file__).parent / 'fixtures' / 'touch-grass.dexscreener_pair.json').read_text()
+        )
+
+        class ReplayDexscreener:
+            async def get_pairs_raw(self, *, chain_id, pair_addresses):
+                assert chain_id == 'robinhood'
+                return DexscreenerService._parse_pairs(payload=body, endpoint='latest/dex/pairs'), body
+
+        async def advance(*a, **k):
+            return transfers.FetchOutcome(1, 2, 0, 0, 0, False)
+
+        async def passes(*a, **k):
+            return True, []
+
+        async def custody(*a, **k):
+            return {}
+
+        monkeypatch.setattr(transfers, 'advance_transfers', advance)
+        monkeypatch.setattr(transfers, 'check_derivation', passes)
+        monkeypatch.setattr(
+            transfers, 'holder_summary',
+            lambda *a, **k: {'top_holders': [{'address': ALICE, 'balance': '1'}]},
+        )
+        monkeypatch.setattr(health, '_pool_touching_addresses', lambda c: [])
+        monkeypatch.setattr(health, '_custody', custody)
+        monkeypatch.setattr(health, '_pairs', lambda **k: [])
+        context = _VerifiedContext()
+        context.dexscreener = ReplayDexscreener()
+        context.chain = type('Chain', (), {'chain_id': 4663})()
+        context.project.pool_ref = '0x' + 'ab' * 32
+        context.record_http = lambda *a, **k: None
+        return context
+
+    @pytest.mark.asyncio
+    async def test_the_two_fields_are_stored_as_floats_from_the_fixture_pair_record(
+        self, replaying
+    ):
+        section = await health.collect(replaying)
+
+        assert section.fields['price_usd'] == 0.003095
+        assert section.fields['fdv_usd'] == 3048089.0
+        assert isinstance(section.fields['price_usd'], float)
+
+    @pytest.mark.asyncio
+    async def test_an_empty_provider_answer_stores_none_not_a_missing_key(
+        self, replaying, monkeypatch
+    ):
+        async def nothing(context):
+            return {}
+
+        monkeypatch.setattr(health, '_provider_snapshot', nothing)
+        section = await health.collect(replaying)
+        assert section.fields['price_usd'] is None and section.fields['fdv_usd'] is None

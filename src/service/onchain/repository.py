@@ -393,6 +393,11 @@ class OnchainRepository:
             f'SELECT * FROM {ONCHAIN_SCHEMA}.entity WHERE key = %s', (key,)
         )
 
+    def get_entity(self, entity_id: int) -> Optional[Dict[str, Any]]:
+        return self.fetch_one(
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.entity WHERE id = %s', (entity_id,)
+        )
+
     def get_children(self, parent_id: int) -> List[Dict[str, Any]]:
         return self.fetch_all(
             f'SELECT * FROM {ONCHAIN_SCHEMA}.entity WHERE parent_id = %s ORDER BY id',
@@ -987,12 +992,20 @@ class OnchainRepository:
         )
 
     def get_builds_for_project(
-        self, project_id: int, limit: int = 30
+        self, project_id: int, limit: int = 30, *, outcome: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        """Newest first. `outcome` narrows to one outcome (the history series
+        reads `ok` builds only, so a failed night is a gap and not a point)."""
+        if outcome is None:
+            return self.fetch_all(
+                f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE project_id = %s '
+                'ORDER BY id DESC LIMIT %s',
+                (project_id, limit),
+            )
         return self.fetch_all(
-            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE project_id = %s '
+            f'SELECT * FROM {ONCHAIN_SCHEMA}.build WHERE project_id = %s AND outcome = %s '
             'ORDER BY id DESC LIMIT %s',
-            (project_id, limit),
+            (project_id, outcome, limit),
         )
 
     def get_build(

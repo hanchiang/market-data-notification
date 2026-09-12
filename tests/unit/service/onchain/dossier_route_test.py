@@ -10,6 +10,7 @@ report job cannot disagree about a figure (one loader), and the page references
 nothing outside itself (local-first).
 """
 import json
+import re
 
 import pytest
 from starlette.testclient import TestClient
@@ -116,11 +117,14 @@ class TestDossierRoute:
         assert payload['sections'][0]['name'] == 'identity'
 
     def test_the_page_references_nothing_outside_itself(self, client, seeded):
-        """Local-first: opening this page must send nothing anywhere. The
-        cheapest guarantee is a page with no external reference at all."""
+        """Local-first: opening this page must send nothing anywhere. The one
+        script is the vendored Chart.js on this same origin; any `http://` or
+        `https://` reference still fails."""
         body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
         assert 'http://' not in body and 'https://' not in body
-        assert '<script' not in body
+        assert re.findall(r'<script src="([^"]*)"', body) == ['/project-monitor/static/chart.umd.js']
+        assert client.get('/project-monitor/static/chart.umd.js').status_code == 200
+        assert '<link' not in body
 
     def test_chain_supplied_text_is_escaped(
         self, client, onchain_repository, seeded, onchain_database_url
@@ -169,4 +173,112 @@ class TestDossierRoute:
     def test_an_unknown_project_is_a_404(self, client, seeded):
         assert client.get(
             '/project-monitor/onchain/dossier/nope?test_mode=1'
+        ).status_code == 404
+
+
+def _pairs(liquidity, holders):
+    return [
+        {'metric': 'liquidity_usd', 'value': liquidity, 'counterpart': 'custody',
+         'counterpart_value': {'pool_type': 'v4'}, 'guards_against': 'liquidity_pull', 'pool_type': 'v4'},
+        {'metric': 'holder_count', 'value': holders, 'counterpart': 'new_vs_returning_24h_and_top_ten_share',
+         'counterpart_value': {'new': 1, 'returning': 2, 'top_ten_share': 0.3}, 'guards_against': 'split'},
+    ]
+
+
+def _add_build(repository, project_id, *, block, outcome='ok', health='ok', pool_count=3):
+    run_id = repository.start_run(builder.JOB_BUILD)
+    build_id = repository.start_build(
+        run_id=run_id, project_id=project_id, block=block, block_timestamp=1_789_000_000 + block
+    )
+    repository.insert_section(
+        build_id=build_id, name='identity', status='ok',
+        fields={'token_symbol': 'GRASS', 'decimals': 18, 'pool_count': pool_count, 'pools': []},
+    )
+    if health == 'ok':
+        repository.insert_section(
+            build_id=build_id, name='onchain_health', status='ok',
+            fields={'pairs': _pairs(1000.0 + block, 40 + block), 'price_usd': 0.01, 'fdv_usd': 5.0},
+        )
+    else:
+        repository.insert_section(
+            build_id=build_id, name='onchain_health', status='failed',
+            error_class='EvmTransportError', fields={},
+        )
+    repository.finish_build(build_id, outcome=outcome, threshold_version='2026-09-06.1')
+    repository.finish_run(run_id, outcome=outcome, failed_units=[], spend={})
+    repository.commit()
+    return build_id
+
+
+class TestHistoryAndSparklines:
+    def test_history_has_one_point_per_ok_build_oldest_first_with_a_gap_for_a_failed_section(
+        self, client, seeded, onchain_repository
+    ):
+        project_id = seeded['touch-grass']
+        _add_build(onchain_repository, project_id, block=1)
+        gap = _add_build(onchain_repository, project_id, block=2, health='failed', outcome='partial')
+        skipped = _add_build(onchain_repository, project_id, block=3, outcome='failed')
+        _add_build(onchain_repository, project_id, block=4)
+
+        response = client.get('/project-monitor/onchain/dossier/touch-grass?format=history&test_mode=1')
+        assert response.status_code == 200
+        payload = json.loads(response.text)
+        assert payload['project'] == 'touch-grass'
+        assert payload['metrics'] == [
+            'liquidity_usd', 'volume_h24_usd', 'trades_h24', 'holders', 'top_ten_share',
+            'pool_count', 'price_usd', 'fdv_usd',
+        ]
+        ids = [point['build_id'] for point in payload['points']]
+        assert ids == sorted(ids)
+        assert skipped not in ids  # a failed build is no point at all
+        assert gap not in ids  # `partial` is not `ok` either
+        # The seeded fixture build has identity only: its health metrics are gaps.
+        first = payload['points'][0]
+        assert first['values']['pool_count'] is None and first['values']['liquidity_usd'] is None
+        last = payload['points'][-1]
+        assert last['values'] == {
+            'liquidity_usd': 1004.0, 'volume_h24_usd': None, 'trades_h24': None, 'holders': 44,
+            'top_ten_share': None, 'pool_count': 3, 'price_usd': 0.01, 'fdv_usd': 5.0,
+        }
+        assert last['block_timestamp'] == 1_789_000_004
+
+    def test_a_partial_ok_build_keeps_its_x_axis_with_null_metrics(self, seeded, onchain_repository):
+        """An `ok` build whose health section failed is a point with gaps, so
+        the chart shows the night rather than skipping it."""
+        from src.service.onchain.report import load_history
+
+        project_id = seeded['touch-grass']
+        gap = _add_build(onchain_repository, project_id, block=2, health='failed', outcome='ok')
+        history = load_history(onchain_repository, 'touch-grass')
+        point = next(p for p in history['points'] if p['build_id'] == gap)
+        assert point['values']['liquidity_usd'] is None and point['values']['pool_count'] == 3
+
+    def test_three_builds_show_the_count_and_seven_emit_the_sparkline(
+        self, client, seeded, onchain_repository
+    ):
+        project_id = seeded['touch-grass']
+        for block in (1, 2, 3):
+            _add_build(onchain_repository, project_id, block=block)
+        body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
+        # Three builds carry the metrics; the fixture build (identity, no
+        # pool_count) is an `ok` point with every metric a gap.
+        assert body.count('>3/7 builds<') == 5
+        assert '>0/7 builds<' in body  # volume: never stored by these builds
+        assert 'data-spark=' not in body
+
+        for block in range(4, 8):
+            _add_build(onchain_repository, project_id, block=block)
+        body = client.get('/project-monitor/onchain/dossier/touch-grass?test_mode=1').text
+        assert '<canvas data-spark="pool_count"' in body
+        assert '<canvas data-spark="liquidity_usd"' in body
+        assert 'data-spark="volume_h24_usd"' not in body  # never stored: a gap in every point
+        inline = json.loads(re.search(
+            r'<script id="history" type="application/json">(.*?)</script>', body
+        ).group(1))
+        assert len(inline['points']) == 8
+        assert '<option value="?build=' in body and '(run ' in body
+
+    def test_history_for_an_unknown_project_is_a_404(self, client, seeded):
+        assert client.get(
+            '/project-monitor/onchain/dossier/nope?format=history&test_mode=1'
         ).status_code == 404

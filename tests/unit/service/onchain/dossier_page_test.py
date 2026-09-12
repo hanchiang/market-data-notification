@@ -6,10 +6,11 @@ buried the diff under forty identity fields.
 Every test here reads rendered text or HTML, not the field dictionary, because
 readability is a property of what the operator sees.
 """
+import json
 import re
 
 from src.router.project_monitor.dashboard import render_dossier_page
-from src.service.onchain import report
+from src.service.onchain import page, report
 
 WAD = 10 ** 18
 HOLDERS = [
@@ -270,9 +271,10 @@ class TestNestedChanges:
         }
         quiet = _section('onchain_health', {'transfer_rows': 12}, changes=bookkeeping)
         html = render_dossier_page(_dossier([IDENTITY, quiet]))
-        lead = html[html.index('class="lead"'):html.index('<h2>Sections</h2>')]
-        assert 'onchain_health' not in lead
-        assert '<details><summary>-- onchain_health [ok]</summary>' in html
+        moved = html[html.index('id="what-moved"'):html.index('id="pools"')]
+        assert 'What moved since previous build (0)' in moved
+        assert 'from_block' not in moved
+        assert 'bookkeeping moved: transfer_fetch, transfer_rows, window' in moved
         text = report.render_dossier(_dossier([quiet]))
         assert '  no change beyond bookkeeping\n  (bookkeeping moved: transfer_fetch, transfer_rows, window)' in text
         assert 'from_block' not in text.split('-- onchain_health')[1].split('  transfer_rows')[0]
@@ -375,30 +377,35 @@ class TestPageShape:
         })
         quiet = _section('contract_safety', {'owner': 'absent'})
         builds = [
-            {'id': 18, 'block': 60_288_320, 'outcome': 'ok', 'block_timestamp': 1_789_132_894},
-            {'id': 17, 'block': 60_270_535, 'outcome': 'partial', 'block_timestamp': 1_789_046_000},
+            {'id': 18, 'run_id': 6, 'block': 60_288_320, 'outcome': 'ok', 'block_timestamp': 1_789_132_894},
+            {'id': 17, 'run_id': 5, 'block': 60_270_535, 'outcome': 'partial', 'block_timestamp': 1_789_046_000},
         ]
         return render_dossier_page(
             _dossier([IDENTITY, quiet, changed], builds=builds),
             projects=['not-a-website', 'touch-grass'],
         )
 
-    def test_the_diff_leads_and_the_sections_follow(self):
+    def test_what_moved_leads_and_the_raw_text_follows(self):
         html = self._page()
-        assert html.index('Changes since the previous build') < html.index('<h2>Sections</h2>')
-        lead = html[html.index('class="lead"'):html.index('<h2>Sections</h2>')]
-        assert '~ burned: 0 GRASS -&gt; 1 GRASS' in lead
-        assert 'contract_safety' not in lead
+        assert html.index('id="what-moved"') < html.index('id="raw-diff"')
+        moved = html[html.index('id="what-moved"'):html.index('id="pools"')]
+        assert 'What moved since previous build (1)' in moved
+        assert '<td>burned</td>' in moved and '0 GRASS' in moved and '1 GRASS' in moved
+        assert 'contract_safety' not in moved
 
-    def test_only_a_changed_section_opens_by_default(self):
+    def test_the_raw_diff_is_folded_and_holds_every_report_line(self):
         html = self._page()
-        assert '<details open><summary>-- token_economics [ok]</summary>' in html
-        assert '<details><summary>-- contract_safety [ok]</summary>' in html
+        assert '<details class="panel wide" id="raw-diff">' in html
+        assert '<details open' not in html
+        raw = html[html.index('id="raw-diff"'):]
+        assert '-- token_economics [ok]' in raw and '-- contract_safety [ok]' in raw
+        assert '~ burned: 0 GRASS -&gt; 1 GRASS' in raw
 
     def test_builds_and_projects_are_linked_and_the_current_ones_are_not(self):
         html = self._page()
-        assert '<a href="?build=17">17 (2026-09-10)</a>' in html
-        assert '<strong>18 (2026-09-11)</strong>' in html
+        assert '<option value="?build=17">build 17 (run 5) · 2026-09-10 13:13 UTC · partial</option>' in html
+        assert '<option value="?build=18" selected>build 18 (run 6) · 2026-09-11 13:21 UTC</option>' in html
+        assert '<a class="m" id="prev-build" href="?build=17">prev build 17</a>' in html
         assert '<a href="not-a-website">not-a-website</a>' in html
         assert '<strong>touch-grass</strong>' in html
 
@@ -414,7 +421,8 @@ class TestPageShape:
             _dossier([IDENTITY, changed], builds=builds),
             projects=['not-a-website', 'touch-grass'], test_mode=True,
         )
-        assert '<a href="?build=17&test_mode=1">' in html
+        assert '<option value="?build=17&test_mode=1">' in html
+        assert 'href="?build=17&test_mode=1"' in html
         assert '<a href="not-a-website?test_mode=1">' in html
         assert 'href="not-a-website?"' not in self._page()
 
@@ -426,35 +434,353 @@ class TestPageShape:
         assert 'href="project:' not in html
         assert '<strong>touch-grass</strong>' in html
 
-    def test_a_failed_section_opens_and_leads_even_with_no_field_diff(self):
+    def test_a_failed_section_is_itself_a_what_moved_row(self):
+        """A section that could not be built is what changed since the
+        previous build, even with no field diff to show."""
         failed = _section('onchain_health', {}, status='failed')
         failed['error_class'] = 'EvmTransportError'
         failed['changes'] = {}
         html = render_dossier_page(_dossier([IDENTITY, failed]))
-        lead = html[html.index('class="lead"'):html.index('<h2>Sections</h2>')]
-        assert '-- onchain_health [failed] (EvmTransportError)' in lead
-        assert '<details open><summary>-- onchain_health [failed]' in html
+        moved = html[html.index('id="what-moved"'):html.index('id="pools"')]
+        assert 'What moved since previous build (1)' in moved
+        assert '<td>section</td>' in moved and 'failed (EvmTransportError)' in moved
+        assert 'section not built' in moved
+        assert '-- onchain_health [failed] (EvmTransportError)' in html[html.index('id="raw-diff"'):]
 
     def test_the_page_references_no_host(self):
         """Local-first: the page must be readable with the network off, and a
         loopback origin that could read every other route here must load
-        nothing from anywhere else."""
+        nothing from anywhere else. The one script is the vendored Chart.js on
+        this origin."""
         html = self._page()
         assert not re.search(r'(src|href)="(https?:)?//', html)
-        assert '<script' not in html and '<link' not in html
+        assert re.findall(r'<script src="([^"]*)"', html) == [page.CHART_SCRIPT]
+        assert page.CHART_SCRIPT.startswith('/project-monitor/')
+        assert '<link' not in html and '@import' not in html
 
     def test_chain_data_is_escaped(self):
-        page = render_dossier_page(_dossier([
+        html = render_dossier_page(_dossier([
             _section('identity', {'token_name': '<script>alert(1)</script>'}),
         ]))
-        assert '<script>alert' not in page
-        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in page
+        assert '<script>alert' not in html
+        assert '&lt;script&gt;alert(1)&lt;/script&gt;' in html
 
     def test_no_build_says_so_and_still_links_the_other_projects(self):
-        page = render_dossier_page(
+        html = render_dossier_page(
             {'project': 'zzz', 'display_name': 'ZZZ', 'build': None, 'sections': []},
             projects=['touch-grass', 'zzz'],
         )
-        assert 'no build yet' in page
-        assert '<a href="touch-grass">touch-grass</a>' in page
-        assert page.endswith('</body></html>')
+        assert 'no build yet' in html
+        assert '<a href="touch-grass">touch-grass</a>' in html
+        assert html.endswith('</body></html>')
+
+
+# -- Slice A: the mission-control page (UX brief 2026-09-12) -------------------
+
+POOL_A = '0x64c5dbbee60473344dc6f7b11391ff9c7bb7464c0d5ecfb0d311ff26df9f8c77'
+POOL_B = '0x1111111111111111111111111111111111111111111111111111111111111111'
+CUSTODY = {
+    'pool_type': 'v4', 'pool_liquidity': '29277002188455995842192', 'open_positions': 1,
+    'owner_count': 1, 'largest_owner': '0x' + 'ab' * 20, 'largest_owner_share': 1.0,
+    'share_by_class': {'eoa': 1.0}, 'liquidity_by_class': {'eoa': '29277002188455995842192'},
+}
+
+
+def _pairs(liquidity, volume, trades, holders, top_ten):
+    return [
+        {'metric': 'liquidity_usd', 'value': liquidity, 'source': 'dex_provider',
+         'counterpart': 'custody', 'counterpart_value': CUSTODY,
+         'guards_against': 'liquidity_pull: depth nobody is committed to', 'pool_type': 'v4'},
+        {'metric': 'dex_volume_h24_usd', 'value': volume, 'source': 'dex_provider',
+         'counterpart': 'active_addresses_24h', 'counterpart_value': 2724,
+         'guards_against': 'wash_trading: volume without new counterparties'},
+        {'metric': 'dex_trades_h24', 'value': trades, 'source': 'dex_provider',
+         'counterpart': 'pool_counterparties_24h', 'counterpart_value': 300,
+         'guards_against': 'bot_churn: trades without distinct counterparties'},
+        {'metric': 'holder_count', 'value': holders, 'source': 'transfer_history',
+         'counterpart': 'new_vs_returning_24h_and_top_ten_share',
+         'counterpart_value': {'new': 12, 'returning': 40, 'top_ten_share': top_ten},
+         'guards_against': 'wallet_splitting: one holder becoming twenty'},
+        {'metric': 'primary_pool_share_of_provider_liquidity', 'value': 0.4987,
+         'source': 'dex_provider', 'counterpart': 'primary_pool_onchain_liquidity',
+         'counterpart_value': '29277002188455995842192',
+         'guards_against': 'fragmentation: many small third-party pools around a launch',
+         'pool_type': 'v4'},
+    ]
+
+
+def _mission_control_dossier(history_points=0):
+    old_pairs = _pairs(169_900.0, 413_000.0, 1_123, 6_601, 0.268672)
+    new_pairs = _pairs(173_738.69, 418_800.0, 1_161, 6_598, 0.266329)
+    health = _section('onchain_health', {
+        'pairs': new_pairs, 'price_usd': 0.003095, 'fdv_usd': 3_048_089.0,
+        'window': {'from_block': 2}, 'transfer_rows': 5, 'derivation_check': 'ok',
+    }, changes={'added': {}, 'removed': {}, 'changed': [
+        {'field': 'pairs', 'old': old_pairs, 'new': new_pairs},
+        {'field': 'window', 'old': {'from_block': 1}, 'new': {'from_block': 2}},
+        {'field': 'price_usd', 'old': 0.0031, 'new': 0.003095, 'delta': -0.000005},
+    ]})
+    pools = [
+        {'reference': POOL_A, 'dex': 'uniswap', 'version': 'v4', 'liquidity_usd': 173_738.69},
+        {'reference': POOL_B, 'dex': 'uniswap', 'version': 'v3', 'liquidity_usd': 174_700.0},
+    ]
+    identity = _section('identity', {
+        'token_symbol': 'GRASS', 'decimals': 18, 'pool_count': 12, 'pool_ref': POOL_A,
+        'pools': pools,
+    }, changes={'added': {}, 'removed': {}, 'changed': [
+        {'field': 'pools', 'old': [dict(pools[0], liquidity_usd=169_900.0), pools[1]], 'new': pools},
+    ]})
+    economics = _section('token_economics', {
+        'top_holders': HOLDERS, 'top_ten_share': 0.266329, 'burned_share': 0.024,
+        'pool_held_share': {'share': 0.0251, 'positions': 1, 'amount': '1', 'method': 'v4_tick_math'},
+        'total_supply': str(10 ** 9 * WAD),
+    }, changes={'added': {}, 'removed': {}, 'changed': [
+        {'field': 'top_ten_share', 'old': 0.268672, 'new': 0.266329, 'delta': -0.002343},
+        {'field': 'top_holders', 'old': [dict(HOLDERS[0], share=0.0349), *HOLDERS[1:]], 'new': HOLDERS},
+    ]})
+    dossier = _dossier([identity, health, economics], builds=[
+        {'id': 26, 'run_id': 9, 'block': 2, 'outcome': 'ok', 'block_timestamp': 1_789_132_894},
+        {'id': 24, 'run_id': 8, 'block': 1, 'outcome': 'failed', 'block_timestamp': 1_789_100_000},
+        {'id': 22, 'run_id': 7, 'block': 0, 'outcome': 'ok', 'block_timestamp': 1_789_046_000},
+    ])
+    dossier['build'] = dict(dossier['build'], id=26, run_id=9)
+    dossier['chain'] = 'Robinhood Chain'
+    dossier['archetype'] = 'launchpad-fixed-supply'
+    dossier['sources'] = [
+        {'class': 'web', 'admission': 'admitted', 'scope': 'project'},
+        {'class': 'web', 'admission': 'admitted', 'scope': 'project'},
+        {'class': 'x', 'admission': 'candidate', 'scope': 'project'},
+        {'class': 'chain_explorer', 'admission': 'admitted', 'scope': 'chain'},
+    ]
+    history = {'project': 'touch-grass', 'metrics': list(report.HISTORY_METRICS), 'points': [
+        {'build_id': i, 'block_timestamp': 1_788_000_000 + i * 86_400,
+         'values': {m: (float(i) if m != 'fdv_usd' else None) for m in report.HISTORY_METRICS}}
+        for i in range(history_points)
+    ]}
+    return dossier, history
+
+
+def _element(html, element_id):
+    """The markup from an element's `id` to the next panel or tile id."""
+    start = html.index(f'id="{element_id}"')
+    following = [m.start() for m in re.finditer(r' id="(tile-[a-z-]+|[a-z-]+)"', html) if m.start() > start]
+    return html[start:following[0]] if following else html[start:]
+
+
+class TestPanelsAndDecisionTags:
+    def test_every_panel_and_tile_is_on_the_page_in_the_briefs_order(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        order = ['header', 'sources', 'kpis', *[t[0] for t in page.TILES], 'charts', *page.PANEL_IDS]
+        positions = [html.index(f'id="{element_id}"') for element_id in order]
+        assert positions == sorted(positions)
+
+    def test_every_rendered_panel_and_tile_carries_its_decision_tag(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        rendered = re.findall(
+            r'<(?:section|div|details)\b[^>]*\bclass="(?:panel|kpi|badges)(?: [^"]*)?"[^>]*\bid="([^"]+)"|'
+            r'<(?:section|div|details)\b[^>]*\bid="([^"]+)"[^>]*\bclass="(?:panel|kpi|badges)(?: [^"]*)?"',
+            html,
+        )
+        ids = {a or b for a, b in rendered}
+        assert ids >= {'sources', *page.PANEL_IDS, *[t[0] for t in page.TILES]}
+        for element_id in ids:
+            assert element_id in page.DECISION_TAGS, element_id
+            expected = f'<span class="tag" title="{page.DECISION_TAGS[element_id]}">'
+            assert expected in _element(html, element_id), element_id
+
+    def test_the_tag_mapping_is_the_briefs(self):
+        assert page.DECISION_TAGS['tile-liquidity'] == 'exit · slow: liquidity that can be pulled'
+        assert page.DECISION_TAGS['raw-diff'] == 'context: supports What moved'
+        assert page.DECISION_TAGS['tile-price'] == page.DECISION_TAGS['tile-fdv']
+
+
+class TestKpiStrip:
+    def test_values_are_the_payloads_figures_in_brief_form_with_the_exact_form_on_hover(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        assert '<div class="v" title="$173,738.69">$173.7k</div>' in _element(html, 'tile-liquidity')
+        assert '<div class="v" title="$418,800.00">$418.8k</div>' in _element(html, 'tile-volume')
+        assert '<div class="v" title="1,161">1,161</div>' in _element(html, 'tile-trades')
+        assert '<div class="v" title="6,598">6,598</div>' in _element(html, 'tile-holders')
+        assert '<div class="v" title="26.6329%">26.63%</div>' in _element(html, 'tile-top-ten')
+        assert '<div class="v" title="12">12</div>' in _element(html, 'tile-pools')
+        assert '<div class="v" title="$0.003095">$0.003095</div>' in _element(html, 'tile-price')
+        assert '<div class="v" title="$3,048,089.00">$3.0m</div>' in _element(html, 'tile-fdv')
+
+    def test_deltas_are_computed_on_stored_values_and_rounded_once(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        assert '<div class="d down" title="previous build: 26.8672%">-0.23 pp <span' in _element(html, 'tile-top-ten')
+        assert '<div class="d up" title="previous build: $169,900.00">+2.3% <span' in _element(html, 'tile-liquidity')
+        assert '<div class="d down" title="previous build: 6,601">-3 <span' in _element(html, 'tile-holders')
+        assert '<div class="d flat" title="previous build: 12">= <span' in _element(html, 'tile-pools')
+        # FDV was not in the diff at all: unchanged, so `=`; price was.
+        assert '= <span' in _element(html, 'tile-fdv')
+        assert '<div class="d down" title="previous build: $0.0031">-0.2% <span' in _element(html, 'tile-price')
+
+    def test_a_first_build_says_so_instead_of_inventing_a_delta(self):
+        dossier, history = _mission_control_dossier()
+        for section in dossier['sections']:
+            section['changes'] = {}
+        html = render_dossier_page(dossier, history=history)
+        assert 'first build <span class="flat">vs prev build</span>' in _element(html, 'tile-liquidity')
+
+    def test_the_holders_tile_carries_the_new_versus_returning_split(self):
+        dossier, history = _mission_control_dossier()
+        assert 'new 12 · returning 40' in _element(render_dossier_page(dossier, history=history), 'tile-holders')
+
+    def test_the_build_picker_names_the_run_and_the_previous_build(self):
+        dossier, history = _mission_control_dossier()
+        html = render_dossier_page(dossier, history=history)
+        assert '<option value="?build=26" selected>build 26 (run 9) · 2026-09-11 13:21 UTC</option>' in html
+        assert '<option value="?build=24">build 24 (run 8) · 2026-09-11 04:13 UTC · failed</option>' in html
+        # The failed build 24 produced no baseline; 22 is what this build is diffed against.
+        assert 'href="?build=22">prev build 22</a>' in html
+        assert 'GRASS · Robinhood Chain · launchpad-fixed-supply' in html
+
+    def test_source_badges_count_admitted_rows_and_mark_configured_classes(self):
+        dossier, history = _mission_control_dossier()
+        badges = _element(render_dossier_page(dossier, history=history), 'sources')
+        assert '<span class="dot ok"></span>web 2<' in badges
+        assert '<span class="dot cand"></span>x cand 1<' in badges
+        assert '<span class="dot ok"></span>chain_explorer 1<' in badges
+        assert '<span class="dot cfg"></span>chain_rpc (config)<' in badges
+        assert '<span class="dot cfg"></span>dex_provider (config)<' in badges
+        assert '<span class="dot "></span>telegram none<' in badges
+
+
+class TestSparklinesAndCharts:
+    def test_under_seven_points_the_tile_shows_the_count_and_no_sparkline(self):
+        dossier, history = _mission_control_dossier(history_points=3)
+        html = render_dossier_page(dossier, history=history)
+        assert html.count('>3/7 builds<') == 7
+        assert '>0/7 builds<' in _element(html, 'tile-fdv')
+        assert 'data-spark=' not in html
+
+    def test_seven_points_emit_the_sparkline_dataset(self):
+        dossier, history = _mission_control_dossier(history_points=7)
+        html = render_dossier_page(dossier, history=history)
+        assert '<canvas data-spark="liquidity_usd"' in _element(html, 'tile-liquidity')
+        assert 'data-spark="fdv_usd"' not in html  # every fdv point is a gap
+        inline = json.loads(re.search(
+            r'<script id="history" type="application/json">(.*?)</script>', html
+        ).group(1))
+        assert len(inline['points']) == 7
+        assert inline['points'][0]['values']['fdv_usd'] is None
+        assert inline['points'][6]['values']['liquidity_usd'] == 6.0
+
+    def test_the_charts_block_is_folded_with_the_three_range_chips(self):
+        dossier, history = _mission_control_dossier(history_points=7)
+        charts = _element(render_dossier_page(dossier, history=history), 'charts')
+        assert charts.startswith('id="charts" class="panel wide"><summary>')
+        assert re.findall(r'data-range="([^"]+)"', charts) == ['7', '30', 'all']
+        assert re.findall(r'data-chart="([^"]+)"', charts) == list(report.HISTORY_METRICS)
+
+    def test_a_history_value_cannot_close_the_script_element(self):
+        dossier, history = _mission_control_dossier(history_points=1)
+        history['points'][0]['values']['liquidity_usd'] = '</script><script>alert(1)</script>'
+        html = render_dossier_page(dossier, history=history)
+        assert '</script><script>alert' not in html
+
+
+class TestWhatMovedTable:
+    def test_counts_leaf_rows_and_puts_bookkeeping_in_the_footer(self):
+        dossier, history = _mission_control_dossier()
+        moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
+        rows = re.findall(r'<tr><td><span class="tag">([a-z_]+)</span></td><td>([^<]*)</td>', moved)
+        assert [label for _, label in rows] == [
+            'pool 0x64c5…8c77 liquidity_usd',
+            'dex_trades_h24', 'dex_volume_h24_usd', 'holder_count',
+            'holder_count counterpart.top_ten_share', 'liquidity_usd', 'price_usd',
+            'holder 0x0000…0001 share', 'top_ten_share',
+        ]
+        assert f'What moved since previous build ({len(rows)})' in moved
+        assert '<div class="foot">bookkeeping moved: window</div>' in moved
+        assert '<td>window</td>' not in moved
+
+    def test_cells_are_brief_with_the_exact_value_on_hover_and_a_pp_delta_for_shares(self):
+        dossier, history = _mission_control_dossier()
+        moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
+        assert ('<td>top_ten_share</td><td class="n" title="26.87%">26.87%</td>'
+                '<td class="n" title="26.63%">26.63%</td><td class="n down">-0.23 pp</td>') in moved
+        assert ('<td>pool 0x64c5…8c77 liquidity_usd</td><td class="n" title="169,900.00">$169.9k</td>'
+                '<td class="n" title="173,738.69">$173.7k</td><td class="n up">+2.3%</td>') in moved
+        assert f'<td title="{POOL_A}">' in _element(render_dossier_page(dossier, history=history), 'pools')
+
+    def test_flagged_rows_come_first(self):
+        dossier, history = _mission_control_dossier()
+        dossier['sections'][2]['flagged'] = [{'field': 'top_ten_share', 'reason': 'concentration_rose'}]
+        moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
+        first = re.search(r'<tr><td><span class="tag">[a-z_]+</span></td><td>([^<]*)</td>', moved).group(1)
+        assert first == 'top_ten_share'
+        assert '<td class="flagn">concentration_rose</td>' in moved
+
+
+class TestPanels:
+    def test_pools_are_sorted_by_liquidity_with_the_sum_and_the_primary_marked(self):
+        dossier, history = _mission_control_dossier()
+        pools = _element(render_dossier_page(dossier, history=history), 'pools')
+        assert 'Pools · sum $348.4k' in pools
+        assert pools.index('0x1111…1111') < pools.index('0x64c5…8c77')
+        assert '0x64c5…8c77 <span class="tag">primary</span>' in pools
+        assert '<td class="n">50.14%</td>' in pools and '<td class="n">49.86%</td>' in pools
+
+    def test_holders_show_ten_rows_with_bars_and_the_two_summary_lines(self):
+        dossier, history = _mission_control_dossier()
+        holders = _element(render_dossier_page(dossier, history=history), 'holders')
+        assert holders.count('<div class="bar">') == 10
+        assert '<td class="n" title="99,000,000 GRASS">99.00M GRASS</td>' in holders
+        assert 'top-10 share 26.63% · pool-held 2.51% (1 positions) · burned 2.40%' in holders
+
+    def test_the_custody_bar_names_eoa_for_what_it_is(self):
+        dossier, history = _mission_control_dossier()
+        custody = _element(render_dossier_page(dossier, history=history), 'custody')
+        assert 'eoa* 100.00%' in custody
+        assert '* eoa = not identified as project or locker; the collector does not check code at the address' in custody
+        assert 'largest owner 0xabab…abab holds 100.00% · 1 open positions · 1 owners' in custody
+        assert 'primary pool is 49.87% of provider-reported liquidity' in custody
+
+    def test_metric_pairs_put_the_guard_text_in_its_own_column(self):
+        dossier, history = _mission_control_dossier()
+        pairs = _element(render_dossier_page(dossier, history=history), 'pairs')
+        assert ('<tr><td>dex_volume_h24_usd</td><td class="n" title="418,800.00">$418.8k</td>'
+                '<td>active_addresses_24h</td><td class="n" title="2724">2,724</td>'
+                '<td class="flat">wash_trading: volume without new counterparties</td></tr>') in pairs
+        assert 'new 12 / returning 40 / top-10 26.63%' in pairs
+        assert '29.28T liquidity units' in pairs or '29,277' in pairs
+
+    def test_a_page_with_only_an_identity_section_still_has_every_panel(self):
+        html = render_dossier_page(_dossier([IDENTITY]))
+        for element_id in ('sources', *page.PANEL_IDS, *[t[0] for t in page.TILES]):
+            assert f'id="{element_id}"' in html, element_id
+        assert 'no pairs: the health section did not build' in html
+        assert '>—<' in _element(html, 'tile-liquidity')
+
+
+class TestBriefForms:
+    def test_money_counts_and_shares(self):
+        assert report.abbrev_money(173738.69) == '$173.7k'
+        assert report.abbrev_money(1_234_567) == '$1.2m'
+        assert report.abbrev_money(418.5) == '$418.50'
+        assert report.abbrev_money(0.003095) == '$0.003095'
+        assert report.abbrev_money(None) == '—'
+        assert report.abbrev_count(1161) == '1,161'
+        assert report.abbrev_count(29277002188455995842192) == '29,277,002,188.46T'
+        assert report.abbrev_pct(0.266329) == '26.63%'
+        assert report.money_exact(3048089.0) == '$3,048,089.00'
+
+    def test_deltas(self):
+        assert report.delta_text(0.268672, 0.266329, 'share') == ('-0.23 pp', 'down')
+        assert report.delta_text(169900.0, 173738.69, 'money') == ('+2.3%', 'up')
+        assert report.delta_text(6601, 6598, 'count') == ('-3', 'down')
+        assert report.delta_text(12, 12, 'count') == ('=', 'flat')
+        assert report.delta_text(None, 12, 'count') == ('first build', 'flat')
+        assert report.delta_text(12, None, 'count') == ('—', 'flat')
+
+    def test_amount_brief_scales_by_decimals_and_keeps_the_exact_form_apart(self):
+        formatting = report.Formatting(_dossier([IDENTITY]), section='token_economics')
+        assert formatting.amount_brief(str(24_800_000 * WAD)) == '24.80M GRASS'
+        assert formatting.amount(str(24_800_000 * WAD)) == '24,800,000 GRASS'
+        assert report.short_address(POOL_A) == '0x64c5…8c77'

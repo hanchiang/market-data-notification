@@ -122,6 +122,12 @@ async def collect(context: BuildContext) -> SectionResult:
         # inside the `holder_count` pair, which carries the new-versus-returning
         # split and the top-ten share that guard them.
         'derivation_check': 'ok',
+        # Price and FDV are lone metrics and stay OUT of `pairs` by design; they
+        # are stored here so the page has a valuation tile and the diff carries
+        # them (UX brief, ruled 2026-09-12). The provider cannot backfill them,
+        # so a build that drops them loses the point for good.
+        'price_usd': _float_or_none(provider.get('price_usd')),
+        'fdv_usd': _float_or_none(provider.get('fdv')),
         'pairs': _pairs(
             provider=provider,
             active=active,
@@ -138,6 +144,14 @@ async def collect(context: BuildContext) -> SectionResult:
         fields=fields,
         evidence_ids=list(context.evidence_ids),
     )
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    """The provider quotes `priceUsd` as a string and `fdv` as a number."""
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _creation_block(context: BuildContext) -> int:

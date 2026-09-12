@@ -290,3 +290,20 @@ class TestPairingAgainstTheProductsOwnList:
                 continue
             row = next(line for line in text.splitlines() if pair['metric'] in line)
             assert 'pool type v4' in row, pair['metric']
+
+
+class TestValuationFormatting:
+    def test_price_and_fdv_read_as_dollars_in_the_text_report(self):
+        """`price_usd` keeps its significant digits: a launchpad token trades at
+        $0.003, and the plain float rule would print 0.003095 without a unit."""
+        dossier = _dossier()
+        dossier['sections'][0]['fields'] = {'pairs': PAIRS, 'price_usd': 0.003095, 'fdv_usd': 3048089.0}
+        text = report.render_dossier(dossier)
+        assert '  price_usd: $0.003095' in text
+        assert '  fdv_usd: $3,048,089.00' in text
+
+    def test_a_missing_valuation_prints_none(self):
+        dossier = _dossier()
+        dossier['sections'][0]['fields'] = {'pairs': PAIRS, 'price_usd': None, 'fdv_usd': None}
+        text = report.render_dossier(dossier)
+        assert '  price_usd: None' in text

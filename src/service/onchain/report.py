@@ -13,7 +13,7 @@ import copy
 import json
 import logging
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.service.onchain import diff as diff_module
 from src.service.onchain.collectors.base import SECTION_ORDER
@@ -31,6 +31,16 @@ def load_dossier(
     entity = repository.get_entity_by_key(f'project:{project_key}')
     if entity is None:
         raise UnknownProjectError(f'no project entity for {project_key!r}')
+    chain = repository.get_entity(int(entity['parent_id'])) if entity.get('parent_id') else None
+    # The header's source badges: one row per source reaching this project,
+    # directly or through its chain (the explorer hangs off the chain entity).
+    sources = [
+        {'class': row['class'], 'admission': row['admission'], 'scope': 'project'}
+        for row in repository.get_sources_for_entity(int(entity['id']))
+    ] + [
+        {'class': row['class'], 'admission': row['admission'], 'scope': 'chain'}
+        for row in (repository.get_sources_for_entity(int(chain['id'])) if chain else [])
+    ]
 
     if build_id is not None:
         # Scoped to the project: an unscoped id would render another project's
@@ -45,6 +55,8 @@ def load_dossier(
             'project': project_key,
             'display_name': entity.get('display_name'),
             'archetype': (entity.get('attrs_json') or {}).get('archetype'),
+            'chain': chain.get('display_name') if chain else None,
+            'sources': sources,
             'builds': [],
             'build': None,
             'sections': [],
@@ -71,8 +83,8 @@ def load_dossier(
     # links them; `--build N` on the CLI takes the same ids).
     recent = [
         {
-            'id': int(row['id']), 'block': row['block'], 'outcome': row['outcome'],
-            'block_timestamp': row['block_timestamp'],
+            'id': int(row['id']), 'run_id': int(row['run_id']), 'block': row['block'],
+            'outcome': row['outcome'], 'block_timestamp': row['block_timestamp'],
         }
         for row in repository.get_builds_for_project(int(entity['id']), limit=10)
     ]
@@ -80,6 +92,8 @@ def load_dossier(
         'project': project_key,
         'display_name': entity.get('display_name'),
         'archetype': (entity.get('attrs_json') or {}).get('archetype'),
+        'chain': chain.get('display_name') if chain else None,
+        'sources': sources,
         'builds': recent,
         'build': {
             'id': int(build['id']),
@@ -130,6 +144,75 @@ def render_json(payload: Any) -> str:
     return json.dumps(payload, sort_keys=True, indent=2, default=str)
 
 
+# The KPI series (UX brief, slice C): one value per build, read from the same
+# stored sections the dossier shows. Metric name -> (section, path), where a
+# path into `pairs` names the row's metric.
+HISTORY_METRICS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
+    'liquidity_usd': ('onchain_health', ('pairs', 'liquidity_usd')),
+    'volume_h24_usd': ('onchain_health', ('pairs', 'dex_volume_h24_usd')),
+    'trades_h24': ('onchain_health', ('pairs', 'dex_trades_h24')),
+    'holders': ('onchain_health', ('pairs', 'holder_count')),
+    'top_ten_share': ('token_economics', ('top_ten_share',)),
+    'pool_count': ('identity', ('pool_count',)),
+    'price_usd': ('onchain_health', ('price_usd',)),
+    'fdv_usd': ('onchain_health', ('fdv_usd',)),
+}
+
+
+def metric_values(sections: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
+    """The eight KPI figures out of one build's sections; a metric whose
+    section is not `ok`, or whose field failed, is None -- a gap, never a
+    carried or interpolated number."""
+    by_name = {str(section.get('name')): section for section in sections}
+    values: Dict[str, Optional[float]] = {}
+    for metric, (section_name, path) in HISTORY_METRICS.items():
+        section = by_name.get(section_name)
+        value: Any = None
+        if section is not None and section.get('status') == 'ok':
+            fields = section.get('fields') or {}
+            if path[0] == 'pairs':
+                value = next(
+                    (pair.get('value') for pair in fields.get('pairs') or []
+                     if isinstance(pair, dict) and pair.get('metric') == path[1]),
+                    None,
+                )
+            else:
+                value = fields.get(path[0])
+        if diff_module.is_failed(value) or isinstance(value, bool):
+            value = None
+        values[metric] = value if isinstance(value, (int, float)) else None
+    return values
+
+
+def load_history(
+    repository: OnchainRepository, project_key: str, *, limit: int = 30
+) -> Dict[str, Any]:
+    """The last `limit` `ok` builds as one point each, oldest first.
+
+    Only `ok` builds are points: a failed night contributes nothing rather than
+    a zero. Within an `ok` build a section that failed still yields its metrics
+    as null, so the series keeps its x-axis and the chart shows a gap.
+    """
+    entity = repository.get_entity_by_key(f'project:{project_key}')
+    if entity is None:
+        raise UnknownProjectError(f'no project entity for {project_key!r}')
+    builds = repository.get_builds_for_project(
+        int(entity['id']), limit=max(1, int(limit)), outcome='ok'
+    )
+    points = []
+    for build in reversed(builds):
+        sections = [
+            {'name': row['name'], 'status': row['status'], 'fields': row['fields_json'] or {}}
+            for row in repository.get_sections_for_build(int(build['id']))
+        ]
+        points.append({
+            'build_id': int(build['id']),
+            'block_timestamp': build['block_timestamp'],
+            'values': metric_values(sections),
+        })
+    return {'project': project_key, 'metrics': list(HISTORY_METRICS), 'points': points}
+
+
 # --- Formatting -------------------------------------------------------------
 #
 # The store holds chain-native values: token amounts in base units, shares as
@@ -146,6 +229,9 @@ SHARE_FIELDS = frozenset({
     'burned_share', 'top_ten_share', 'share', 'largest_owner_share',
     'primary_pool_share_of_provider_liquidity',
 })
+# US dollars, as the provider quotes them. `price_usd` needs its significant
+# digits (a launchpad token trades at $0.003), so it is not the plain float rule.
+MONEY_FIELDS = frozenset({'price_usd', 'fdv_usd'})
 # Epoch seconds; `pair_created_at` is the provider's milliseconds.
 SECOND_FIELDS = frozenset({'from_timestamp', 'to_timestamp', 'block_timestamp'})
 MILLISECOND_FIELDS = frozenset({'pair_created_at'})
@@ -224,6 +310,8 @@ class Formatting:
             return self.amount(value)
         if name in SHARE_FIELDS and isinstance(value, (int, float)):
             return f'{value * 100:.2f}%'
+        if name in MONEY_FIELDS and isinstance(value, (int, float)):
+            return money_exact(value)
         if name in SECOND_FIELDS and isinstance(value, (int, float)):
             return _utc(value)
         if name in MILLISECOND_FIELDS and isinstance(value, (int, float)):
@@ -245,6 +333,125 @@ class Formatting:
         if isinstance(value, list):
             return '[' + ', '.join(self.inline(name, item) for item in value) + ']'
         return self.scalar(name, value)
+
+
+    def amount_brief(self, value: Any) -> str:
+        """`24.80M GRASS`: the tile and cell form of `amount`; the exact form
+        goes in the title attribute."""
+        try:
+            raw = int(str(value))
+        except (TypeError, ValueError):
+            return str(value)
+        if self.decimals is None:
+            return f'{abbrev_count(raw)} (base units)'
+        with localcontext() as context:
+            context.prec = len(str(abs(raw))) + 8
+            units = float(Decimal(raw).scaleb(-self.decimals))
+        text = _abbreviate(units, (('T', 1e12), ('B', 1e9), ('M', 1e6), ('k', 1e3)), 2)
+        return f'{text} {self.symbol}' if self.symbol else text
+
+
+# -- Brief forms: tiles and table cells (UX brief, Number formatting) ---------
+#
+# Abbreviated magnitudes right-aligned are what every product in the research
+# pass shares, and their absence was the first reason the page read badly. Each
+# brief form is paired on the page with the exact form in a `title` attribute;
+# nothing here replaces the exact forms above, which the CLI and the raw diff
+# keep printing.
+
+DASH = '—'
+
+
+def money_exact(value: float) -> str:
+    value = float(value)
+    if value == 0:
+        return '$0'
+    return f'${value:,.2f}' if abs(value) >= 1 else f'${value:.4g}'
+
+
+def abbrev_money(value: Any) -> str:
+    """`$173.7k`, `$1.2m`; under a dollar the significant digits, which is
+    where a launchpad token's price lives."""
+    if value is None:
+        return DASH
+    value = float(value)
+    if abs(value) >= 1000:
+        return '$' + _abbreviate(value, (('b', 1e9), ('m', 1e6), ('k', 1e3)), 1)
+    return money_exact(value)
+
+
+def abbrev_count(value: Any) -> str:
+    if value is None:
+        return DASH
+    value = float(value)
+    if abs(value) < 1e6:
+        return f'{int(value):,}'
+    return _abbreviate(value, (('T', 1e12), ('B', 1e9), ('M', 1e6)), 2)
+
+
+def abbrev_pct(value: Any) -> str:
+    return DASH if value is None else f'{float(value) * 100:.2f}%'
+
+
+def short_address(text: Any) -> str:
+    """`0x8366…0951`; anything that is not a hex identifier (a metric name)
+    is returned whole, since it is the name and not a copy target."""
+    text = str(text)
+    if not text.startswith('0x') or len(text) < 14:
+        return text
+    return f'{text[:6]}…{text[-4:]}'
+
+
+def brief(name: str, value: Any) -> str:
+    """The brief form chosen by the field's name, the way `scalar` chooses the
+    exact one: a share as a percentage, a dollar figure abbreviated, a count
+    with separators."""
+    if value is None:
+        return DASH
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return str(value)
+    if name in SHARE_FIELDS or 'share' in name:
+        return abbrev_pct(value)
+    if name in MONEY_FIELDS or name.endswith('_usd'):
+        return abbrev_money(value)
+    return abbrev_count(value)
+
+
+def _abbreviate(value: float, units: Tuple[Tuple[str, float], ...], places: int) -> str:
+    for unit, divisor in units:
+        if abs(value) >= divisor:
+            return f'{value / divisor:,.{places}f}{unit}'
+    return f'{value:,.{places}f}'
+
+
+def delta_kind(name: str) -> str:
+    return 'share' if 'share' in name else ('money' if name.endswith('_usd') else 'count')
+
+
+def delta_text(old: Any, new: Any, kind: str) -> Tuple[str, str]:
+    """(text, direction) for a tile or a What-moved cell.
+
+    Computed on the stored values and rounded once, so 0.268672 -> 0.266329
+    reads as 26.87% -> 26.63%, delta -0.23 pp -- never the difference of the
+    two rounded strings. A share moves in percentage POINTS, never in percent
+    of itself; a dollar figure moves in percent of its previous value; a count
+    moves by its difference. Direction is `up`, `down` or `flat` for the CSS.
+    """
+    if new is None:
+        return (DASH, 'flat')
+    if old is None:
+        return ('first build', 'flat')
+    old, new = float(old), float(new)
+    if old == new:
+        return ('=', 'flat')
+    direction = 'up' if new > old else 'down'
+    if kind == 'share':
+        return (f'{(new - old) * 100:+.2f} pp', direction)
+    if kind == 'count':
+        return (f'{int(round(new - old)):+,}', direction)
+    if old:
+        return (f'{(new - old) / old * 100:+.1f}%', direction)
+    return (f'{new - old:+,.0f}', direction)
 
 
 def _utc(seconds: float) -> str:

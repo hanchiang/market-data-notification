@@ -80,9 +80,7 @@ def load_dossier(
                 # baselines each section on its latest ok/partial predecessor
                 # whatever the build outcome, so after a partial night two
                 # sections of one build can diff against two different builds.
-                'previous_build_id': _build_of_section(
-                    repository, section_diff.get('previous_section_id')
-                ),
+                'previous_build_id': section_diff.get('previous_build_id'),
             }
         )
     sections.sort(key=lambda section: _section_order(section['name']))
@@ -130,13 +128,6 @@ def project_key(entity_key: Any) -> str:
     returned whole rather than raising. One parser for the CLI and the page."""
     text = str(entity_key)
     return text.partition(':')[2] or text
-
-
-def _build_of_section(repository: OnchainRepository, section_id: Any) -> Optional[int]:
-    if section_id is None:
-        return None
-    row = repository.get_section(int(section_id))
-    return int(row['build_id']) if row else None
 
 
 def _section_order(name: str) -> int:

@@ -682,14 +682,15 @@ class OnchainRepository:
                 ),
             )
 
-    def get_section(self, section_id: int) -> Optional[Dict[str, Any]]:
-        return self.fetch_one(
-            f'SELECT * FROM {ONCHAIN_SCHEMA}.section WHERE id = %s', (section_id,)
-        )
-
     def get_section_diff(self, section_id: int) -> Optional[Dict[str, Any]]:
+        """The diff row plus `previous_build_id`, the build of the section it
+        was taken against -- joined here so the dossier loader needs no second
+        query per section to name it."""
         return self.fetch_one(
-            f'SELECT * FROM {ONCHAIN_SCHEMA}.section_diff WHERE section_id = %s',
+            f'SELECT d.*, p.build_id AS previous_build_id '
+            f'FROM {ONCHAIN_SCHEMA}.section_diff d '
+            f'LEFT JOIN {ONCHAIN_SCHEMA}.section p ON p.id = d.previous_section_id '
+            'WHERE d.section_id = %s',
             (section_id,),
         )
 

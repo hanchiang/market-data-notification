@@ -163,7 +163,7 @@ JS = """(function(){
 var el=document.getElementById('history');if(!el)return;
 var H=JSON.parse(el.textContent),P=H.points||[];
 function series(m,pts){return pts.map(function(p){return p.values[m]})}
-function labels(pts){return pts.map(function(p){return p.block_timestamp?new Date(p.block_timestamp*1000).toISOString().slice(0,10):'build '+p.build_id})}
+function labels(pts){return pts.map(function(p){return p.block_timestamp?new Date(p.block_timestamp*1000).toISOString().slice(5,16).replace('T',' '):'build '+p.build_id})}
 if(!window.Chart)return;
 var line=function(m,pts,axes){return {type:'line',data:{labels:labels(pts),datasets:[{label:m,data:series(m,pts),borderColor:'#7aa2ff',borderWidth:1.5,pointRadius:axes?2:0,spanGaps:false}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{enabled:!!axes}},scales:{x:{display:!!axes,ticks:{color:'#8a93a3'},grid:{color:'#262c36'}},y:{display:!!axes,ticks:{color:'#8a93a3'},grid:{color:'#262c36'}}}}}};
 document.querySelectorAll('canvas[data-spark]').forEach(function(c){new Chart(c,line(c.dataset.spark,P,false))});
@@ -306,7 +306,8 @@ class _Page:
 
         Each section carries the build its diff was taken against
         (`previous_build_id`); after a partial night they differ, and the
-        header then names the common one and lists the exceptions
+        header then names the common one (on a tie, the nearer, higher build)
+        and lists the exceptions
         (`prev build 24 · onchain_health vs 22`). A payload without the field
         falls back to the nearest earlier build that produced a baseline.
         """
@@ -447,7 +448,7 @@ class _Page:
         points = len(self.history.get('points') or [])
         return (
             '<details id="charts" class="panel wide"><summary>Trends over the last '
-            f'{points} ok builds · one chart per tile · range in builds {_tag("charts")}</summary>'
+            f'{points} builds · one chart per tile · range in builds {_tag("charts")}</summary>'
             f'<div class="chips">{chips}</div><div class="charts">{canvases}</div></details>'
         )
 
@@ -716,7 +717,10 @@ def _leaves(
     if isinstance(old, dict) and isinstance(new, dict):
         for key in sorted(set(old) | set(new)):
             if old.get(key) != new.get(key):
-                yield from _leaves(f'{label}.{key}', f'{identity}.{key}', key, old.get(key), new.get(key))
+                # A per-class liquidity amount is still liquidity: the child
+                # keeps the parent's name so it prints as `L`, not under `eoa`.
+                child = name if name in report.LIQUIDITY_UNIT_FIELDS else key
+                yield from _leaves(f'{label}.{key}', f'{identity}.{key}', child, old.get(key), new.get(key))
         return
     key = LIST_KEYS.get(name)
     if key and _is_record_list(old) and _is_record_list(new):
@@ -751,7 +755,11 @@ def _leaves(
 
 def _leaf_row(section, label, identity, name, old, new, formatting: Formatting, flag) -> _Row:
     numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (old, new))
-    if numeric:
+    if name in report.LIQUIDITY_UNIT_FIELDS and _both_integers(old, new):
+        # Liquidity is stored as a digit string (uint128); its move reads as a
+        # percentage, since the absolute difference is a 22-digit number.
+        delta, direction = delta_text(int(str(old)), int(str(new)), 'money')
+    elif numeric:
         delta, direction = delta_text(old, new, delta_kind(name))
     elif old is None and new == 'added' or old == 'removed' and new is None:
         delta, direction = (new or old), ('up' if new else 'down')
@@ -766,11 +774,17 @@ def _leaf_row(section, label, identity, name, old, new, formatting: Formatting, 
     )
 
 
+def _both_integers(old: Any, new: Any) -> bool:
+    return all(str(v).lstrip('-').isdigit() for v in (old, new))
+
+
 def _brief_for(name: str, value: Any, formatting: Formatting) -> str:
     if value is None:
         return DASH
     if name in AMOUNT_FIELDS and formatting.section in Formatting.SCALED_SECTIONS:
         return formatting.amount_brief(value)
+    if name in report.LIQUIDITY_UNIT_FIELDS:
+        return abbrev_liquidity(value)
     if isinstance(value, (dict, list)):
         return 'record'
     if isinstance(value, (int, float)) and not isinstance(value, bool):

@@ -185,15 +185,23 @@ def _pairs(liquidity, holders):
     ]
 
 
-def _add_build(repository, project_id, *, block, outcome='ok', health='ok', pool_count=3):
+def _add_build(
+    repository, project_id, *, block, outcome='ok', health='ok', identity='ok', pool_count=3
+):
     run_id = repository.start_run(builder.JOB_BUILD)
     build_id = repository.start_build(
         run_id=run_id, project_id=project_id, block=block, block_timestamp=1_789_000_000 + block
     )
-    repository.insert_section(
-        build_id=build_id, name='identity', status='ok',
-        fields={'token_symbol': 'GRASS', 'decimals': 18, 'pool_count': pool_count, 'pools': []},
-    )
+    if identity == 'ok':
+        repository.insert_section(
+            build_id=build_id, name='identity', status='ok',
+            fields={'token_symbol': 'GRASS', 'decimals': 18, 'pool_count': pool_count, 'pools': []},
+        )
+    else:
+        repository.insert_section(
+            build_id=build_id, name='identity', status='failed',
+            error_class='EvmTransportError', fields={},
+        )
     if health == 'ok':
         repository.insert_section(
             build_id=build_id, name='onchain_health', status='ok',
@@ -211,13 +219,15 @@ def _add_build(repository, project_id, *, block, outcome='ok', health='ok', pool
 
 
 class TestHistoryAndSparklines:
-    def test_history_has_one_point_per_ok_build_oldest_first_with_a_gap_for_a_failed_section(
+    def test_history_has_one_point_per_build_oldest_first_with_nulls_for_failed_sections(
         self, client, seeded, onchain_repository
     ):
         project_id = seeded['touch-grass']
         _add_build(onchain_repository, project_id, block=1)
         gap = _add_build(onchain_repository, project_id, block=2, health='failed', outcome='partial')
-        skipped = _add_build(onchain_repository, project_id, block=3, outcome='failed')
+        failed = _add_build(
+            onchain_repository, project_id, block=3, outcome='failed', health='failed', identity='failed'
+        )
         _add_build(onchain_repository, project_id, block=4)
 
         response = client.get('/project-monitor/onchain/dossier/touch-grass?format=history&test_mode=1')
@@ -233,10 +243,14 @@ class TestHistoryAndSparklines:
         # Every build is a point (review round 1): a `partial` night keeps its
         # good sections and its failed section is a null, so the line breaks
         # there instead of interpolating across the night.
-        assert gap in ids and skipped in ids
+        assert gap in ids and failed in ids
         partial = next(p for p in payload['points'] if p['build_id'] == gap)
         assert partial['values']['pool_count'] == 3
         assert partial['values']['liquidity_usd'] is None and partial['values']['holders'] is None
+        # A build whose every section failed is a point of nothing but gaps.
+        every_failed = next(p for p in payload['points'] if p['build_id'] == failed)
+        assert set(every_failed['values']) == set(payload['metrics'])
+        assert all(value is None for value in every_failed['values'].values())
         # The seeded fixture build has identity only: its health metrics are gaps.
         first = payload['points'][0]
         assert first['values']['pool_count'] is None and first['values']['liquidity_usd'] is None

@@ -650,6 +650,12 @@ class TestKpiStrip:
         for section in dossier['sections']:
             section['previous_build_id'] = 22
         assert 'prev build 22</a>' in render_dossier_page(dossier, history=history)
+        # A tie goes to the nearer (higher) build: two sections on 24, two on 22.
+        dossier['sections'].append(_section('contract_safety', {'owner': 'absent'}))
+        for section, build_id in zip(dossier['sections'], (24, 22, 24, 22)):
+            section['previous_build_id'] = build_id
+        html = render_dossier_page(dossier, history=history)
+        assert 'prev build 24 · onchain_health vs 22 · contract_safety vs 22</a>' in html
 
     def test_source_badges_count_admitted_rows_and_mark_configured_classes(self):
         dossier, history = _mission_control_dossier()
@@ -735,6 +741,30 @@ class TestWhatMovedTable:
         assert rows[0] == 'pool 0x64c5…8c77 liquidity_usd'
         assert moved.count('<td class="flagn">pool_removed</td>') == 1
         assert f'What moved since previous build ({len(rows)})' in moved
+
+    def test_liquidity_units_in_what_moved_are_compact_with_a_percentage_delta(self):
+        """Round 2: the custody record's `pool_liquidity` printed its 23-digit
+        integer and `liquidity_by_class.eoa` was formatted under `eoa`; both
+        were strings, so the delta column said `changed`."""
+        dossier, history = _mission_control_dossier()
+        health = dossier['sections'][1]
+        new_pairs = health['fields']['pairs']
+        old_pairs = [dict(p) for p in new_pairs]
+        old_pairs[0] = dict(new_pairs[0], counterpart_value=dict(
+            CUSTODY, pool_liquidity='28277002188455995842192',
+            liquidity_by_class={'eoa': '28277002188455995842192'},
+        ))
+        health['changes'] = {'added': {}, 'removed': {}, 'changed': [
+            {'field': 'pairs', 'old': old_pairs, 'new': new_pairs},
+        ]}
+        moved = _element(render_dossier_page(dossier, history=history), 'what-moved')
+        for label in ('liquidity_usd counterpart.pool_liquidity', 'liquidity_usd counterpart.liquidity_by_class.eoa'):
+            assert (f'<td title="{label}">{label}</td>'
+                    '<td class="n" title="28277002188455995842192 L">2.83e22 L</td>'
+                    '<td class="n" title="29277002188455995842192 L">2.93e22 L</td>'
+                    '<td class="n up">+3.5%</td>') in moved, label
+        assert '28277002188455995842192</td>' not in moved
+        assert 'changed</td>' not in moved
 
     def test_flagged_rows_come_first(self):
         dossier, history = _mission_control_dossier()

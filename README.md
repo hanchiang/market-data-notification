@@ -509,6 +509,16 @@ Important endpoints:
 - `GET /sentiment/stocks-fear-greed`
 - `GET /crypto_stats/topsectors`
 
+The project monitor's dashboard is a separate loopback-only app
+(`python src/job/project_monitor/dashboard.py --port 8765`, read-only connection):
+
+- `GET /project-monitor/onchain/` — market overview and source-coverage grid
+- `GET /project-monitor/onchain/dossier/{project}` — the project dossier page
+  (`?format=json`, `?format=history`, `?build=N`)
+- `GET /project-monitor/onchain/runs` — the run ledger
+
+Operator procedure: `MARKET-DATA/docs/runbooks/project-dossier.md`.
+
 ## Troubleshooting
 
 ### Redis

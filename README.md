@@ -510,7 +510,7 @@ Important endpoints:
 - `GET /crypto_stats/topsectors`
 
 The project monitor's dashboard is a separate loopback-only app
-(`python src/job/project_monitor/dashboard.py --port 8765`, read-only connection):
+(`ENV=dev PYTHONPATH="$(pwd)" poetry run python src/job/project_monitor/dashboard.py --port 8765`, read-only connection):
 
 - `GET /project-monitor/onchain/` — market overview and source-coverage grid
 - `GET /project-monitor/onchain/dossier/{project}` — the project dossier page
